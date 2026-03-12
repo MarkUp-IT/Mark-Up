@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import Navbar from "@/components/navbar";
+import Navbar from "@/component/navbar";
 import Image from "next/image";
 
 export default function ProdukPage() {
