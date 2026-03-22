@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 
 export default function Footer(){
     return (
@@ -17,42 +18,46 @@ export default function Footer(){
                         Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt
                     </p>
                     <div className="flex flex-row gap-[10px] mt-10">
-                        <div className="rounded-full bg-[#060010] w-[28px] h-[28px] border-1 border-[#EDEDF3]/25 flex justify-center items-center">
+                        <div className="group rounded-full bg-[#060010] w-[28px] h-[28px] border-1 border-[#EDEDF3]/25 flex justify-center items-center hover:bg-white">
                             <Image
                                 src="/images/twitter.svg"
                                 width={16}
                                 height={16}
                                 alt="Twitter"
-                                className="invert"
+                                className="invert group-hover:invert-0"
                             />
                         </div>
-                        <div className="rounded-full bg-[#060010] w-[28px] h-[28px] border-1 border-[#EDEDF3]/25 flex justify-center items-center">
+                        <div className="group rounded-full bg-[#060010] w-[28px] h-[28px] border-1 border-[#EDEDF3]/25 flex justify-center items-center hover:bg-white">
                             <Image
                                 src="/images/facebook.svg"
                                 width={14}
                                 height={14}
                                 alt="Facebook"
-                                className="invert"
+                                className="invert group-hover:invert-0"
                             />
                         </div>
-                        <div className="rounded-full bg-[#060010] w-[28px] h-[28px] border-1 border-[#EDEDF3]/25 flex justify-center items-center">
-                            <Image
-                                src="/images/instagram.svg"
-                                width={16}
-                                height={16}
-                                alt="Instagram"
-                                className="invert"
-                            />
-                        </div>
-                        <div className="rounded-full bg-[#060010] w-[28px] h-[28px] border-1 border-[#EDEDF3]/25 flex justify-center items-center">
-                            <Image
-                                src="/images/github.svg"
-                                width={16}
-                                height={16}
-                                alt="Github"
-                                className="invert"
-                            />
-                        </div>
+                        <Link href="https://www.instagram.com/markup_official/" target="_blank">
+                            <div className="group rounded-full bg-[#060010] w-[28px] h-[28px] border-1 border-[#EDEDF3]/25 flex justify-center items-center hover:bg-white">
+                                <Image
+                                    src="/images/instagram.svg"
+                                    width={16}
+                                    height={16}
+                                    alt="Instagram"
+                                    className="invert group-hover:invert-0"
+                                />
+                            </div>
+                        </Link>
+                        <Link href="https://github.com/MarkUp-IT " target="_blank">
+                            <div className="group rounded-full bg-[#060010] w-[28px] h-[28px] border-1 border-[#EDEDF3]/25 flex justify-center items-center hover:bg-white">
+                                <Image
+                                    src="/images/github.svg"
+                                    width={16}
+                                    height={16}
+                                    alt="Github"
+                                    className="invert translate-x-[1px] group-hover:invert-0"
+                                />
+                            </div>
+                        </Link>
                     </div>
                 </div>
                 <div className="flex flex-col gap-[30px]">
@@ -60,21 +65,31 @@ export default function Footer(){
                         NAVIGASI
                     </p>
                     <div className="flex flex-col gap-[15px]">
-                            <p>
-                                Beranda
-                            </p>
-                            <p>
-                                Info Lomba
-                            </p>
-                            <p>
-                                Produk
-                            </p>
-                            <p>
-                                Mentor
-                            </p>
-                            <p>
-                                Tentang Kami
-                            </p>
+                            <Link href="/">
+                                <p className="hover:font-semibold">
+                                    Beranda
+                                </p>
+                            </Link>
+                            <Link href="/info-lomba">
+                                <p className="hover:font-semibold">
+                                    Info Lomba
+                                </p>
+                            </Link>
+                            <Link href="/produk">
+                                <p className="hover:font-semibold">
+                                    Produk
+                                </p>
+                            </Link>
+                            <Link href="/mentor">
+                                <p className="hover:font-semibold">
+                                    Mentor
+                                </p>
+                            </Link>
+                            <Link href="/tentang-kami">
+                                <p className="hover:font-semibold">
+                                    Tentang Kami
+                                </p>
+                            </Link>
                         </div>
                     </div>
                 <div className="flex flex-col gap-[30px]">
@@ -82,16 +97,16 @@ export default function Footer(){
                         BANTUAN
                     </p>
                     <div className="flex flex-col gap-[15px]">
-                        <p>
+                        <p className="hover:font-semibold">
                             Customer Support
                         </p>
-                        <p>
+                        <p className="hover:font-semibold">
                             Delivery Details
                         </p>
-                        <p>
+                        <p className="hover:font-semibold">
                             Terms & Conditions
                         </p>
-                        <p>
+                        <p className="hover:font-semibold">
                             Privacy Policy
                         </p>
                     </div>
