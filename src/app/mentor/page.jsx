@@ -5,6 +5,7 @@ import Footer from "@/component/Footer";
 import CountUp from "@/component/CountUp";
 import MentorCard from "@/component/MentorCard";
 import dynamic from "next/dynamic";
+import 'animate.css';
 
 const GlassSurface = dynamic(() => import("@/component/GlassSurface"), { 
     ssr: false 
@@ -34,7 +35,7 @@ const hackathonMentor = [
 export default function MentorPage() {
   return (
     <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[300px] rounded-b-full"
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1900px] h-[300px] rounded-b-full"
             style={{
                 background: 'radial-gradient(ellipse at top, rgba(255,255,255,0.15) 0%, transparent 70%)',
                 filter: 'blur(20px)',
@@ -44,7 +45,7 @@ export default function MentorPage() {
         
         <div className="main-content flex flex-col gap-20 items-center mt-28 relative z-40">
             <div className="hero-section py-[8vh] w-full px-[30vh] flex flex-col gap-7 items-center">
-                <div className="bg-[#08C7E1]/25 w-[147px] rounded-[24px] flex justify-center">
+                <div className="bg-[#08C7E1]/25 w-[147px] h-[40px] rounded-[24px] flex justify-center items-center">
                     <p className="text-[#08C7E1] font-bold z-20 text-[20px]" >
                         Tim Expert
                     </p>
