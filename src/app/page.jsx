@@ -1,6 +1,7 @@
 "use client";
 
 import CountUp from "@/component/CountUp";
+import GlassSurface from "@/component/GlassSurface";
 import GradientText from "@/component/GradientText";
 import Navbar from "@/component/navbar";
 import Image from "next/image";
