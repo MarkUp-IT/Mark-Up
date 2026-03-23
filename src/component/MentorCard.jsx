@@ -17,7 +17,7 @@ export default function MentorCard({ name, description, imgUrl }) {
       initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
-      viewport={{ once: true, margin: "-50px" }}
+      viewport={{ margin: "-50px" }}
       className="group w-[293px] h-[253px] ..."
     >
       

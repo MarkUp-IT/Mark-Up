@@ -2,6 +2,17 @@
 
 import Navbar from "@/component/navbar";
 import Footer from "@/component/Footer";
+import TeamCard from "@/component/TeamCard";
+import { motion } from "framer-motion";
+
+const teams = [
+    {name: "Affan Fathir", position: "CEO", description: "1st Winner National Business Case ..."},
+    {name: "Affan Fathir", position: "CEO", description: "1st Winner National Business Case ..."},
+    {name: "Affan Fathir", position: "CEO", description: "1st Winner National Business Case ..."},
+    {name: "Affan Fathir", position: "CEO", description: "1st Winner National Business Case ..."},
+    {name: "Affan Fathir", position: "CEO", description: "1st Winner National Business Case ..."},
+    {name: "Affan Fathir", position: "CEO", description: "1st Winner National Business Case ..."}
+]
 
 export default function TentangKamiPage(){
     return (
@@ -43,7 +54,13 @@ export default function TentangKamiPage(){
                         </p>
                     </div>
                     <div className="flex flex-row gap-5">
-                        <div className="bg-[#34303C]/90 w-[503px] h-[250px] rounded-[24px] border border-[0.5px] border-[#958F9E]/40 flex flex-row gap-5 items-center justify-center">
+                        <motion.div
+                        initial={{ opacity: 0, x: -60 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
+                        viewport={{ margin: "-80px" }}
+                        className="bg-[#34303C]/90 w-[503px] h-[250px] rounded-[24px] border border-[0.5px] border-[#958F9E]/40 flex flex-row gap-5 items-center justify-center"
+                        >
                             <div className="w-[127px] h-[190px] bg-gradient-to-br from-[#4A2CA1] to-[#17A9D4]">
                             </div>
                             <div className="w-[297px] flex flex-col">
@@ -57,8 +74,14 @@ export default function TentangKamiPage(){
                                     Founder
                                 </p>
                             </div>
-                        </div>
-                        <div className="bg-[#34303C]/90 w-[503px] h-[250px] rounded-[24px] border border-[0.5px] border-[#958F9E]/40 flex flex-row gap-5 items-center justify-center">
+                        </motion.div>
+                        <motion.div
+                        initial={{ opacity: 0, x: 60 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 1, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
+                        viewport={{ margin: "-80px" }}
+                        className="bg-[#34303C]/90 w-[503px] h-[250px] rounded-[24px] border border-[0.5px] border-[#958F9E]/40 flex flex-row gap-5 items-center justify-center"
+                        >
                             <div className="w-[127px] h-[190px] bg-gradient-to-br from-[#4A2CA1] to-[#17A9D4]">
                             </div>
                             <div className="w-[297px] flex flex-col">
@@ -72,7 +95,7 @@ export default function TentangKamiPage(){
                                     Founder
                                 </p>
                             </div>
-                        </div>
+                        </motion.div>
                     </div>
                 </div>
                 <div>
@@ -86,6 +109,18 @@ export default function TentangKamiPage(){
                                 {" "}Teams
                             </span>
                         </p>
+                    </div>
+                    <div className="flex flex-col items-center mt-5 mb-25">
+                        <div className="flex flex-wrap gap-5 justify-center max-w-[1050px]">
+                            {teams.map((team, index) => (
+                                <TeamCard
+                                key={index}
+                                name={team.name}
+                                position={team.position}
+                                description={team.description}
+                                />
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
