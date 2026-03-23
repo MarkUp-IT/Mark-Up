@@ -86,8 +86,9 @@ export default function Footer(){
                                 </p>
                             </Link>
                             <Link href="/tentang-kami">
-                                <p className="hover:font-semibold">
+                                <p className="relative font-light hover:font-semibold">
                                     Tentang Kami
+                                    <span className="invisible font-semibold block h-0 overflow-hidden">Tentang Kami</span>
                                 </p>
                             </Link>
                         </div>
@@ -105,6 +106,7 @@ export default function Footer(){
                         </p>
                         <p className="hover:font-semibold">
                             Terms & Conditions
+                            <span className="invisible font-semibold block h-0 overflow-hidden">Terms & Conditions</span>
                         </p>
                         <p className="hover:font-semibold">
                             Privacy Policy
