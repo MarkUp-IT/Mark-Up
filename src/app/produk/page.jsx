@@ -13,14 +13,14 @@ const productData = [
     id: 1,
     title: "Masterclass Business Case Competition (BCC)",
     type: "Modul",
-    desc: "Panduan komprehensif menyusun BMC dari nol untuk kompetisi Business Plan maupun real business.",
+    desc: "Panduan komprehensif memecahkan kasus bisnis dari nol, mulai dari problem solving hingga menyusun winning pitch deck untuk kompetisi.",
     oldPrice: "Rp125.000",
     newPrice: "Rp45.000",
     sold: 28,
     discount: "64%",
     image: "", // Biarkan kosong agar pakai background gradient fallback
     fullDesc:
-      "📚 E-Book Panduan BMC (50+ Halaman)\n🎯 5 Studi Kasus BMC Perusahaan Sukses (Gojek, Kopi Kenangan, dll)\n📊 3 Template BMC Editable (Canva & PPT)\n📹 Video Pembahasan Eksklusif (45 Menit)\n\n📌 Modul ini dirancang khusus untuk pemula maupun peserta lomba Business Plan yang ingin memahami fundamental bisnis dengan cepat dan tepat sasaran.\n\nCakupan Materi:\n1. Memahami 9 elemen kunci Business Model Canvas\n2. Strategi menentukan Unique Value Proposition yang kompetitif\n3. Cara menganalisis Cost Structure dan Revenue Stream\n4. Kesalahan umum peserta lomba saat membuat BMC dan cara menghindarinya",
+      "📚 E-Book Panduan Analisis Kasus (50+ Halaman)\n🎯 10 Winning Pitch Deck Finalis Nasional & Internasional\n📊 5 Template Presentasi Kasus Editable (Canva & PPT)\n📹 Video Bedah Kasus Eksklusif (45 Menit)\n\n📌 Modul ini dirancang khusus untuk pemula maupun peserta lomba Business Case yang ingin memahami kerangka berpikir sistematis (structured thinking) untuk memecahkan masalah bisnis dengan cepat dan tepat sasaran.\n\nCakupan Materi:\n1. Cara melakukan Root Cause Analysis (MECE, Issue Tree)\n2. Pemilihan framework yang tepat (SWOT, Porter's 5 Forces, 4P, dll)\n3. Menyusun strategi solusi dan rencana implementasi (Timeline & Budgeting)\n4. Teknik Storytelling & Visualisasi Data untuk Pitch Deck yang meyakinkan juri",
     link: "https://docs.google.com/forms/d/e/1FAIpQLSfS5xo7AMuG2dDb417P_BoSuIQq6YUURagvopwxB5CDvwVhJQ/viewform",
   },
 
