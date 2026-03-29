@@ -2,229 +2,89 @@
 
 import Navbar from "@/component/navbar";
 import Footer from "@/component/Footer";
-import CountUp from "@/component/CountUp";
-import MentorCard from "@/component/MentorCard";
-import dynamic from "next/dynamic";
-import 'animate.css';
+import { motion } from "framer-motion";
 
-const GlassSurface = dynamic(() => import("@/component/GlassSurface"), { 
-    ssr: false 
-});
-
-const businessCaseMentor = [
-    {name: "Affan Fathir", description: "1st Winner National Business Case ..."},
-    {name: "Affan Fathir", description: "1st Winner National Business Case ..."},
-    {name: "Affan Fathir", description: "1st Winner National Business Case ..."},
-    {name: "Affan Fathir", description: "1st Winner National Business Case ..."}
-]
-
-const debateMentor = [
-    {name: "Affan Fathir", description: "1st Winner National Business Case ..."},
-    {name: "Affan Fathir", description: "1st Winner National Business Case ..."},
-    {name: "Affan Fathir", description: "1st Winner National Business Case ..."}
-]
-const uiuxMentor = [
-    {name: "Affan Fathir", description: "1st Winner National Business Case ..."},
-    {name: "Affan Fathir", description: "1st Winner National Business Case ..."}
-]
-
-const hackathonMentor = [
-    {name: "Affan Fathir", description: "1st Winner National Business Case ..."}
-]
+// Data Mentor digabung semua karena All Role, format FULL CAPSLOCK
+const allMentors = [
+  { name: "VITTORIO SALIM, FMVA" },
+  { name: "MUHAMMAD NABIL RAZHIN" },
+  { name: "ANDI ALIYAH SHABRINA" },
+  { name: "SYONA HANA ARDITAPUTRI" },
+  { name: "PRATISARA KHANSA TEGES PALUPI" },
+  { name: "IMELDA FELICIA DHARMAWAN" },
+  { name: "AARIEF FAWWAZ SATRIAHUTAMA" },
+  { name: "DHILLA AVRYLIA UTOMO" },
+  { name: "MUHAMMAD ADNAN BAYU" },
+  { name: "CATHERINE HARIJANTO" },
+  { name: "ADENA LAKSITA PARAMESTI" },
+];
 
 export default function MentorPage() {
   return (
-    <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1900px] h-[300px] rounded-b-full"
-            style={{
-                background: 'radial-gradient(ellipse at top, rgba(255,255,255,0.15) 0%, transparent 70%)',
-                filter: 'blur(20px)',
-            }}
-        />
-        <Navbar />
-        
-        <div className="main-content flex flex-col gap-20 items-center mt-28 relative z-40">
-            <div className="hero-section py-[8vh] w-full px-[30vh] flex flex-col gap-7 items-center">
-                <div className="bg-[#08C7E1]/25 w-[147px] h-[40px] rounded-[24px] flex justify-center items-center">
-                    <p className="text-[#08C7E1] font-bold z-20 text-[20px]" >
-                        Tim Expert
-                    </p>
-                </div>
-                <h1 className="main-title inline text-6xl text-center text-white font-bold font-poppins">
-                Expert{" "}
-                <span className="text-transparent bg-gradient-to-br bg-clip-text from-[#006FFF] via-[#00C6D1] to-[#31f5ff]">
-                    Mentor
-                </span>
-                </h1>
-                <h1 className="w-[60%] text-center font-light">
-                Para juara kompetisi yang siap membimbingmu meraih prestasi impian
-                </h1>
-                <GlassSurface
-                    width="634px"
-                    height={48}
-                    borderRadius={12}
-                    blur={15}
-                    opacity={0.3}
-                    backgroundOpacity={0.1}
-                    className="w-[634px]"
-                >
-                    <div className="relative flex items-center w-full px-4">
-                        <svg 
-                            xmlns="http://www.w3.org/2000/svg" 
-                            fill="none" 
-                            viewBox="0 0 24 24" 
-                            strokeWidth="1.5" 
-                            stroke="currentColor" 
-                            className="size-5 absolute left-0 text-white/50"
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                        </svg>
-                        <input 
-                            type="search" 
-                            className="w-full bg-transparent pl-8 text-white placeholder:text-white/50 outline-none" 
-                            placeholder="Cari nama mentor atau bidang"
-                        />
-                    </div>
-                </GlassSurface>
+    <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col overflow-x-hidden">
+      {/* Background Glow */}
+      <div
+        className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%]"
+        style={{
+          background:
+            "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
+          filter: "blur(40px)",
+          zIndex: 0,
+        }}
+      />
 
-                <div className="numbering flex gap-5">
-                <div className="alumni flex flex-col gap-1 items-center">
-                    <div className="alumni-num text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff] text-4xl font-bold flex items-center">
-                    <CountUp
-                        from={0}
-                        to={50}
-                        separator=","
-                        direction="up"
-                        duration={1}
-                        className="count-up-text"
-                        startCounting={false}
-                    />
-                    <h1>+</h1>
-                    </div>
-                    <h1 className="font-light">Mentor Expert</h1>
-                </div>
-                <div className="w-1 h-auto bg-gradient-to-b from-white to-transparent"></div>
-                <div className="modul flex flex-col gap-1 items-center">
-                    <div className="modul-num text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff] text-4xl font-bold flex items-center">
-                    <CountUp
-                        from={0}
-                        to={5}
-                        separator=","
-                        direction="up"
-                        duration={1}
-                        className="count-up-text"
-                        startCounting={false}
-                    />
-                    <h1>+</h1>
-                    </div>
-                    <h1 className="font-light">Kategori Lomba</h1>
-                </div>
-                <div className="w-1 h-auto bg-gradient-to-b from-white to-transparent"></div>
-                    <div className="mentor flex flex-col gap-1 items-center">
-                        <div className="mentor-num text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff] text-4xl font-bold flex items-center">
-                            <CountUp
-                                from={0}
-                                to={89}
-                                separator=","
-                                direction="up"
-                                duration={1}
-                                className="count-up-text"
-                                startCounting={false}
-                            />
-                            <h1>%</h1>
-                        </div>
-                        <h1 className="font-light">Win Rate</h1>
-                    </div>
-                </div>
-            </div>
-            <div className="mentor-content flex flex-col gap-20 items-center mb-40">
-                <div>
-                    <div className="flex flex-col items-center mb-10">
-                        <p className="font-poppins font-bold text-4xl">
-                            Business Case
-                        </p>
-                        <p className="text-[#B19EEF] font-bold text-xs ">
-                            4 MENTOR
-                        </p>
-                    </div>
-                    <div className="flex flex-row gap-7 items-center">
-                        <div className="flex flex-wrap gap-4">
-                            {businessCaseMentor.map((mentor, index) => (
-                                <MentorCard
-                                key={index}
-                                name={mentor.name}
-                                description={mentor.description}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <div className="flex flex-col items-center mb-10">
-                        <p className="font-poppins font-bold text-4xl">
-                            Debate
-                        </p>
-                        <p className="text-[#B19EEF] font-bold text-xs ">
-                            3 MENTOR
-                        </p>
-                    </div>
-                    <div className="flex flex-row gap-7 items-center">
-                        <div className="flex flex-wrap gap-4">
-                            {debateMentor.map((mentor, index) => (
-                                <MentorCard
-                                key={index}
-                                name={mentor.name}
-                                description={mentor.description}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <div className="flex flex-col items-center mb-10">
-                        <p className="font-poppins font-bold text-4xl">
-                            UI/UX
-                        </p>
-                        <p className="text-[#B19EEF] font-bold text-xs ">
-                            2 MENTOR
-                        </p>
-                    </div>
-                    <div className="flex flex-row gap-7 items-center">
-                        <div className="flex flex-wrap gap-4">
-                            {uiuxMentor.map((mentor, index) => (
-                                <MentorCard
-                                key={index}
-                                name={mentor.name}
-                                description={mentor.description}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <div className="flex flex-col items-center mb-10">
-                        <p className="font-poppins font-bold text-4xl">
-                            Hackathon
-                        </p>
-                        <p className="text-[#B19EEF] font-bold text-xs ">
-                            1 MENTOR
-                        </p>
-                    </div>
-                    <div className="flex flex-row gap-7 items-center">
-                        <div className="flex flex-wrap gap-4">
-                            {hackathonMentor.map((mentor, index) => (
-                                <MentorCard
-                                key={index}
-                                name={mentor.name}
-                                description={mentor.description}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </div>
+      <Navbar />
+
+      <div className="main-content flex flex-col gap-16 md:gap-24 items-center mt-28 md:mt-36 mb-24 relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6">
+        {/* Hero Section */}
+        <div className="hero-section flex flex-col gap-4 md:gap-6 items-center w-full">
+          <div className="bg-[#08C7E1]/10 border border-[#08C7E1]/20 px-4 md:px-5 py-1.5 rounded-full flex justify-center items-center">
+            <p className="text-[#08C7E1] font-semibold tracking-wide text-[11px] md:text-[13px]">
+              Tim Expert
+            </p>
+          </div>
+          <h1 className="text-4xl sm:text-5xl md:text-[56px] text-center text-white font-bold font-poppins leading-tight tracking-tight">
+            Expert{" "}
+            <span className="text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff]">
+              Mentor
+            </span>
+          </h1>
+          <p className="w-full max-w-[800px] text-center font-light text-[#A19DAB] text-sm md:text-base leading-relaxed px-2">
+            Kolaborasi para ahli dan praktisi yang bekerja di balik layar untuk
+            memastikan pengalaman belajarmu di MARK-UP berjalan optimal.
+          </p>
         </div>
-        <Footer />
+
+        {/* Mentor List Section (Hanya Grid, Tanpa Judul Kategori) */}
+        <div className="mentor-content flex flex-col items-center w-full max-w-[1200px]">
+          {/* Grid responsif: 1 kolom (HP), 2 kolom (Tablet), 3 atau 4 kolom (Desktop) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 md:gap-6 w-full justify-items-center">
+            {allMentors.map((mentor, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: index * 0.05 }}
+                viewport={{ once: true }}
+                className="w-full max-w-[320px] group cursor-default"
+              >
+                {/* Desain Card Minimalis Elegan */}
+                <div className="bg-[#120822]/60 backdrop-blur-md rounded-[16px] border border-white/10 p-6 flex flex-col items-center text-center hover:border-[#B19EEF]/60 transition-all duration-300 hover:-translate-y-2 relative overflow-hidden h-full min-h-[120px] justify-center shadow-lg">
+                  {/* Efek Glow Tipis di dalam card saat di-hover */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#B19EEF]/0 to-[#00C6D1]/0 group-hover:from-[#B19EEF]/10 group-hover:to-[#00C6D1]/5 transition-all duration-500"></div>
+
+                  {/* Teks Nama Mentor (Lebih Bold & Rapi) */}
+                  <h3 className="font-poppins font-bold text-[17px] md:text-lg text-white group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-[#FF9FFC] group-hover:to-[#a98fff] group-hover:bg-clip-text transition-all duration-300 relative z-10 px-2 tracking-wide leading-snug">
+                    {mentor.name}
+                  </h3>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <Footer />
     </div>
   );
 }
