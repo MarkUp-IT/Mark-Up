@@ -111,7 +111,7 @@ export default function HomePage() {
   return (
     <div className="w-full font-jakarta text-white bg-black min-h-screen relative flex flex-col overflow-x-hidden">
       <Navbar className="bg-white/10" />
-      <div className="w-full h-screen flex flex-col absolute z-0">
+      <div className="absolute top-0 left-0 w-full h-[100dvh] md:h-screen flex flex-col z-0 overflow-hidden pointer-events-none">
         <DarkVeil
           hueShift={337}
           noiseIntensity={0}
@@ -119,7 +119,7 @@ export default function HomePage() {
           speed={0.5}
           scanlineFrequency={0.5}
           warpAmount={0}
-          className={`w-full h-screen`}
+          className="w-full h-full object-cover"
         />
       </div>
       <div className="main-content flex flex-col gap-24 md:gap-32 items-center mt-24 md:mt-28 relative z-40 mb-24 w-full">
