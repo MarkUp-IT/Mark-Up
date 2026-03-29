@@ -20,9 +20,6 @@ const jakarta = Plus_Jakarta_Sans({
 export const metadata = {
   title: "MARK-UP OFFICIAL WEBSITE",
   description: "",
-  icons: {
-    icon: [{ url: "/images/bund.png", sizes: "32x32", type: "image/png" }],
-  },
 };
 
 export default function RootLayout({ children }) {
