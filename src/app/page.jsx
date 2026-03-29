@@ -111,7 +111,17 @@ export default function HomePage() {
   return (
     <div className="w-full font-jakarta text-white bg-black min-h-screen relative flex flex-col overflow-x-hidden">
       <Navbar className="bg-white/10" />
-
+      <div className="w-full h-screen flex flex-col absolute z-0">
+        <DarkVeil
+          hueShift={337}
+          noiseIntensity={0}
+          scanlineIntensity={0}
+          speed={0.5}
+          scanlineFrequency={0.5}
+          warpAmount={0}
+          className={`w-full h-screen`}
+        />
+      </div>
       <div className="main-content flex flex-col gap-24 md:gap-32 items-center mt-24 md:mt-28 relative z-40 mb-24 w-full">
         {/* HERO SECTION */}
         <div className="hero-section py-8 md:py-[8vh] w-full px-6 md:px-[10vh] lg:px-[30vh] flex flex-col gap-4 md:gap-6 items-center">
