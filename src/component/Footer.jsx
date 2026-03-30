@@ -64,14 +64,14 @@ export default function Footer() {
                 Beranda
               </p>
             </Link>
-            <Link href="/info-lomba">
-              <p className="hover:text-white hover:font-semibold transition-all">
-                Info Lomba
-              </p>
-            </Link>
             <Link href="/produk">
               <p className="hover:text-white hover:font-semibold transition-all">
                 Produk
+              </p>
+            </Link>
+            <Link href="/info-lomba">
+              <p className="hover:text-white hover:font-semibold transition-all">
+                Info Lomba
               </p>
             </Link>
             <Link href="/mentor">
