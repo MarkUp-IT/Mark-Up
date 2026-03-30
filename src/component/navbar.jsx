@@ -16,7 +16,7 @@ export default function Navbar() {
     { nama: "Produk", url: "/produk" },
     { nama: "Info Lomba", url: "/info-lomba" },
     { nama: "Mentor", url: "/mentor" },
-    { nama: "Tentang Kami", url: "/tentang-kami" },
+    // { nama: "Tentang Kami", url: "/tentang-kami" },
   ];
 
   const GlassSurfaceDynamic = dynamic(
