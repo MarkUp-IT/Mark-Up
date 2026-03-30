@@ -148,7 +148,8 @@ export default function Footer() {
                 />
               </svg>
               <p className="w-full md:max-w-[280px] leading-relaxed">
-                Jl.Mojo Kidul Blok 60285
+                Jl. Sutorejo Prima Indah Utara VII, No. 20, Kelurahan Dukuh
+                Sutorejo, Kec. Mulyorejo, Kota Surabaya, Provinsi Jawa Timur
               </p>
             </div>
           </div>
