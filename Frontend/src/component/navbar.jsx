@@ -74,16 +74,16 @@ export default function Navbar() {
             {/* TOMBOL MASUK & DAFTAR (Muncul di Desktop/Tablet) */}
             <div className="hidden sm:flex items-center gap-4">
               <Link
-                href="/"
+                href="/login"
                 className="text-sm font-medium text-gray-200 hover:text-white transition-colors"
-                onClick={(e) => e.preventDefault()} // Cegah pindah halaman sementara
+                // onClick={(e) => e.preventDefault()} // Cegah pindah halaman sementara
               >
                 Masuk
               </Link>
               <Link
-                href="/"
+                href="/register"
                 className="text-sm font-bold bg-[#E5DFFF] text-[#530D8E] px-5 py-2.5 rounded-full hover:bg-white hover:scale-105 transition-all shadow-[0_0_15px_rgba(229,223,255,0.3)]"
-                onClick={(e) => e.preventDefault()} // Cegah pindah halaman sementara
+                // onClick={(e) => e.preventDefault()} // Cegah pindah halaman sementara
               >
                 Daftar
               </Link>

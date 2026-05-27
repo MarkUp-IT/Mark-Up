@@ -1,15 +1,20 @@
 "use client";
 
-
+import { useState } from "react";
 
 export default function Login() {
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const isValid = email.trim() !== "" && password.trim() !== "";
  
 
   return (
     <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col overflow-x-hidden">
       {/* Background Glow */}
       <div
-        className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%]"
+        className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%] pointer-events-none"
         style={{
           background:
             "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
@@ -32,17 +37,68 @@ export default function Login() {
                 </div>
                 
     
-                <div>
-                    <input type="text" id="username" name="user_name" placeholder="Email" required className="w-[452px] h-[52px] bg-[#2B2B2B] rounded-[16px] pl-10 text-[19px] font-poppins"/>
+                <div className="relative">
+                    {email !== "" && (
+                      <label
+                        className="
+                          absolute
+                          -top-3
+                          left-5
+                          text-[16px]
+                          text-[#B19EEF]
+                          bg-transparent
+                          px-2
+                          z-10
+                        "
+                      >
+                        Email
+                      </label>
+                    )}
+
+                    <input 
+                    type="text" 
+                    id="username" 
+                    name="user_name" 
+                    placeholder="Email"
+                    value = {email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-[452px] h-[52px] bg-[#2B2B2B] rounded-[16px] pl-10 text-[19px] font-poppins focus:outline-none"/>
                 </div>
-                <div>
-                    <input type="text" id="username" name="user_name" placeholder="Password" required className="w-[452px] h-[52px] bg-[#2B2B2B] rounded-[16px] pl-10 text-[19px] font-poppins"/>
+                <div className="relative">
+                    {password !== "" && (
+                      <label
+                        className="
+                          absolute
+                          -top-3
+                          left-5
+                          text-[16px]
+                          text-[#B19EEF]
+                          bg-transparent
+                          px-2
+                          z-10
+                        "
+                      >
+                        Password
+                      </label>
+                    )}
+
+
+                    <input 
+                    type="text" 
+                    id="username" 
+                    name="user_name" 
+                    placeholder="Password" 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-[452px] h-[52px] bg-[#2B2B2B] rounded-[16px] pl-10 text-[19px] font-poppins focus:outline-none"/>
                 </div>
                 <div className="flex flex-row gap-3 items-center">
                    
                 </div>
                 <div>
-                    <button className="bg-[#B19EEF] flex items-center justify-center w-[452px] h-[52px] rounded-[14px] text-[#000000] font-bold">
+                    <button 
+                    disabled={!isValid}
+                    className="bg-[#B19EEF] flex items-center justify-center w-[452px] h-[52px] rounded-[14px] text-[#000000] font-bold disabled:bg-[#635983] disabled:cursor-not-allowed">
                         Masuk
                     </button>
                 </div>
