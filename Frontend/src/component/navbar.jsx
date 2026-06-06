@@ -166,15 +166,15 @@ export default function Navbar() {
             {/* Tombol Auth untuk Mobile (Numpuk di bawah menu) */}
             <div className="flex sm:hidden flex-col gap-3 mt-4 pt-4 border-t border-white/10">
               <Link
-                href="/"
-                onClick={(e) => e.preventDefault()}
+                href="/login"
+                // onClick={(e) => e.preventDefault()}
                 className="w-full py-2.5 text-center border border-white/20 rounded-full text-sm font-medium text-white hover:bg-white/10 transition-colors"
               >
                 Masuk
               </Link>
               <Link
-                href="/"
-                onClick={(e) => e.preventDefault()}
+                href="/register"
+                // onClick={(e) => e.preventDefault()}
                 className="w-full py-2.5 text-center bg-[#E5DFFF] text-[#530D8E] rounded-full text-sm font-bold shadow-lg"
               >
                 Daftar Sekarang
