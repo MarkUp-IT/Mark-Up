@@ -1,7 +1,7 @@
 "use client";
 
 
-import { Bell, Settings, Search, Calendar, Download, TrendingUp } from 'lucide-react';
+import { Bell, Settings, Search, Plus, TrendingUp, Download, Eye, PenLine, SquareArrowOutUpRight } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -14,61 +14,56 @@ import {
 import { useState } from "react";
 import Sidebar from "@/component/admin/sidebar";
 
-export default function admin() {
+export default function produk() {
 
     
 
     
 
     const data = [
-        { day: "29/03", revenue: 400 },
-        { day: "30/03", revenue: 300 },
-        { day: "31/03", revenue: 600 },
-        { day: "01/04", revenue: 500 },
-        { day: "02/04", revenue: 300 },
-        { day: "03/04", revenue: 500 },
+        { product: "PRIVATE MENTORING", revenue: 200 },
+        { product: "INTENSIVE BOOTCAMP", revenue: 700 },
+        { product: "E-LEARNING & MODUL", revenue: 300 },
+        
     ];
 
-    const logs = [
+    const products = [
         {
-            log_id: "#A001",
-            username: "Nicco C. P.",
-            role: "CIO",
-            action: "Add Product #B0001",
-            target_entity: "Products/Bootcamp",
-            timestamp: "Oct 24, 2026 · 14:22",
-            status: "PUBLISHED",
+            product_id: "#ME003",
+            title: "101 Career Mentoring",
+            price: "Rp110.000",
+            category: "Mentoring",
+            status: "ACTIVE",
+            sold: 12,
         },
         {
-            log_id: "#U011",
-            username: "Faisal A.",
-            role: "Associate IT",
-            action: "Edit Product #ME003",
-            target_entity: "Products/Mentoring",
-            timestamp: "Oct 24, 2026 · 11:05",
-            status: "SCHEDULED",
+            product_id: "#BO001",
+            title: "Essential Sprint Registration",
+            price: "Rp110.000",
+            category: "Bootcamp",
+            status: "DEACTIVE",
+            sold: 5,
         },
         {
-            log_id: "#A101",
-            username: "Muhammad A.",
-            role: "Associate IT",
-            action: "Add Competition #W001",
-            target_entity: "Competition/UI_UX",
-            timestamp: "Oct 23, 2026 · 09:25",
-            status: "PUBLISHED",
+            product_id: "#MO001",
+            title: "Full-Throttle Coaching",
+            price: "Rp110.000",
+            category: "Module",
+            status: "DEACTIVE",
+            sold: 8,
         },
         {
-            log_id: "#R121",
-            username: "Affan F. D.",
-            role: "Associate IT",
-            action: "Remove Competition #H005",
-            target_entity: "Competition/Hackathon",
-            timestamp: "Oct 23, 2026 · 04:28",
-            status: "REMOVED",
+            product_id: "#BO003",
+            title: "Bundling PowerPack (Newbie Friendly)",
+            price: "Rp110.000",
+            category: "Bootcamp",
+            status: "ACTIVE",
+            sold: 10,
         },
     ];
 
-    const [isActive , setIsActive] = useState("all");
+    const [isActive , setIsActive] = useState("semua");
+    const [aktif , setAktif] = useState("semua");
 
     return (
         <div className="w-full font-inter text-black bg-white min-h-screen relative flex flex-row overflow-x-hidden">
@@ -78,7 +73,7 @@ export default function admin() {
                 <div className="w-[1158px] h-[72px] bg-[#E2E8F0] flex flex-row items-center justify-center gap-15">
                     <div className="flex gap-20">
                         <p className="text-black font-bold text-[20.25px]">
-                            Dashboard
+                            Manajemen Produk
                         </p>
                         <div className="relative">
                             <Search
@@ -88,7 +83,7 @@ export default function admin() {
 
                             <input
                                 type="text"
-                                placeholder="Search analytics..."
+                                placeholder="Search products..."
                                 className="bg-white w-[511px] h-[36px] rounded-[6.75px] pl-10"
                             />
                         </div>
@@ -116,62 +111,29 @@ export default function admin() {
 
                 </div>
 
-                <div className="flex flex-row items-center w-full justify-between">
+                <div className="flex flex-row items-center justify-between w-full">
                     <div>
                         <p className="font-bold text-[25px]">
-                            Dashboard Overview
+                            Products Catalog
                         </p>
                         <p className="text-[#43474D] text-[15px]">
-                            Real-time performance metrics for MARK-UP products
+                            Manage MARK-UP bootcamps, modules, and mentoring sessions from a unified interface.
                         </p>
                     </div>
                     <div className="flex flex-row gap-4">
-                        <div className="w-[412px] h-[43.5px] bg-[#F0F4F8] rounded-[4.5px] flex justify-center items-center gap-1">
-                            <button 
-                            onClick={() => setIsActive("all")}
-                            className={`px-2 h-[33.75px] rounded-[6.75px] font-medium text-[#43474D] ${isActive === "all" ? "bg-white" : ""}`}>
-                                All Time
-                            </button>
-                            <button 
-                            onClick={() => setIsActive("day")}
-                            className={`px-2 h-[33.75px] rounded-[6.75px] font-medium text-[#43474D] ${isActive === "day" ? "bg-white text-black" : ""}`}>
-                                Day
-                            </button>
-                            <button 
-                            onClick={() => setIsActive("week")}
-                            className={`px-2 h-[33.75px] rounded-[6.75px] font-medium text-[#43474D] ${isActive === "week" ? "bg-white text-black" : ""}`}>
-                                Week
-                            </button>
-                            <button 
-                            onClick={() => setIsActive("month")}
-                            className={`px-2 h-[33.75px] rounded-[6.75px] font-medium text-[#43474D] ${isActive === "month" ? "bg-white text-black" : ""}`}>
-                                Month
-                            </button>
-                            <div className="relative">
-                                <button
-                                onClick={() => setIsActive("custom")} 
-                                className={`w-[100px] h-[33.75px] pr-5 rounded-[6.75px] font-medium text-[#43474D] ${isActive === "custom" ? "bg-white text-black" : ""}`}>
-                                    Custom
-                                </button>
-                                <Calendar
-                                className= {`absolute left-19 top-1/2 -translate-y-1/2 text-[#43474D] ${isActive === "custom" ? "text-black" : ""}`}
-                                size={18}
-                                />
-                            </div>
-
-                        </div>
+                        
                         <div className="relative">
-                            <Download 
+                            <Plus 
                             className="absolute left-3 top-1/2 -translate-y-1/2 text-white"
                             size={18}
                             />    
                             <button className="bg-[#2563EB] w-[163px] h-[43.5px] text-white font-semibold pl-5 rounded-[6.75px] hover:bg-[#2563EB]/80">
-                                Export to PDF
+                                New Product
                             </button>
                         </div>
                     </div>
                 </div>
-                <div className="w-full flex justify-between">
+                <div className="w-full flex justify-between ">
                     <div className="bg-[#FDFFE7] w-[370px] h-[146px] rounded-[9px] flex flex-col justify-center px-7">
                         <p className="text-[#43474D] font-bold text-[16px]">
                             PRIVATE MENTORING SALES
@@ -222,9 +184,9 @@ export default function admin() {
                         <div className="flex-1 min-h-0">
                             <ResponsiveContainer width="100%" height="100%">
                                 
-                                <BarChart data={data}>
+                                <BarChart data={data} barCategoryGap={5}>
 
-                                    <XAxis dataKey="day" />
+                                    <XAxis dataKey="product" />
 
                                     <YAxis hide/>
 
@@ -238,9 +200,11 @@ export default function admin() {
                                         <Cell
                                             key={index}
                                             fill={
-                                            index === data.length - 1
-                                                ? "#2563EB" 
-                                                : "#C8D8F6"
+                                            index === 0
+                                                ? "#FFEE00" 
+                                            : index === 1
+                                                ? "#2563EB"
+                                            : "#A301A2"
                                             }
                                         />
                                         ))}
@@ -252,70 +216,133 @@ export default function admin() {
                     <div className="flex flex-col gap-10">
                         <div className=" bg-[#E7FFE9] w-[370px] h-[146px] rounded-[9px] flex flex-col justify-center px-7">
                             <p className="text-[#43474D] font-bold text-[16px]">
-                                TODAY SALES
+                                ACTIVE PRODUCTS NOW
                             </p>
                             <div className="flex flex-row">
-                                <p className="font-bold text-[43.87px]">43</p>
-                                <span className="text-[#43474D] pt-8 pl-2">units</span>
+                                <p className="font-bold text-[43.87px]">32</p>
+                                <span className="text-[#43474D] pt-8 pl-2">products</span>
                             </div>
                         </div>
                         <div className=" w-[370px] h-[146px] rounded-[9px] flex flex-col justify-center px-7">
                             <p className="text-[#43474D] font-bold text-[16px]">
-                                ACTIVE USERS
+                                TOTAL PRODUCTS ALL TIME
                             </p>
                             <div className="flex flex-row">
-                                <p className="font-bold text-[43.87px]">42.8k</p>
-                                <span className="text-[#43474D] pt-8 pl-2">online</span>
+                                <p className="font-bold text-[43.87px]">1.28k</p>
+                                <span className="text-[#43474D] pt-8 pl-2">products</span>
                             </div>
                         </div>
                         
                     </div>
                 </div>
-                <div className=" w-full flex flex-col ">
+                <div className=" w-full flex flex-col">
                     <div className="flex justify-between">
                         <p className="text-[18px]">
-                            Audit Trail
+                            List Products
                         </p>
                         <p className="text-[#2563EB] font-bold text-[14.62px]">
-                            View All Logs
+                            View All Products
                         </p>
                     </div>
                     <p className="text-[#43474D]">
-                        Review recent administrative activities across the platform.
+                        List of MARK-UP products all time
                     </p>
+                    <div className='flex flex-row justify-between mt-5'>
+                        <div className='flex flex-row gap-5'>
+                            <div className="w-[370px] h-[43.5px] bg-[#F0F4F8] rounded-[4.5px] flex justify-center items-center gap-1">
+                                <button 
+                                onClick={() => setIsActive("semua")}
+                                className={`px-2 h-[33.75px] rounded-[6.75px] font-medium text-[#43474D] ${isActive === "semua" ? "bg-white text-black" : ""}`}>
+                                    Semua
+                                </button>
+                                <button 
+                                onClick={() => setIsActive("mentoring")}
+                                className={`px-2 h-[33.75px] rounded-[6.75px] font-medium text-[#43474D] ${isActive === "mentoring" ? "bg-white text-black" : ""}`}>
+                                    Mentoring
+                                </button>
+                                <button 
+                                onClick={() => setIsActive("bootcamp")}
+                                className={`px-2 h-[33.75px] rounded-[6.75px] font-medium text-[#43474D] ${isActive === "bootcamp" ? "bg-white text-black" : ""}`}>
+                                    Bootcamp
+                                </button>
+                                <button 
+                                onClick={() => setIsActive("module")}
+                                className={`px-2 h-[33.75px] rounded-[6.75px] font-medium text-[#43474D] ${isActive === "module" ? "bg-white text-black" : ""}`}>
+                                    Module
+                                </button>
+                            </div>
+                            <div className="w-[270px] h-[43.5px] bg-[#F0F4F8] rounded-[4.5px] flex justify-center items-center gap-1">
+                                <button 
+                                onClick={() => setAktif("semua")}
+                                className={`px-2 h-[33.75px] rounded-[6.75px] font-medium text-[#43474D] ${aktif === "semua" ? "bg-white text-black" : ""}`}>
+                                    Semua
+                                </button>
+                                <button 
+                                onClick={() => setAktif("active")}
+                                className={`px-2 h-[33.75px] rounded-[6.75px] font-medium text-[#43474D] ${aktif === "active" ? "bg-white text-black" : ""}`}>
+                                    Active
+                                </button>
+                                <button 
+                                onClick={() => setAktif("deactivate")}
+                                className={`px-2 h-[33.75px] rounded-[6.75px] font-medium text-[#43474D] ${aktif === "deactivate" ? "bg-white text-black" : ""}`}>
+                                    Deactivate
+                                </button>
+                            </div>
+                        </div>
+                        <div className='relative flex items-center'>
+                            <Download 
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-black "
+                            size={15}
+                            />  
+                            <button className='w-[121px] h-[35px] bg-[#F0F4F8] text-[12px] pl-5 font-medium rounded-[4px] hover:bg-[#E8E8E9]'>
+                                Export .CSV
+                            </button>
+                        </div>
+                    </div>
                     <div className="rounded-[8px] overflow-hidden mt-5">
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm ">
                                 <thead className="bg-[#F0F4F8]">
                                     <tr>
-                                        <th className="px-6 py-3 text-center">LOG ID</th>
-                                        <th className="px-6 py-3 text-center">
-                                            ADMIN USERNAME
-                                            <br />
-                                            ADMIN USERID
-                                        </th>
-                                        <th className="px-6 py-3 text-center">ACTION</th>
-                                        <th className="px-6 py-3 text-center">TARGET ENTITY</th>
-                                        <th className="px-6 py-3 text-center">TIMESTAMP</th>
+                                        <th className="px-6 py-3 text-center">PRODUCT ID</th>
+                                        <th className="px-6 py-3 text-center">PRODUCT TITLE</th>
+                                        <th className="px-6 py-3 text-center">PRICE</th>
+                                        <th className="px-6 py-3 text-center">CATEGORY</th>
                                         <th className="px-6 py-3 text-center">STATUS</th>
+                                        <th className="px-6 py-3 text-center">SOLD</th>
+                                        <th className="px-6 py-3 text-center">ACTIONS</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-[#F0F4F8]">
-                                    {logs.map((item) =>(
+                                    {products.map((item) =>(
                                         <tr key={item.log_id}>
-                                            <td className="px-6 py-4 text-center">{item.log_id}</td>
-                                            <td className="px-6 py-4 text-center">{item.username}</td>
-                                            <td className="px-6 py-4 text-center">{item.action}</td>
-                                            <td className="px-6 py-4 text-center">{item.target_entity}</td>
-                                            <td className="px-6 py-4 text-center">{item.timestamp}</td>
+                                            <td className="px-6 py-4 text-center">{item.product_id}</td>
+                                            <td className="px-6 py-4 text-center">{item.title}</td>
+                                            <td className="px-6 py-4 text-center">{item.price}</td>
+                                            <td className="px-6 py-4 text-center">
+                                                <span className={`inline-flex items-center justify-center px-3 py-1 text-xs rounded-[2.25px] font-medium text-black ${
+                                                    item.category === "Mentoring" ? "bg-[#FDFFE7]"  
+                                                    : item.category === "Bootcamp" ? "bg-[#E7FFFC]"
+                                                    : "bg-[#FFE7FD]"
+                                                }`}>
+                                                        {item.category}
+                                                </span>
+                                            </td>
                                             <td className="px-6 py-4 text-center">
                                                 <span className={`inline-flex items-center justify-center px-3 py-1 text-xs rounded-[13.5px] font-bold ${
-                                                    item.status === "PUBLISHED" ? "bg-[#D6FFD8] text-[#024816]"  
-                                                    : item.status === "SCHEDULED" ? "bg-[#E0E9FF] text-[#00356D]"
+                                                    item.status === "ACTIVE" ? "bg-[#D6FFD8] text-[#024816]"  
                                                     : "bg-[#FFD6D7] text-[#480203]"
-                                                    }`}>
+                                                }`}>
                                                         {item.status}
                                                 </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-center">{item.sold}</td>
+                                            <td className='flex px-6 py-4  justify-center '>
+                                                <div className='flex flex-row items-center gap-2'>
+                                                    <Eye size={20}/>
+                                                    <PenLine size={20}/>
+                                                    <SquareArrowOutUpRight size={20}/>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
