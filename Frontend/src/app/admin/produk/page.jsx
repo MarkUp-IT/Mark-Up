@@ -16,10 +16,6 @@ import Sidebar from "@/component/admin/sidebar";
 
 export default function produk() {
 
-    
-
-    
-
     const data = [
         { product: "PRIVATE MENTORING", revenue: 200 },
         { product: "INTENSIVE BOOTCAMP", revenue: 700 },
@@ -64,10 +60,13 @@ export default function produk() {
 
     const [isActive , setIsActive] = useState("semua");
     const [aktif , setAktif] = useState("semua");
-    const [isOpen, setIsOpen] = useState(false);
+    const [isAddOpen, setIsAddOpen] = useState(false);
+    const [isEditOpen, setIsEditOpen] = useState(false);
+
+    const [selectedProduct, setSelectedProduct] = useState(null);
 
     useEffect(() => {
-        if (isOpen) {
+        if (isAddOpen) {
             document.body.style.overflow = "hidden";
         } else {
             document.body.style.overflow = "auto";
@@ -76,7 +75,19 @@ export default function produk() {
         return () => {
             document.body.style.overflow = "auto";
         };
-    }, [isOpen]);
+    }, [isAddOpen]);
+
+    useEffect(() => {
+        if (isEditOpen) {
+            document.body.style.overflow = "hidden";
+        } else {
+            document.body.style.overflow = "auto";
+        }
+
+        return () => {
+            document.body.style.overflow = "auto";
+        };
+    }, [isEditOpen]);
 
     return (
         <div className="w-full font-inter text-black bg-white min-h-screen relative flex flex-row overflow-x-hidden">
@@ -141,7 +152,7 @@ export default function produk() {
                             size={18}
                             />    
                             <button 
-                            onClick={() => setIsOpen(true)}
+                            onClick={() => setIsAddOpen(true)}
                             className="bg-[#2563EB] w-[163px] h-[43.5px] text-white font-semibold pl-5 rounded-[6.75px] hover:bg-[#2563EB]/80">
                                 New Product
                             </button>
@@ -354,9 +365,21 @@ export default function produk() {
                                             <td className="px-6 py-4 text-center">{item.sold}</td>
                                             <td className='flex px-6 py-4  justify-center '>
                                                 <div className='flex flex-row items-center gap-2'>
-                                                    <Eye size={20}/>
-                                                    <PenLine size={20}/>
-                                                    <SquareArrowOutUpRight size={20}/>
+                                                    <Eye 
+                                                    className='cursor-pointer'
+                                                    size={20}/>
+                                                    <PenLine 
+                                                    size={20}
+                                                    onClick={() => {
+                                                        setSelectedProduct(item);
+                                                        setIsEditOpen(true)
+                                                    }}
+                                                    
+                                                    className='cursor-pointer'
+                                                    />
+                                                    <SquareArrowOutUpRight 
+                                                    className='cursor-pointer'
+                                                    size={20}/>
                                                 </div>
                                             </td>
                                         </tr>
@@ -371,7 +394,7 @@ export default function produk() {
 
             </div>
 
-            {isOpen && (
+            {isAddOpen && (
                 <div className="fixed inset-0 bg-black/30 z-40" />
             )}
 
@@ -382,7 +405,7 @@ export default function produk() {
                 transition-transform duration-300 ease-in-out
                 flex flex-col
                 overflow-y-auto
-                ${isOpen ? "translate-x-0" : "translate-x-full"}
+                ${isAddOpen ? "translate-x-0" : "translate-x-full"}
             `}>
                 <div className='w-full h-[115px] shrink-0 bg-[#F0F4F8] flex flex-col justify-center px-10 gap-1'>
                     <div className='flex flex-row w-full justify-between'>
@@ -390,7 +413,8 @@ export default function produk() {
                             New Product
                         </p>
                         <X 
-                        onClick={() => setIsOpen(false)}
+                        onClick={() => setIsAddOpen(false)}
+                        className='cursor-pointer'
                         />
                     </div>
                     <p className='text-[#43474D]'>
@@ -586,10 +610,241 @@ export default function produk() {
                 </div>
 
                 <div className='flex flex-row justify-center items-center gap-5 w-full h-[100px] mb-10'>
-                    <button className='text-[#2563EB] bg-white rounded-[9.61px] w-[251px] h-[69px] border border-2 border-[#C3C6CE] font-bold'>
+                    <button className='text-[#2563EB] bg-white rounded-[9.61px] w-[251px] h-[69px] border border-2 border-[#C3C6CE] font-bold hover:bg-[#DCDCDC]'>
                         Discard Draft
                     </button>
-                    <button className='text-white bg-[#2563EB] rounded-[9.61px] w-[251px] h-[69px] font-bold'>
+                    <button className='text-white bg-[#2563EB] rounded-[9.61px] w-[251px] h-[69px] font-bold hover:bg-[#2563EB]/80'>
+                        Publish Product
+                    </button>
+                </div>
+
+            </div>
+
+            {isEditOpen && (
+                <div className="fixed inset-0 bg-black/30 z-40" />
+            )}
+
+            <div 
+            className={`
+                fixed top-0 right-0 h-screen w-[700px]
+                bg-white shadow-xl z-50
+                transition-transform duration-300 ease-in-out
+                flex flex-col
+                overflow-y-auto
+                ${isEditOpen ? "translate-x-0" : "translate-x-full"}
+            `}>
+                <div className='w-full h-[115px] shrink-0 bg-[#F0F4F8] flex flex-col justify-center px-10 gap-1'>
+                    <div className='flex flex-row w-full justify-between'>
+                        <p className='text-black text-[19.23px]'>
+                            Edit Product
+                        </p>
+                        <X 
+                        onClick={() => setIsEditOpen(false)}
+                        className='cursor-pointer'
+                        />
+                    </div>
+                    <p className='text-[#43474D]'>
+                        Fill in the details to create a new offering.
+                    </p>
+                </div>
+
+                <div 
+                key={selectedProduct?.product_id}   
+                className='mx-10 my-10 flex flex-col gap-5'>
+                    <div className='flex flex-col gap-2'>
+                        <p className='text-[#43474D] text-[19px]'> 
+                            PRODUCT THUMBNAIL
+                        </p>
+                        <div className='bg-[#F0F4F8] w-[623px] h-[220px] rounded-[9.61px] flex flex-col items-center justify-center border-2 border-dashed border-gray-300'>
+                            <div className='bg-white rounded-[14.42px] w-[78px] h-[70px] flex justify-center items-center mb-5'>
+                                <CloudUpload size={30} className='text-[#285FA0]'/>
+                            </div>
+                            <p className='text-black font-semibold text-[16.82px] mb-2'>
+                                Click to upload or drag and drop
+                            </p>
+                            <p className='text-[#43474D] text-[14.42px]'>
+                                Recommended: 1280x590px (Max 5MB)
+                            </p>
+                        </div>
+                    </div>
+                    <div className='flex flex-col gap-2'>
+                        <p className='text-[#43474D] text-[19px]'> 
+                            TITLE
+                        </p>
+                        <div className='relative'>
+                            <input
+                            type="text"
+                            defaultValue={selectedProduct?.title || ''}
+                            placeholder='Enter product name...'
+                            className='w-[623px] h-[58px] bg-[#F0F4F8] shadow-md pl-5'
+                            />
+                        </div>
+                    </div>
+                    <div className='flex flex-col gap-2'>
+                        <p className='text-[#43474D] text-[19px]'> 
+                            CATEGORY
+                        </p>
+                        <div className="relative w-[623px]">
+                            <select
+                                className="
+                                w-full h-[58px]
+                                bg-[#F0F4F8]
+                                shadow-md
+                                px-5
+                                appearance-none
+                                "
+                                defaultValue={selectedProduct?.category || 'Bootcamp'}
+                            >
+                                <option>Bootcamp</option>
+                                <option>Mentoring</option>
+                                <option>Module</option>
+                            </select>
+
+                            <ChevronDown
+                                size={20}
+                                className="
+                                absolute
+                                right-5
+                                top-1/2
+                                -translate-y-1/2
+                                pointer-events-none
+                                "
+                            />
+                        </div>
+                    </div>
+                    <div className='flex flex-col gap-2'>
+                        <p className='text-[#43474D] text-[19px]'> 
+                            REGISTRATION LINK (URL)
+                        </p>
+                        <div className='relative'>
+                            <input
+                            type="text"
+                            placeholder='Enter product transaction link...'
+                            className='w-[623px] h-[58px] bg-[#F0F4F8] shadow-md pl-5'
+                            />
+                        </div>
+                    </div>
+                    <div className='flex flex-col gap-2'>
+                        <p className='text-[#43474D] text-[19px]'> 
+                            SHORT DESCRIPTION
+                        </p>
+                        <div className='relative'>
+                            <input
+                            type="text"
+                            placeholder='Write short description (max 100 characters)...'
+                            className='w-[623px] h-[58px] bg-[#F0F4F8] shadow-md pl-5'
+                            />
+                        </div>
+                    </div>
+                    <div className='flex flex-col gap-2'>
+                        <p className='text-[#43474D] text-[19px]'> 
+                            EXPLANATION
+                        </p>
+                        <div className='relative'>
+                            <input
+                            type="text"
+                            placeholder='Write product explanation (no limit)...'
+                            className='w-[623px] h-[58px] bg-[#F0F4F8] shadow-md pl-5'
+                            />
+                        </div>
+                    </div>
+                    <div className="flex gap-5">
+                        <div className="flex flex-col gap-2 flex-1">
+                            <p className="text-[#43474D] text-[19px]">
+                            PUBLISHED AT
+                            </p>
+
+                            <div className="relative">
+                            <input
+                                type="date"
+                                className="
+                                w-full h-[58px]
+                                bg-[#F0F4F8]
+                                shadow-md
+                                px-5
+                                "
+                            />
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2 w-[200px]">
+                            <p className="text-[#43474D] text-[19px]">
+                            TIME
+                            </p>
+
+                            <div className="relative">
+                            <input
+                                type="time"
+                                className="
+                                w-full h-[58px]
+                                bg-[#F0F4F8]
+                                shadow-md
+                                px-5
+                                "
+                            />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex gap-5">
+                        <div className="flex flex-col gap-2 flex-1">
+                            <p className="text-[#43474D] text-[19px]">
+                            PRICE (Rp)
+                            </p>
+
+                            <input
+                            type="number"
+                            defaultValue={selectedProduct?.price?.replace(/[^0-9]/g, '') || 0}
+                            placeholder="0"
+                            className="
+                                w-full h-[58px]
+                                bg-[#F0F4F8]
+                                shadow-md
+                                px-5
+                            "
+                            />
+                        </div>
+
+                        <div className="flex flex-col gap-2 flex-1">
+                            <p className="text-[#43474D] text-[19px]">
+                            DISCOUNT (%)
+                            </p>
+
+                            <input
+                            type="number"
+                            placeholder="0"
+                            className="
+                                w-full h-[58px]
+                                bg-[#F0F4F8]
+                                shadow-md
+                                px-5
+                            "
+                            />
+                        </div>
+
+                        <div className="flex flex-col gap-2 flex-1">
+                            <p className="text-[#43474D] text-[19px]">
+                            STOCK
+                            </p>
+
+                            <input
+                            type="number"
+                            placeholder="0"
+                            className="
+                                w-full h-[58px]
+                                bg-[#F0F4F8]
+                                shadow-md
+                                px-5
+                            "
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className='flex flex-row justify-center items-center gap-5 w-full h-[100px] mb-10'>
+                    <button className='text-[#2563EB] bg-white rounded-[9.61px] w-[251px] h-[69px] border border-2 border-[#C3C6CE] font-bold hover:bg-[#DCDCDC]'>
+                        Discard Draft
+                    </button>
+                    <button className='text-white bg-[#2563EB] rounded-[9.61px] w-[251px] h-[69px] font-bold hover:bg-[#2563EB]/80'>
                         Publish Product
                     </button>
                 </div>
