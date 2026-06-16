@@ -1,98 +1,70 @@
 "use client";
 
-import {LayoutDashboard, Archive, Trophy, ScrollText, MessagesSquare, History} from 'lucide-react';
+import {
+  LayoutDashboard,
+  Package,
+  Trophy,
+  ReceiptText,
+  MessageSquare,
+  History,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export default function Sidebar(){
+export default function Sidebar() {
+  const pathname = usePathname();
 
-    const pathname = usePathname();
-    const daftarMenu = [
-        { 
-            nama: "Dashboard", 
-            url: "/admin",
-            icon: LayoutDashboard
-        },
-        { 
-            nama: "Produk", 
-            url: "/admin/produk",
-            icon: Archive
-        },
-        { 
-            nama: "Info Lomba", 
-            url: "/admin/lomba",
-            icon: Trophy
-        },
-        { 
-            nama: "Transaksi", 
-            url: "/admin/transaksi",
-            icon: ScrollText
-        },
-        { 
-            nama: "Ulasan", 
-            url: "/admin/ulasan",
-            icon: MessagesSquare
-        },
-        { 
-            nama: "Audit Trail", 
-            url: "/admin/audit",
-            icon: History
-        },
-    ];
+  const daftarMenu = [
+    { nama: "Dashboard", url: "/admin", icon: LayoutDashboard },
+    { nama: "Produk", url: "/admin/produk", icon: Package },
+    { nama: "Info Lomba", url: "/admin/lomba", icon: Trophy },
+    { nama: "Transaksi", url: "/admin/transaksi", icon: ReceiptText },
+    { nama: "Ulasan", url: "/admin/ulasan", icon: MessageSquare },
+    { nama: "Audit Trail", url: "/admin/audit", icon: History },
+  ];
 
-    return (
-    <div className="fixed left-0 top-0 h-screen bg-[#E2E8F0] w-[288px] flex flex-col pt-5 pl-5 pr-5">
+  const currentPath = pathname || "/admin/produk";
 
-        <div className="pl-5 mb-5">
-            <p className="font-bold text-[22.5px]">
-                MARK-UP
-            </p>
-            <p className="text-[#43474D] text-[12.37px] tracking-[1.24px]">
-                ADMIN
-            </p>
+  return (
+    <div className="fixed top-0 left-0 w-[288px] h-screen bg-[#F8FAFC] border-r border-[#E2E8F0] flex flex-col justify-between py-8 px-4 z-10">
+      <div>
+        <div className="flex flex-col mb-10 px-4">
+          <h1 className="text-[24px] font-black text-[#1E293B] tracking-tight">
+            MARK-UP
+          </h1>
+          <span className="text-[11px] font-bold text-[#64748B] tracking-widest mt-1">
+            ADMIN
+          </span>
         </div>
-
-        <div className="hidden lg:flex menus flex flex-col items-center">
-            {daftarMenu.map((menu, index) => {
-            const menuAktif = pathname === menu.url;
+        <nav className="flex flex-col gap-2">
+          {daftarMenu.map((menu, index) => {
+            const menuAktif =
+              currentPath.includes(menu.url) &&
+              (menu.url !== "/admin" || currentPath === "/admin");
             const Icon = menu.icon;
 
             return (
-                <Link
-                    key={index}
-                    href={menu.url}
-                    className={`flex flex-row gap-4 w-full h-[54px] items-center rounded-[6.75px] pl-5 transition-colors ${
-                        menuAktif
-                        ? "bg-white text-[#2563EB]"
-                        : "text-[#475569] hover:bg-white"
-                    }`}
-                    >
-                    <Icon
-                        className={
-                        menuAktif
-                            ? "text-[#2563EB]"
-                            : "text-[#475569]"
-                        }
-                    />
-
-                    <span
-                        className={
-                        menuAktif
-                            ? "font-medium text-[#2563EB]"
-                            : ""
-                        }
-                    >
-                        {menu.nama}
-                    </span>
-                </Link>
+              <Link
+                key={index}
+                href={menu.url}
+                className={`flex items-center gap-3 px-4 py-3 rounded-[8px] cursor-pointer transition-all ${
+                  menuAktif
+                    ? "text-[#2563EB] bg-white shadow-sm"
+                    : "text-[#64748B] hover:bg-white hover:shadow-sm hover:text-black"
+                }`}
+              >
+                <Icon size={20} />
+                <span className="font-medium text-[14px]">{menu.nama}</span>
+              </Link>
             );
-            })}
-        </div>
-
-        <div className="w-full h-[54px] bg-[#EB2528] flex justify-center items-center rounded-[6.75px] mt-50 hover:bg-[#EB2528]/80">
-            <p className="text-white font-semibold ">Keluar</p>
-        </div>
-
+          })}
+        </nav>
+      </div>
+      <div className="px-4">
+        <button className="w-full bg-[#E11D48] text-white font-bold py-3 rounded-[8px] hover:bg-[#BE123C] transition-colors text-[14px]">
+          Keluar
+        </button>
+      </div>
     </div>
-
-)};
+  );
+}
