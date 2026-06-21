@@ -11,6 +11,15 @@ import {
   X,
   CloudUpload,
   ChevronDown,
+  LayoutDashboard,
+  Package,
+  Trophy,
+  ReceiptText,
+  MessageSquare,
+  History,
+  Presentation,
+  Users,
+  FileText,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Sidebar from "@/component/admin/sidebar";
@@ -383,14 +392,7 @@ export default function InfoLomba() {
       )}
 
       <div
-        className={`
-                fixed top-0 right-0 h-screen w-[600px]
-                bg-white shadow-2xl z-50
-                transition-transform duration-300 ease-in-out
-                flex flex-col
-                overflow-y-auto
-                ${isAddOpen ? "translate-x-0" : "translate-x-full"}
-            `}
+        className={`fixed top-0 right-0 h-screen w-[600px] bg-white shadow-2xl z-50 transition-transform duration-300 ease-in-out flex flex-col overflow-y-auto ${isAddOpen ? "translate-x-0" : "translate-x-full"}`}
       >
         <div className="w-full h-[120px] shrink-0 bg-[#F8FAFC] border-b border-[#E2E8F0] flex flex-col justify-center px-10 gap-1">
           <div className="flex flex-row w-full justify-between items-center">
@@ -452,14 +454,7 @@ export default function InfoLomba() {
               CATEGORY
             </p>
             <div className="relative w-full">
-              <select
-                className="
-                                w-full h-[48px]
-                                bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px]
-                                px-4 pr-10
-                                appearance-none outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]
-                                "
-              >
+              <select className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 pr-10 appearance-none outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]">
                 <option>Business Case</option>
                 <option>Business Plan</option>
                 <option>Debat</option>
@@ -575,14 +570,7 @@ export default function InfoLomba() {
       )}
 
       <div
-        className={`
-                fixed top-0 right-0 h-screen w-[600px]
-                bg-white shadow-2xl z-50
-                transition-transform duration-300 ease-in-out
-                flex flex-col
-                overflow-y-auto
-                ${isEditOpen ? "translate-x-0" : "translate-x-full"}
-            `}
+        className={`fixed top-0 right-0 h-screen w-[600px] bg-white shadow-2xl z-50 transition-transform duration-300 ease-in-out flex flex-col overflow-y-auto ${isEditOpen ? "translate-x-0" : "translate-x-full"}`}
       >
         <div className="w-full h-[120px] shrink-0 bg-[#F8FAFC] border-b border-[#E2E8F0] flex flex-col justify-center px-10 gap-1">
           <div className="flex flex-row w-full justify-between items-center">
@@ -651,12 +639,7 @@ export default function InfoLomba() {
             <div className="relative w-full">
               <select
                 defaultValue={selectedCompetition?.category || "Business Case"}
-                className="
-                                w-full h-[48px]
-                                bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px]
-                                px-4 pr-10
-                                appearance-none outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]
-                                "
+                className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 pr-10 appearance-none outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]"
               >
                 <option>Business Case</option>
                 <option>Business Plan</option>
