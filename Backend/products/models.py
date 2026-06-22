@@ -1,9 +1,9 @@
 from __future__ import annotations
-
+from django.core.validators import MinValueValidator, MaxValueValidator
 import uuid
-
 from django.db import models
-
+from accounts.models import User
+from mentors.models import MentorProfile
 
 class BaseModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
@@ -120,3 +120,43 @@ class EventSpaceProduct(BaseModel):
 
     def __str__(self) -> str:
         return self.title
+
+class Review(BaseModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="review"
+        
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="review",
+    )
+    mentor_profile = models.ForeignKey(
+        MentorProfile,
+        on_delete=models.CASCADE,
+        related_name="review",     
+    )
+    rating = models.DecimalField(
+        max_digits=2,
+        decimal_places=1,
+        validators=[
+            MinValueValidator(1),
+            MaxValueValidator(5)
+        ]
+    )
+    review_text = models.TextField(
+        blank=True,
+        null=True
+    )
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "product"],
+                name="unique_user_product_review"
+            )
+        ]
+
+    

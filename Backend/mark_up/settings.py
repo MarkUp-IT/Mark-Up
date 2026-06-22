@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "mentors",
     "products",
     "transactions",
+    "programs",
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
