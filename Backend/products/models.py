@@ -16,7 +16,6 @@ class ProductType(models.TextChoices):
     MENTORING = "MENTORING", "Mentoring"
     MODULE = "MODULE", "Module"
     BOOTCAMP = "BOOTCAMP", "Bootcamp"
-    EVENT_SPACE = "EVENT_SPACE", "Event Space"
 
 
 class Product(BaseModel):
@@ -98,28 +97,6 @@ class BootcampProduct(BaseProductDetail):
     def __str__(self) -> str:
         return self.title
 
-
-class EventSpaceProduct(BaseModel):
-    product = models.OneToOneField(
-        Product,
-        on_delete=models.CASCADE,
-        primary_key=True,
-        related_name="event_space_detail",
-    )
-    title = models.CharField(max_length=255)
-    description = models.TextField()
-    image_url = models.URLField(blank=True, null=True)
-    price_online = models.DecimalField(max_digits=12, decimal_places=2)
-    price_offline = models.DecimalField(max_digits=12, decimal_places=2)
-    is_active = models.BooleanField(default=True)
-
-    class Meta:
-        verbose_name = "Event Space Product"
-        verbose_name_plural = "Event Space Products"
-        ordering = ["title"]
-
-    def __str__(self) -> str:
-        return self.title
 
 class Review(BaseModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

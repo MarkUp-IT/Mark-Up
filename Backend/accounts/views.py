@@ -2,7 +2,7 @@ from django.contrib.auth import authenticate
 from django.http import JsonResponse, HttpResponseNotAllowed
 from .utils import get_request_data
 from .forms import RegisterForm
-
+from rest_framework_simplejwt.tokens import RefreshToken
 
 def register_view(request):
 	if request.method != "POST":
@@ -50,17 +50,30 @@ def login_view(request):
 			status=400,
 		)
 
-	user = authenticate(request, username=email, password=password)
+	user = authenticate(
+		request,
+		username=email,
+		password=password,
+	)
+
 	if user is None:
 		return JsonResponse(
 			{"detail": "Email atau password salah."},
 			status=401,
 		)
 
+	refresh = RefreshToken.for_user(user)
+
 	return JsonResponse(
 		{
 			"detail": "Login berhasil.",
-			"user": {"id": str(user.id), "email": user.email, "fullname": user.fullname},
+			"access": str(refresh.access_token),
+			"refresh": str(refresh),
+			"user": {
+				"id": str(user.id),
+				"email": user.email,
+				"fullname": user.fullname,
+			},
 		},
 		status=200,
 	)
