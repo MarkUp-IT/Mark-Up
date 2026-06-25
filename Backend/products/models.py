@@ -37,7 +37,9 @@ class Product(BaseModel):
 
 class BaseProductDetail(BaseModel):
     title = models.CharField(max_length=255)
-    description = models.TextField()
+    description = models.TextField(max_length=500)
+    explanation = models.TextField(default='')
+    published_at = models.DateTimeField(blank=True, null=True)
     image_url = models.URLField(blank=True, null=True)
     price = models.DecimalField(max_digits=12, decimal_places=2)
     is_active = models.BooleanField(default=True)
@@ -71,6 +73,7 @@ class ModuleProduct(BaseProductDetail):
         related_name="module_detail",
     )
     file_pdf_url = models.URLField()
+    stock = models.PositiveIntegerField(default=0)
 
     class Meta:
         verbose_name = "Module Product"
@@ -88,6 +91,7 @@ class BootcampProduct(BaseProductDetail):
         primary_key=True,
         related_name="bootcamp_detail",
     )
+    stock = models.PositiveIntegerField(default=0)
 
     class Meta:
         verbose_name = "Bootcamp Product"
@@ -103,19 +107,15 @@ class Review(BaseModel):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="review"
+        related_name="reviews"
         
     )
     product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE,
-        related_name="review",
+        related_name="reviews",
     )
-    mentor_profile = models.ForeignKey(
-        MentorProfile,
-        on_delete=models.CASCADE,
-        related_name="review",     
-    )
+
     rating = models.DecimalField(
         max_digits=2,
         decimal_places=1,

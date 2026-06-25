@@ -3,6 +3,7 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from .utils import get_request_data
 from .forms import RegisterForm
 from rest_framework_simplejwt.tokens import RefreshToken
+from .models import User
 
 def register_view(request):
 	if request.method != "POST":
@@ -77,3 +78,27 @@ def login_view(request):
 		},
 		status=200,
 	)
+
+
+def get_users(request):
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	users = User.objects.all().order_by("-created_at")
+	data = []
+	for u in users:
+		item = {
+			"id": str(u.id),
+			"fullname": u.fullname,
+			"email": u.email,
+			"phone": u.phone,
+			"role": u.role,
+			"status": u.status,
+			"image": u.profile_image_url,
+			"created_at": u.created_at.isoformat() if getattr(u, "created_at", None) else None,
+		}
+
+
+		data.append(item)
+
+	return JsonResponse({"users": data}, status=200)

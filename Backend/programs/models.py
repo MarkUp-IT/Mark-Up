@@ -38,8 +38,16 @@ class Competition(models.Model):
         blank=True,
         null=True,
     )
-    deadline = models.DateTimeField()
+    prizepool = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        blank=True,
+        null=True,
+    )
+    event_date = models.DateTimeField(blank=True, null=True)
+    deadline = models.DateTimeField(blank=True, null=True)
     level = models.CharField(max_length=100, blank=True, null=True)
+    target_participant = models.CharField(max_length=100, blank=True, null=True)
     registration_link = models.URLField(blank=True, null=True)
 
     class Meta:

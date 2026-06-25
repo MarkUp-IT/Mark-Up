@@ -90,3 +90,40 @@ def add_product(request):
 			{"detail": f"Gagal membuat detail produk: {str(e)}"},
 			status=500,
 		)
+
+
+def get_products(request):
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	products = Product.objects.all().order_by("-created_at")
+	data = []
+	for p in products:
+		item = {
+			"id": str(p.id),
+			"type": p.type,
+			"created_at": p.created_at.isoformat() if getattr(p, "created_at", None) else None,
+		}
+		detail = None
+		if p.type == ProductType.MENTORING:
+			detail = getattr(p, "mentoring_detail", None)
+		elif p.type == ProductType.MODULE:
+			detail = getattr(p, "module_detail", None)
+		elif p.type == ProductType.BOOTCAMP:
+			detail = getattr(p, "bootcamp_detail", None)
+
+		if detail:
+			item.update({
+				"title": detail.title,
+				"description": detail.description,
+				"image_url": detail.image_url,
+				"price": str(detail.price),
+				"is_active": detail.is_active,
+			})
+			# module-specific
+			if hasattr(detail, "file_pdf_url"):
+				item["file_pdf_url"] = detail.file_pdf_url
+
+		data.append(item)
+
+	return JsonResponse({"products": data}, status=200)

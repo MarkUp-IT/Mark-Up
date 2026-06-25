@@ -1,11 +1,8 @@
 from __future__ import annotations
-
 import uuid
-
 from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.utils import timezone
 
 from products.models import Product
 
@@ -65,6 +62,10 @@ class Transaction(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(blank=True, null=True)
 
+    @property
+    def calculated_grand_total(self):
+        return self.sub_total - self.discount_amount + self.tax 
+    
     class Meta:
         verbose_name = "Transaction"
         verbose_name_plural = "Transactions"
@@ -96,11 +97,23 @@ class TransactionItem(models.Model):
         default=1,
         validators=[MinValueValidator(1)],
     )
+    mentor_availability = models.OneToOneField(
+        "mentors.MentorAvailability",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="transaction_item",
+    )
 
     class Meta:
         verbose_name = "Transaction Item"
         verbose_name_plural = "Transaction Items"
-        unique_together = ("transaction", "product")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["transaction", "product", "mentor_availability"],
+                name="unique_transaction_product_availability"
+            )
+        ]
         indexes = [
             models.Index(fields=["transaction"]),
             models.Index(fields=["product"]),
@@ -123,26 +136,25 @@ class UserLibrary(models.Model):
         on_delete=models.CASCADE,
         related_name="library_access",
     )
-    product = models.ForeignKey(
-        Product,
-        on_delete=models.PROTECT,
-        related_name="user_libraries",
-    )
+    
     active_date = models.DateTimeField(blank=True, null=True)
     expire_date = models.DateTimeField(blank=True, null=True)
+
+    @property
+    def product(self):
+        return self.transaction_item.product
 
     class Meta:
         verbose_name = "User Library"
         verbose_name_plural = "User Libraries"
         indexes = [
             models.Index(fields=["user"]),
-            models.Index(fields=["product"]),
             models.Index(fields=["active_date"]),
             models.Index(fields=["expire_date"]),
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["user", "product", "transaction_item"],
+                fields=["user", "transaction_item"],
                 name="unique_user_product_transaction_item",
             )
         ]
