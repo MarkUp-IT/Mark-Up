@@ -2,6 +2,7 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from .utils import get_request_data
 from .forms import CompetitionForm
 from .models import Competition
+from django.utils import timezone
 
 
 def add_competition(request):
@@ -30,6 +31,48 @@ def add_competition(request):
 			"competition": {"id": str(competition.id), "title": competition.title, "category": competition.category, "organizer": competition.organizer},
 		},
 		status=201,
+	)
+
+def get_competitions(request):
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	competitions = Competition.objects.all().order_by("-created_at")
+	data = []
+
+	for c in competitions:
+		data.append({
+			"competition_id": str(c.id),
+			"category": c.category,
+			"title": c.title,
+			"image_url": c.image_url,
+			"organizer": c.organizer,
+			"deadline": c.deadline,
+		})
+
+	return JsonResponse({"competitions": data}, status=200)
+
+def get_competition_summary(request):
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	total_competition = Competition.objects.count()
+
+	active = Competition.objects.filter(
+		deadline__gt=timezone.now()
+	).count()
+
+	expired = Competition.objects.filter(
+		deadline__lte=timezone.now()
+	).count()
+
+	return JsonResponse(
+		{
+			"total": total_competition,
+			"total_active": active,
+			"total_expired": expired,
+		},
+		status=200,
 	)
 
 

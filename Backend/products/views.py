@@ -1,7 +1,40 @@
 from django.http import JsonResponse, HttpResponseNotAllowed
 from .utils import get_request_data
-from .forms import ProductCreateForm
+from .forms import MentoringProductForm, ModuleProductForm, BootcampProductForm
 from .models import Product, ProductType, MentoringProduct, ModuleProduct, BootcampProduct
+
+DETAIL_FORM_MAP = {
+    ProductType.MENTORING: (MentoringProductForm, "mentoring_detail"),
+    ProductType.MODULE: (ModuleProductForm, "module_detail"),
+    ProductType.BOOTCAMP: (BootcampProductForm, "bootcamp_detail"),
+}
+
+
+def _get_detail_form_class(product_type):
+    return DETAIL_FORM_MAP.get(product_type, (None, None))[0]
+
+
+def _get_detail_attr(product_type):
+    return DETAIL_FORM_MAP.get(product_type, (None, None))[1]
+
+
+def _format_product_response(product, detail):
+    response = {
+        "id": str(product.id),
+        "type": product.type,
+        "title": detail.title,
+        "description": detail.description,
+        "price": str(detail.price),
+        "is_active": detail.is_active,
+    }
+
+    if getattr(detail, "file_pdf_url", None) is not None:
+        response["file_pdf_url"] = detail.file_pdf_url
+
+    if getattr(detail, "stock", None) is not None:
+        response["stock"] = detail.stock
+
+    return response
 
 
 def add_product(request):
@@ -12,84 +45,33 @@ def add_product(request):
 	if request_data is None:
 		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
-	form = ProductCreateForm(request_data)
+	product_type = request_data.get("type")
+	if product_type not in DETAIL_FORM_MAP:
+		return JsonResponse({"errors": {"type": ["Tipe produk tidak valid."]}}, status=400)
 
-	if not form.is_valid():
-		errors = {k: list(v) for k, v in form.errors.items()}
-		non_field = form.non_field_errors()
+	form_class = _get_detail_form_class(product_type)
+	detail_form = form_class(request_data)
+
+	if not detail_form.is_valid():
+		errors = {k: list(v) for k, v in detail_form.errors.items()}
+		non_field = detail_form.non_field_errors()
 		if non_field:
 			errors["non_field_errors"] = list(non_field)
+		product.delete()
 		return JsonResponse({"errors": errors}, status=400)
 
-	cleaned_data = form.cleaned_data
-	product_type = cleaned_data["type"]
-
-	
 	product = Product.objects.create(type=product_type)
+	detail = detail_form.save(commit=False)
+	detail.product = product
+	detail.save()
 
-	try:
-		
-		if product_type == ProductType.MENTORING:
-			detail = MentoringProduct.objects.create(
-				product=product,
-				title=cleaned_data["title"],
-				description=cleaned_data["description"],
-				image_url=cleaned_data.get("image_url") or None,
-				price=cleaned_data["price"],
-				is_active=cleaned_data.get("is_active", True),
-			)
-		elif product_type == ProductType.MODULE:
-			file_pdf_url = request_data.get("file_pdf_url")
-			if not file_pdf_url:
-				product.delete()
-				return JsonResponse(
-					{"errors": {"file_pdf_url": ["PDF URL diperlukan untuk Module."]}},
-					status=400,
-				)
-			detail = ModuleProduct.objects.create(
-				product=product,
-				title=cleaned_data["title"],
-				description=cleaned_data["description"],
-				image_url=cleaned_data.get("image_url") or None,
-				price=cleaned_data["price"],
-				is_active=cleaned_data.get("is_active", True),
-				file_pdf_url=file_pdf_url,
-			)
-		elif product_type == ProductType.BOOTCAMP:
-			detail = BootcampProduct.objects.create(
-				product=product,
-				title=cleaned_data["title"],
-				description=cleaned_data["description"],
-				image_url=cleaned_data.get("image_url") or None,
-				price=cleaned_data["price"],
-				is_active=cleaned_data.get("is_active", True),
-			)
-		else:
-			product.delete()
-			return JsonResponse(
-				{"errors": {"type": ["Tipe produk tidak valid."]}},
-				status=400,
-			)
-
-		return JsonResponse(
-			{
-				"detail": "Penambahan produk berhasil.",
-				"product": {
-					"id": str(product.id),
-					"type": product.type,
-					"title": detail.title,
-					"price": str(detail.price),
-				},
-			},
-			status=201,
-		)
-
-	except Exception as e:
-		product.delete()
-		return JsonResponse(
-			{"detail": f"Gagal membuat detail produk: {str(e)}"},
-			status=500,
-		)
+	return JsonResponse(
+		{
+			"detail": "Penambahan produk berhasil.",
+			"product": _format_product_response(product, detail),
+		},
+		status=201,
+	)
 
 
 def get_products(request):
@@ -120,10 +102,89 @@ def get_products(request):
 				"price": str(detail.price),
 				"is_active": detail.is_active,
 			})
-			# module-specific
+			
 			if hasattr(detail, "file_pdf_url"):
 				item["file_pdf_url"] = detail.file_pdf_url
 
 		data.append(item)
 
 	return JsonResponse({"products": data}, status=200)
+
+
+def get_product_summary(request):
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])  
+
+	active_by_type = {
+		ProductType.MENTORING: Product.objects.filter(
+			type=ProductType.MENTORING,
+			mentoring_detail__is_active=True,
+		).count(),
+		ProductType.MODULE: Product.objects.filter(
+			type=ProductType.MODULE,
+			module_detail__is_active=True,
+		).count(),
+		ProductType.BOOTCAMP: Product.objects.filter(
+			type=ProductType.BOOTCAMP,
+			bootcamp_detail__is_active=True,
+		).count(),
+	}
+
+	total_active = sum(active_by_type.values())
+	total_products = Product.objects.count()
+
+	return JsonResponse(
+		{
+			"active_by_type": {
+				ProductType.MENTORING: active_by_type[ProductType.MENTORING],
+				ProductType.MODULE: active_by_type[ProductType.MODULE],
+				ProductType.BOOTCAMP: active_by_type[ProductType.BOOTCAMP],
+			},
+			"total_active": total_active,
+			"total": total_products,
+		},
+		status=200,
+	)
+
+def update_product(request, product_id):
+	if request.method not in ["PUT", "PATCH"]:
+		return HttpResponseNotAllowed(["PUT", "PATCH"])
+
+	request_data = get_request_data(request)
+	if request_data is None:
+		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+	try:
+		product = Product.objects.get(id=product_id)
+	except Product.DoesNotExist:
+		return JsonResponse({"detail": "Produk tidak ditemukan."}, status=404)
+
+	requested_type = request_data.get("type")
+	if requested_type and requested_type != product.type:
+		return JsonResponse({"errors": {"type": ["Tidak dapat mengubah tipe produk."]}}, status=400)
+
+	product_type = product.type
+	detail_attr = _get_detail_attr(product_type)
+	detail = getattr(product, detail_attr, None)
+	if detail is None:
+		return JsonResponse({"detail": "Detail produk tidak ditemukan."}, status=404)
+
+	form_class = _get_detail_form_class(product_type)
+	detail_form = form_class(request_data, instance=detail)
+
+	if not detail_form.is_valid():
+		errors = {k: list(v) for k, v in detail_form.errors.items()}
+		non_field = detail_form.non_field_errors()
+		if non_field:
+			errors["non_field_errors"] = list(non_field)
+		return JsonResponse({"errors": errors}, status=400)
+
+	detail = detail_form.save()
+
+	return JsonResponse(
+		{
+			"detail": "Produk berhasil diperbarui.",
+			"product": _format_product_response(product, detail),
+		},
+		status=200,
+	)

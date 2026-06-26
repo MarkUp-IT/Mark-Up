@@ -5,7 +5,7 @@ from django.contrib.auth.models import AbstractUser
 class UserRole(models.TextChoices):
     ADMIN = "ADMIN", "Admin"
     MENTOR = "MENTOR", "Mentor"
-    MENTEE = "MENTEE", "Mentee"
+    STUDENT = "STUDENT", "Mentee"
 
 
 class UserStatus(models.TextChoices):
@@ -35,7 +35,7 @@ class User(AbstractUser):
     role = models.CharField(
         max_length=20,
         choices=UserRole.choices,
-        default=UserRole.MENTEE
+        default=UserRole.STUDENT
     )
 
     status = models.CharField(

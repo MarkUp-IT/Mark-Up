@@ -3,7 +3,7 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from .utils import get_request_data
 from .forms import RegisterForm
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import User
+from .models import User, UserRole
 
 def register_view(request):
 	if request.method != "POST":
@@ -102,3 +102,24 @@ def get_users(request):
 		data.append(item)
 
 	return JsonResponse({"users": data}, status=200)
+
+def get_user_summary(request):
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	total_users = User.objects.count()
+	students = User.objects.filter(
+		role=UserRole.STUDENT
+	).count()
+	mentors = User.objects.filter(
+		role=UserRole.MENTOR
+	).count()
+
+	return JsonResponse(
+		{
+			"total_users": total_users,
+			"students": students,
+			"mentors": mentors,
+		},
+		status=200,
+	)

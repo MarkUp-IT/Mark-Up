@@ -1,11 +1,22 @@
 from django import forms
-from .models import ProductType
+from django.forms import ModelForm
+from .models import MentoringProduct, ModuleProduct, BootcampProduct
 
 
-class ProductCreateForm(forms.Form):
-    type = forms.ChoiceField(choices=ProductType.choices)
-    title = forms.CharField(max_length=255)
-    description = forms.CharField()
-    image_url = forms.URLField(required=False)
-    price = forms.DecimalField(max_digits=12, decimal_places=2)
-    is_active = forms.BooleanField(required=False)
+class MentoringProductForm(ModelForm):
+    class Meta:
+        model = MentoringProduct
+        fields = ["title", "description", "explanation", "published_at", 
+                  "image_url", "price", "is_active"]
+
+class ModuleProductForm(ModelForm):
+    class Meta:
+        model = ModuleProduct
+        fields = ["title", "description", "explanation", "published_at",
+                  "image_url", "price", "is_active", "file_pdf_url", "stock"]
+
+class BootcampProductForm(ModelForm):
+    class Meta:
+        model = BootcampProduct
+        fields = ["title", "description", "explanation", "published_at",
+                  "image_url", "price", "is_active", "stock"]
