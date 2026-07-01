@@ -3,12 +3,14 @@
 import {
   LayoutDashboard,
   Package,
+  ListPlus,
   Trophy,
   ReceiptText,
   MessageSquare,
   Presentation,
   Users,
   FileText,
+  History,
 } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
@@ -19,32 +21,35 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [hoveredMenu, setHoveredMenu] = useState(null);
 
-  const daftarMenu = [
-    { nama: "Dashboard", url: "/admin", icon: LayoutDashboard },
+  const menuList = [
+    { name: "Dashboard", url: "/admin", icon: LayoutDashboard },
+    { name: "Product Catalog", url: "/admin/products", icon: Package },
     {
-      nama: "Produk",
-      url: "/admin/produk",
-      icon: Package,
+      name: "Order Management",
+      url: "/admin/orders",
+      icon: ListPlus,
       subItems: [
         {
-          nama: "Mentoring",
-          url: "/admin/produk/mentoring",
+          name: "Mentoring",
+          url: "/admin/orders/mentoring",
           icon: Presentation,
         },
-        { nama: "Bootcamp", url: "/admin/produk/bootcamp", icon: Users },
-        { nama: "Modul", url: "/admin/produk/modul", icon: FileText },
+        { name: "Bootcamp", url: "/admin/orders/bootcamp", icon: Users },
+        { name: "Module", url: "/admin/orders/module", icon: FileText },
       ],
     },
-    { nama: "Info Lomba", url: "/admin/lomba", icon: Trophy },
-    { nama: "Transaksi", url: "/admin/transaksi", icon: ReceiptText },
-    { nama: "Ulasan", url: "/admin/ulasan", icon: MessageSquare },
+    { name: "Competition Info", url: "/admin/competitions", icon: Trophy },
+    { name: "Transactions", url: "/admin/transactions", icon: ReceiptText },
+    { name: "Feedbacks", url: "/admin/feedbacks", icon: MessageSquare },
+    { name: "User Management", url: "/admin/user-management", icon: Users },
+    { name: "Audit Trail", url: "/admin/audit-trail", icon: History },
   ];
 
   // Fallback ke "/admin" jika pathname belum tersedia
   const currentPath = pathname || "/admin";
 
   return (
-    <div className="fixed top-0 left-0 w-[288px] h-screen bg-[#F8FAFC] border-r border-[#E2E8F0] flex flex-col justify-between py-8 px-4 z-10">
+    <div className="fixed top-0 left-0 w-[288px] h-screen bg-[#F8FAFC] border-r border-[#E2E8F0] flex flex-col z-50 justify-between py-8 px-4 z-10">
       <div>
         <div className="flex flex-col mb-10 px-4">
           <h1 className="text-[24px] font-black text-[#1E293B] tracking-tight">
@@ -55,7 +60,7 @@ export default function Sidebar() {
           </span>
         </div>
         <nav className="flex flex-col gap-2">
-          {daftarMenu.map((menu, index) => {
+          {menuList.map((menu, index) => {
             // Logika untuk mengecek apakah menu ini yang sedang diakses
             const isActiveMain =
               currentPath.includes(menu.url) &&
@@ -63,16 +68,16 @@ export default function Sidebar() {
 
             const Icon = menu.icon;
             const hasSubMenu = menu.subItems && menu.subItems.length > 0;
-            const isHovered = hoveredMenu === menu.nama;
+            const isHovered = hoveredMenu === menu.name;
 
-            // Sub-menu muncul jika main menu sedang aktif ATAU sedang di-hover
-            const showSubMenu = hasSubMenu && (isActiveMain);
+            // Sub-menu muncul jika main menu sedang aktif
+            const showSubMenu = hasSubMenu && isActiveMain;
 
             return (
               <div
                 key={index}
                 className="flex flex-col gap-1"
-                onMouseEnter={() => setHoveredMenu(menu.nama)}
+                onMouseEnter={() => setHoveredMenu(menu.name)}
                 onMouseLeave={() => setHoveredMenu(null)}
               >
                 {/* Main Menu Item */}
@@ -85,7 +90,7 @@ export default function Sidebar() {
                   }`}
                 >
                   <Icon size={20} />
-                  <span className="font-medium text-[14px]">{menu.nama}</span>
+                  <span className="font-medium text-[14px]">{menu.name}</span>
                 </Link>
 
                 {/* Sub Menu Items */}
@@ -108,7 +113,7 @@ export default function Sidebar() {
                         >
                           <SubIcon size={20} />
                           <span className="font-medium text-[14px]">
-                            {sub.nama}
+                            {sub.name}
                           </span>
                         </Link>
                       );
@@ -122,7 +127,7 @@ export default function Sidebar() {
       </div>
       <div className="px-4">
         <button className="w-full bg-[#E11D48] text-white font-bold py-3 rounded-[8px] hover:bg-[#BE123C] transition-colors text-[14px] shadow-sm">
-          Keluar
+          Logout
         </button>
       </div>
     </div>
