@@ -11,7 +11,7 @@ import {
   Trash2,
   Plus,
 } from "lucide-react";
-import Sidebar from "@/component/admin/sidebar";
+import Sidebar from "@/component/admin/Sidebar";
 
 export default function BootcampDetail() {
   const sessions = [

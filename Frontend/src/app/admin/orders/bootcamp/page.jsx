@@ -10,7 +10,8 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import Sidebar from "@/component/admin/sidebar";
+import Sidebar from "@/component/admin/Sidebar";
+import Header from "@/component/admin/Header";
 
 export default function BootcampPage() {
   const bootcamps = [
@@ -64,149 +65,111 @@ export default function BootcampPage() {
   return (
     <div className="w-full font-inter text-black bg-[#F8FAFC] min-h-screen relative flex flex-row overflow-x-hidden">
       <Sidebar />
-      <div className="flex-1 flex items-center ml-[288px] py-5 flex-col gap-5 px-10 bg-white min-h-screen">
-        {/* Header */}
-        <div className="w-[1158px] h-[72px] bg-[#E2E8F0] flex flex-row items-center justify-center gap-15 rounded-[8px]">
-          <div className="flex gap-20 items-center">
-            <p className="text-black font-bold text-[20.25px]">
-              Manajemen Konten
-            </p>
-            <div className="relative">
-              <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                size={18}
-              />
-              <input
-                type="text"
-                placeholder="Search bootcamp title..."
-                className="bg-white w-[511px] h-[36px] rounded-[6.75px] pl-10 border-none outline-none focus:ring-2 focus:ring-[#4C1D95]/20"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-row gap-4 items-center">
-            <Bell
-              color="#64748B"
-              className="cursor-pointer hover:text-black transition-colors"
-            />
-            <Settings
-              color="#64748B"
-              className="cursor-pointer hover:text-black transition-colors"
-            />
-          </div>
-
-          <div className="flex flex-row gap-4 items-center">
-            <div className="flex flex-col text-right">
-              <p className="font-semibold text-[14.62px]">Affan Fathir D.</p>
-              <p className="text-[12.37px] text-[#64748B]">Associate IT</p>
-            </div>
-            <div className="bg-[#2B3034] w-[36px] h-[36px] rounded-[13.5px] flex items-center justify-center overflow-hidden">
-              <img
-                src="https://api.dicebear.com/7.x/notionists/svg?seed=Affan&backgroundColor=2B3034"
-                alt="avatar"
-                className="w-full h-full object-cover"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Title Area */}
-        <div className="flex flex-row items-center justify-between w-[1158px] mt-2">
-          <div className="flex flex-col gap-1">
-            <p className="font-bold text-[25px]">Manajemen Konten Bootcamp</p>
-            <p className="text-[#64748B] text-[15px]">
-              Kelola sesi sinkronus, bagikan link Zoom, dan pantau progres
-              peserta untuk setiap batch aktif.
-            </p>
-          </div>
-          <button
-            onClick={() => setIsAddSessionOpen(true)}
-            className="bg-[#4C1D95] h-[43.5px] px-6 text-white font-semibold rounded-[6.75px] hover:bg-[#3B0764] transition-colors shadow-sm"
-          >
-            Tambah Sesi
-          </button>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="w-[1158px] flex justify-between gap-5 mt-2">
-          <div className="bg-[#F8FAFC] flex-1 h-[146px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm border border-[#E2E8F0]">
-            <p className="text-[#43474D] font-bold text-[14px] tracking-wide">
-              TOTAL ACTION REQUIRED
-            </p>
-            <div className="flex flex-row items-baseline gap-2 mt-2">
-              <p className="font-bold text-[48px] text-[#0F172A] leading-none">
-                151
+      <div className="ml-[288px]">
+        <Header judulHalaman="Bootcamp Management" />
+        <div className="flex-1 flex items-center py-5 flex-col gap-5 px-10 bg-white min-h-screen">
+          {/* Title Area */}
+          <div className="flex flex-row items-center justify-between w-[1158px] mt-2">
+            <div className="flex flex-col gap-1">
+              <p className="font-bold text-[25px]">Manajemen Konten Bootcamp</p>
+              <p className="text-[#64748B] text-[15px]">
+                Kelola sesi sinkronus, bagikan link Zoom, dan pantau progres
+                peserta untuk setiap batch aktif.
               </p>
-              <span className="text-[#64748B] text-[16px] font-medium">
-                sessions
-              </span>
             </div>
-          </div>
-          <div className="bg-[#F0564A] flex-1 h-[146px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
-            <p className="text-white font-bold text-[14px] tracking-wide">
-              UNASSIGNED MENTOR
-            </p>
-            <div className="flex flex-row items-baseline gap-2 mt-2">
-              <p className="font-bold text-[48px] text-white leading-none">8</p>
-              <span className="text-white text-[16px] font-medium">
-                sessions
-              </span>
-            </div>
-          </div>
-          <div className="bg-[#F0564A] flex-1 h-[146px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
-            <p className="text-white font-bold text-[14px] tracking-wide">
-              PENDING LINKS
-            </p>
-            <div className="flex flex-row items-baseline gap-2 mt-2">
-              <p className="font-bold text-[48px] text-white leading-none">3</p>
-              <span className="text-white text-[16px] font-medium">
-                sessions
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* List of Bootcamps */}
-        <div className="w-[1158px] flex flex-col gap-4 mt-4">
-          {bootcamps.map((bootcamp, index) => (
-            <div
-              key={index}
-              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] p-5 flex flex-row items-center justify-between shadow-sm hover:shadow-md transition-shadow"
+            <button
+              onClick={() => setIsAddSessionOpen(true)}
+              className="bg-[#4C1D95] h-[43.5px] px-6 text-white font-semibold rounded-[6.75px] hover:bg-[#3B0764] transition-colors shadow-sm"
             >
-              <div className="flex flex-row items-center gap-5">
-                <div className="w-[60px] h-[60px] bg-[#E2E8F0] rounded-[6px]"></div>
-                <div className="flex flex-col gap-1">
-                  <p className="font-bold text-[16px] text-[#1E293B]">
-                    {bootcamp.title}
-                  </p>
-                  <p className="text-[13px] text-[#64748B] font-medium">
-                    <span className="text-[#1E293B] font-bold">
-                      {bootcamp.peserta}
-                    </span>{" "}
-                    Peserta •{" "}
-                    <span className="text-[#1E293B] font-bold">
-                      {bootcamp.sesi}
-                    </span>{" "}
-                    Sesi •{" "}
-                    <span className="text-[#1E293B] font-bold">
-                      {bootcamp.unassigned}
-                    </span>{" "}
-                    Unassigned Mentor •{" "}
-                    <span className="text-[#1E293B] font-bold">
-                      {bootcamp.pending}
-                    </span>{" "}
-                    Pending Links
-                  </p>
-                </div>
+              Tambah Sesi
+            </button>
+          </div>
+
+          {/* Stats Cards */}
+          <div className="w-[1158px] flex justify-between gap-5 mt-2">
+            <div className="bg-[#F8FAFC] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm border border-[#E2E8F0]">
+              <p className="text-[#43474D] font-bold text-[14px] tracking-wide">
+                TOTAL ACTION REQUIRED
+              </p>
+              <div className="flex flex-row items-baseline gap-2 mt-2">
+                <p className="font-bold text-[48px] text-[#0F172A] leading-none">
+                  151
+                </p>
+                <span className="text-[#64748B] text-[16px] font-medium">
+                  sessions
+                </span>
               </div>
-              <Link
-                href={`/admin/produk/bootcamp/${bootcamp.id}`}
-                className="font-bold text-[#4C1D95] text-[14px] hover:underline"
-              >
-                Lihat Detail
-              </Link>
             </div>
-          ))}
+            <div className="bg-[#F0564A] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
+              <p className="text-white font-bold text-[14px] tracking-wide">
+                UNASSIGNED MENTOR
+              </p>
+              <div className="flex flex-row items-baseline gap-2 mt-2">
+                <p className="font-bold text-[48px] text-white leading-none">
+                  8
+                </p>
+                <span className="text-white text-[16px] font-medium">
+                  sessions
+                </span>
+              </div>
+            </div>
+            <div className="bg-[#F0564A] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
+              <p className="text-white font-bold text-[14px] tracking-wide">
+                PENDING LINKS
+              </p>
+              <div className="flex flex-row items-baseline gap-2 mt-2">
+                <p className="font-bold text-[48px] text-white leading-none">
+                  3
+                </p>
+                <span className="text-white text-[16px] font-medium">
+                  sessions
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* List of Bootcamps */}
+          <div className="w-[1158px] flex flex-col gap-4 mt-4">
+            {bootcamps.map((bootcamp, index) => (
+              <div
+                key={index}
+                className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] p-5 flex flex-row items-center justify-between shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div className="flex flex-row items-center gap-5">
+                  <div className="w-[60px] h-[60px] bg-[#E2E8F0] rounded-[6px]"></div>
+                  <div className="flex flex-col gap-1">
+                    <p className="font-bold text-[16px] text-[#1E293B]">
+                      {bootcamp.title}
+                    </p>
+                    <p className="text-[13px] text-[#64748B] font-medium">
+                      <span className="text-[#1E293B] font-bold">
+                        {bootcamp.peserta}
+                      </span>{" "}
+                      Peserta •{" "}
+                      <span className="text-[#1E293B] font-bold">
+                        {bootcamp.sesi}
+                      </span>{" "}
+                      Sesi •{" "}
+                      <span className="text-[#1E293B] font-bold">
+                        {bootcamp.unassigned}
+                      </span>{" "}
+                      Unassigned Mentor •{" "}
+                      <span className="text-[#1E293B] font-bold">
+                        {bootcamp.pending}
+                      </span>{" "}
+                      Pending Links
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={`/admin/produk/bootcamp/${bootcamp.id}`}
+                  className="font-bold text-[#4C1D95] text-[14px] hover:underline"
+                >
+                  Lihat Detail
+                </Link>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

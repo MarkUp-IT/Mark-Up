@@ -22,7 +22,8 @@ import {
   FileText,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import Sidebar from "@/component/admin/sidebar";
+import Sidebar from "@/component/admin/Sidebar";
+import Header from "@/component/admin/Header";
 
 export default function InfoLomba() {
   const competitions = [
@@ -89,297 +90,261 @@ export default function InfoLomba() {
   return (
     <div className="w-full font-inter text-black bg-white min-h-screen relative flex flex-row overflow-x-hidden">
       <Sidebar />
-      <div className="flex-1 flex items-center ml-[288px] py-5 flex-col gap-5 px-10">
-        <div className="w-[1158px] h-[72px] bg-[#E2E8F0] flex flex-row items-center justify-center gap-15 rounded-[8px]">
-          <div className="flex gap-20 items-center">
-            <p className="text-black font-bold text-[20.25px]">
-              Manajemen Lomba
-            </p>
-            <div className="relative">
-              <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                size={18}
-              />
-              <input
-                type="text"
-                placeholder="Search competition..."
-                className="bg-white w-[511px] h-[36px] rounded-[6.75px] pl-10 border-none outline-none focus:ring-2 focus:ring-[#2563EB]/20"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-row gap-4 items-center">
-            <Bell color="#64748B" className="cursor-pointer hover:text-black" />
-            <Settings
-              color="#64748B"
-              className="cursor-pointer hover:text-black"
-            />
-          </div>
-
-          <div className="flex flex-row gap-4 items-center">
-            <div className="flex flex-col text-right">
-              <p className="font-semibold text-[14.62px]">Affan Fathir D.</p>
-              <p className="text-[12.37px] text-[#64748B]">Associate IT</p>
-            </div>
-            <div className="bg-[#2B3034] w-[36px] h-[36px] rounded-[13.5px] flex items-center justify-center overflow-hidden">
-              <img
-                src="https://api.dicebear.com/7.x/notionists/svg?seed=Affan&backgroundColor=2B3034"
-                alt="avatar"
-                className="w-full h-full object-cover"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-row items-center justify-between w-[1158px] mt-2">
-          <div>
-            <p className="font-bold text-[25px]">Info Lomba</p>
-            <p className="text-[#43474D] text-[15px]">
-              Kelola informasi info lomba pada website MARK-UP
-            </p>
-          </div>
-          <div className="flex flex-row gap-4">
-            <div className="relative">
-              <Plus
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-white pointer-events-none"
-                size={18}
-              />
-              <button
-                onClick={() => setIsAddOpen(true)}
-                className="bg-[#2563EB] w-[190px] h-[43.5px] text-white font-semibold pl-6 rounded-[6.75px] hover:bg-[#2563EB]/80 transition-colors shadow-sm"
-              >
-                New Competitions
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="w-[1158px] flex justify-between gap-5 mt-2">
-          <div className="bg-[#EFE2C2] flex-1 h-[146px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
-            <p className="text-[#43474D] font-bold text-[14px] tracking-wide">
-              TOTAL COMPETITIONS
-            </p>
-            <div className="flex flex-row items-baseline gap-2 mt-2">
-              <p className="font-bold text-[48px] text-black leading-none">
-                15
-              </p>
-              <span className="text-[#43474D] text-[16px] font-medium">
-                competitions
-              </span>
-            </div>
-          </div>
-          <div className="bg-[#2563EB] flex-1 h-[146px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
-            <p className="text-white font-bold text-[14px] tracking-wide">
-              ACTIVE
-            </p>
-            <div className="flex flex-row items-baseline gap-2 mt-2">
-              <p className="font-bold text-[48px] text-white leading-none">
-                12
-              </p>
-              <span className="text-white text-[16px] font-medium">
-                competitions
-              </span>
-            </div>
-          </div>
-          <div className="bg-[#F0564A] flex-1 h-[146px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
-            <p className="text-white font-bold text-[14px] tracking-wide">
-              EXPIRED
-            </p>
-            <div className="flex flex-row items-baseline gap-2 mt-2">
-              <p className="font-bold text-[48px] text-white leading-none">3</p>
-              <span className="text-white text-[16px] font-medium">
-                competitions
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="w-[1158px] flex flex-col mt-5">
-          <div className="flex justify-between items-end">
-            <div className="flex flex-col gap-1">
-              <p className="text-[18px] font-semibold text-black">
-                List Competitions
-              </p>
-              <p className="text-[#43474D] text-[14px]">
-                List of MARK-UP competitions all time
+      <div className="ml-[288px]">
+        <Header judulHalaman="Competitions" />
+        <div className="flex-1 flex items-center py-5 flex-col gap-5 px-10">
+          <div className="flex flex-row items-center justify-between w-[1158px] mt-2">
+            <div>
+              <p className="font-bold text-[25px]">Competition Info</p>
+              <p className="text-[#43474D] text-[15px]">
+                Kelola informasi info lomba pada website MARK-UP
               </p>
             </div>
-            <p className="text-[#2563EB] font-bold text-[14.62px] cursor-pointer hover:underline">
-              View All Products
-            </p>
-          </div>
-
-          <div className="flex flex-row justify-between mt-6">
-            <div className="flex flex-row gap-5">
-              <div className="h-[43.5px] bg-[#F0F4F8] px-2 rounded-[6px] flex justify-center items-center gap-1 shadow-sm">
+            <div className="flex flex-row gap-4">
+              <div className="relative">
+                <Plus
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white pointer-events-none"
+                  size={18}
+                />
                 <button
-                  onClick={() => setIsCategoryActive("semua")}
-                  className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "semua" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
+                  onClick={() => setIsAddOpen(true)}
+                  className="bg-[#2563EB] w-[190px] h-[43.5px] text-white font-semibold pl-6 rounded-[6.75px] hover:bg-[#2563EB]/80 transition-colors shadow-sm"
                 >
-                  Semua
-                </button>
-                <button
-                  onClick={() => setIsCategoryActive("business-case")}
-                  className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "business-case" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                >
-                  Business Case
-                </button>
-                <button
-                  onClick={() => setIsCategoryActive("business-plan")}
-                  className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "business-plan" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                >
-                  Business Plan
-                </button>
-                <button
-                  onClick={() => setIsCategoryActive("debat")}
-                  className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "debat" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                >
-                  Debat
-                </button>
-                <button
-                  onClick={() => setIsCategoryActive("lkti")}
-                  className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "lkti" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                >
-                  LKTI
-                </button>
-                <button
-                  onClick={() => setIsCategoryActive("ui-ux")}
-                  className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "ui-ux" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                >
-                  UI/UX
-                </button>
-                <button
-                  onClick={() => setIsCategoryActive("hackathon")}
-                  className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "hackathon" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                >
-                  Hackathon
-                </button>
-              </div>
-              <div className="h-[43.5px] bg-[#F0F4F8] px-2 rounded-[6px] flex justify-center items-center gap-1 shadow-sm">
-                <button
-                  onClick={() => setIsStatusActive("semua")}
-                  className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isStatusActive === "semua" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                >
-                  Semua
-                </button>
-                <button
-                  onClick={() => setIsStatusActive("active")}
-                  className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isStatusActive === "active" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                >
-                  Active
-                </button>
-                <button
-                  onClick={() => setIsStatusActive("expired")}
-                  className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isStatusActive === "expired" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                >
-                  Expired
+                  New Competitions
                 </button>
               </div>
             </div>
-            <div className="relative flex items-center">
-              <Download
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#43474D]"
-                size={15}
-              />
-              <button className="w-[130px] h-[43.5px] bg-[#F0F4F8] text-[13px] pl-6 pr-2 font-medium rounded-[6px] hover:bg-[#E2E8F0] shadow-sm transition-colors text-[#43474D]">
-                Export .CSV
-              </button>
+          </div>
+
+          <div className="w-[1158px] flex justify-between gap-5 mt-2">
+            <div className="bg-[#EFE2C2] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
+              <p className="text-[#43474D] font-bold text-[14px] tracking-wide">
+                TOTAL COMPETITIONS
+              </p>
+              <div className="flex flex-row items-baseline gap-2 mt-2">
+                <p className="font-bold text-[48px] text-black leading-none">
+                  15
+                </p>
+                <span className="text-[#43474D] text-[16px] font-medium">
+                  competitions
+                </span>
+              </div>
+            </div>
+            <div className="bg-[#2563EB] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
+              <p className="text-white font-bold text-[14px] tracking-wide">
+                ACTIVE
+              </p>
+              <div className="flex flex-row items-baseline gap-2 mt-2">
+                <p className="font-bold text-[48px] text-white leading-none">
+                  12
+                </p>
+                <span className="text-white text-[16px] font-medium">
+                  competitions
+                </span>
+              </div>
+            </div>
+            <div className="bg-[#F0564A] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
+              <p className="text-white font-bold text-[14px] tracking-wide">
+                EXPIRED
+              </p>
+              <div className="flex flex-row items-baseline gap-2 mt-2">
+                <p className="font-bold text-[48px] text-white leading-none">
+                  3
+                </p>
+                <span className="text-white text-[16px] font-medium">
+                  competitions
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="rounded-[8px] overflow-hidden mt-6 border border-[#E2E8F0] shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
-                <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
-                  <tr>
-                    <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                      COMPETITION ID
-                    </th>
-                    <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                      COMPETITION TITLE
-                    </th>
-                    <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                      ORGANIZER
-                    </th>
-                    <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                      CATEGORY
-                    </th>
-                    <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                      STATUS
-                    </th>
-                    <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                      ACTIONS
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E2E8F0] bg-white">
-                  {competitions.map((item, index) => (
-                    <tr
-                      key={index}
-                      className="hover:bg-[#F8FAFC] transition-colors"
-                    >
-                      <td className="px-6 py-5 text-center text-[#64748B] font-medium">
-                        {item.competition_id}
-                      </td>
-                      <td className="px-6 py-5 text-center text-[#1E293B] font-semibold max-w-[250px] break-words">
-                        {item.title}
-                      </td>
-                      <td className="px-6 py-5 text-center text-[#43474D] font-medium">
-                        {item.organizer}
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <span className="inline-flex items-center justify-center px-3 py-1.5 text-[12px] rounded-[6px] font-semibold bg-[#F1F5F9] text-[#475569]">
-                          {item.category}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <span
-                          className={`inline-flex items-center justify-center px-4 py-1.5 text-[12px] rounded-full font-bold ${
-                            item.status === "ACTIVE"
-                              ? "bg-[#DCFCE7] text-[#166534]"
-                              : "bg-[#FEE2E2] text-[#991B1B]"
-                          }`}
-                        >
-                          {item.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <div className="flex flex-row items-center justify-center gap-4">
-                          <PenLine
-                            size={18}
-                            onClick={() => {
-                              setSelectedCompetition(item);
-                              setIsEditOpen(true);
-                            }}
-                            className="cursor-pointer text-[#64748B] hover:text-[#2563EB] transition-colors"
-                          />
-                          <SquareArrowOutUpRight
-                            className="cursor-pointer text-[#64748B] hover:text-[#2563EB] transition-colors"
-                            size={18}
-                          />
-                        </div>
-                      </td>
+          <div className="w-[1158px] flex flex-col mt-5">
+            <div className="flex justify-between items-end">
+              <div className="flex flex-col gap-1">
+                <p className="text-[18px] font-semibold text-black">
+                  List Competitions
+                </p>
+                <p className="text-[#43474D] text-[14px]">
+                  List of MARK-UP competitions all time
+                </p>
+              </div>
+              <p className="text-[#2563EB] font-bold text-[14.62px] cursor-pointer hover:underline">
+                View All Products
+              </p>
+            </div>
+
+            <div className="flex flex-row justify-between mt-6">
+              <div className="flex flex-row gap-5">
+                <div className="h-[43.5px] bg-[#F0F4F8] px-2 rounded-[6px] flex justify-center items-center gap-1 shadow-sm">
+                  <button
+                    onClick={() => setIsCategoryActive("semua")}
+                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "semua" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
+                  >
+                    Semua
+                  </button>
+                  <button
+                    onClick={() => setIsCategoryActive("business-case")}
+                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "business-case" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
+                  >
+                    Business Case
+                  </button>
+                  <button
+                    onClick={() => setIsCategoryActive("business-plan")}
+                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "business-plan" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
+                  >
+                    Business Plan
+                  </button>
+                  <button
+                    onClick={() => setIsCategoryActive("debat")}
+                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "debat" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
+                  >
+                    Debat
+                  </button>
+                  <button
+                    onClick={() => setIsCategoryActive("lkti")}
+                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "lkti" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
+                  >
+                    LKTI
+                  </button>
+                  <button
+                    onClick={() => setIsCategoryActive("ui-ux")}
+                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "ui-ux" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
+                  >
+                    UI/UX
+                  </button>
+                  <button
+                    onClick={() => setIsCategoryActive("hackathon")}
+                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "hackathon" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
+                  >
+                    Hackathon
+                  </button>
+                </div>
+                <div className="h-[43.5px] bg-[#F0F4F8] px-2 rounded-[6px] flex justify-center items-center gap-1 shadow-sm">
+                  <button
+                    onClick={() => setIsStatusActive("semua")}
+                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isStatusActive === "semua" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
+                  >
+                    Semua
+                  </button>
+                  <button
+                    onClick={() => setIsStatusActive("active")}
+                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isStatusActive === "active" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
+                  >
+                    Active
+                  </button>
+                  <button
+                    onClick={() => setIsStatusActive("expired")}
+                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isStatusActive === "expired" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
+                  >
+                    Expired
+                  </button>
+                </div>
+              </div>
+              <div className="relative flex items-center">
+                <Download
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#43474D]"
+                  size={15}
+                />
+                <button className="w-[130px] h-[43.5px] bg-[#F0F4F8] text-[13px] pl-6 pr-2 font-medium rounded-[6px] hover:bg-[#E2E8F0] shadow-sm transition-colors text-[#43474D]">
+                  Export .CSV
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-[8px] overflow-hidden mt-6 border border-[#E2E8F0] shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-[13px]">
+                  <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                    <tr>
+                      <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
+                        COMPETITION ID
+                      </th>
+                      <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
+                        COMPETITION TITLE
+                      </th>
+                      <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
+                        ORGANIZER
+                      </th>
+                      <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
+                        CATEGORY
+                      </th>
+                      <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
+                        STATUS
+                      </th>
+                      <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
+                        ACTIONS
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#E2E8F0] bg-white">
+                    {competitions.map((item, index) => (
+                      <tr
+                        key={index}
+                        className="hover:bg-[#F8FAFC] transition-colors"
+                      >
+                        <td className="px-6 py-5 text-center text-[#64748B] font-medium">
+                          {item.competition_id}
+                        </td>
+                        <td className="px-6 py-5 text-center text-[#1E293B] font-semibold max-w-[250px] break-words">
+                          {item.title}
+                        </td>
+                        <td className="px-6 py-5 text-center text-[#43474D] font-medium">
+                          {item.organizer}
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <span className="inline-flex items-center justify-center px-3 py-1.5 text-[12px] rounded-[6px] font-semibold bg-[#F1F5F9] text-[#475569]">
+                            {item.category}
+                          </span>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <span
+                            className={`inline-flex items-center justify-center px-4 py-1.5 text-[12px] rounded-full font-bold ${
+                              item.status === "ACTIVE"
+                                ? "bg-[#DCFCE7] text-[#166534]"
+                                : "bg-[#FEE2E2] text-[#991B1B]"
+                            }`}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <div className="flex flex-row items-center justify-center gap-4">
+                            <PenLine
+                              size={18}
+                              onClick={() => {
+                                setSelectedCompetition(item);
+                                setIsEditOpen(true);
+                              }}
+                              className="cursor-pointer text-[#64748B] hover:text-[#2563EB] transition-colors"
+                            />
+                            <SquareArrowOutUpRight
+                              className="cursor-pointer text-[#64748B] hover:text-[#2563EB] transition-colors"
+                              size={18}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
 
-          <div className="flex justify-center items-center mt-6 mb-10 gap-2 text-[#64748B] text-[14px]">
-            <span className="w-8 h-8 flex items-center justify-center bg-white border border-[#2563EB] text-[#2563EB] font-bold rounded-md cursor-pointer hover:bg-[#EFF6FF] shadow-sm">
-              1
-            </span>
-            <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-md font-medium">
-              2
-            </span>
-            <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-md font-medium">
-              3
-            </span>
-            <span className="font-medium tracking-widest">...</span>
-            <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-md font-medium">
-              12
-            </span>
+            <div className="flex justify-center items-center mt-6 mb-10 gap-2 text-[#64748B] text-[14px]">
+              <span className="w-8 h-8 flex items-center justify-center bg-white border border-[#2563EB] text-[#2563EB] font-bold rounded-md cursor-pointer hover:bg-[#EFF6FF] shadow-sm">
+                1
+              </span>
+              <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-md font-medium">
+                2
+              </span>
+              <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-md font-medium">
+                3
+              </span>
+              <span className="font-medium tracking-widest">...</span>
+              <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-md font-medium">
+                12
+              </span>
+            </div>
           </div>
         </div>
       </div>
