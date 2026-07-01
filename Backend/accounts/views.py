@@ -4,6 +4,7 @@ from .utils import get_request_data
 from .forms import RegisterForm
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, UserRole
+from .decorators import jwt_required, role_required
 
 def register_view(request):
 	if request.method != "POST":
@@ -80,6 +81,8 @@ def login_view(request):
 	)
 
 
+@jwt_required
+@role_required(UserRole.ADMIN)
 def get_users(request):
 	if request.method != "GET":
 		return HttpResponseNotAllowed(["GET"])
@@ -98,11 +101,13 @@ def get_users(request):
 			"created_at": u.created_at.isoformat() if getattr(u, "created_at", None) else None,
 		}
 
-
 		data.append(item)
 
 	return JsonResponse({"users": data}, status=200)
 
+
+@jwt_required
+@role_required(UserRole.ADMIN)
 def get_user_summary(request):
 	if request.method != "GET":
 		return HttpResponseNotAllowed(["GET"])

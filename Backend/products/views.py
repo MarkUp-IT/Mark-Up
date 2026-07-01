@@ -1,7 +1,10 @@
+from django.core.paginator import Paginator, EmptyPage
 from django.http import JsonResponse, HttpResponseNotAllowed
 from .utils import get_request_data
 from .forms import MentoringProductForm, ModuleProductForm, BootcampProductForm
-from .models import Product, ProductType, MentoringProduct, ModuleProduct, BootcampProduct
+from .models import Product, ProductType
+from accounts.decorators import jwt_required, role_required
+from accounts.models import UserRole
 
 DETAIL_FORM_MAP = {
     ProductType.MENTORING: (MentoringProductForm, "mentoring_detail"),
@@ -36,7 +39,8 @@ def _format_product_response(product, detail):
 
     return response
 
-
+@jwt_required
+@role_required(UserRole.ADMIN)
 def add_product(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
@@ -78,9 +82,30 @@ def get_products(request):
 	if request.method != "GET":
 		return HttpResponseNotAllowed(["GET"])
 
+	page_number = request.GET.get("page", 1)
+	page_size = request.GET.get("page_size", 10)
+
+	try:
+		page_number = int(page_number)
+	except (TypeError, ValueError):
+		page_number = 1
+
+	try:
+		page_size = int(page_size)
+	except (TypeError, ValueError):
+		page_size = 10
+
+	page_size = max(1, min(page_size, 100))
 	products = Product.objects.all().order_by("-created_at")
+	paginator = Paginator(products, page_size)
+
+	try:
+		page_obj = paginator.page(page_number)
+	except EmptyPage:
+		page_obj = paginator.page(paginator.num_pages or 1)
+
 	data = []
-	for p in products:
+	for p in page_obj.object_list:
 		item = {
 			"id": str(p.id),
 			"type": p.type,
@@ -102,15 +127,26 @@ def get_products(request):
 				"price": str(detail.price),
 				"is_active": detail.is_active,
 			})
-			
+
 			if hasattr(detail, "file_pdf_url"):
 				item["file_pdf_url"] = detail.file_pdf_url
 
 		data.append(item)
 
-	return JsonResponse({"products": data}, status=200)
+	return JsonResponse({
+		"products": data,
+		"pagination": {
+			"page": page_obj.number,
+			"page_size": page_obj.paginator.per_page,
+			"total_items": paginator.count,
+			"total_pages": paginator.num_pages,
+			"has_next": page_obj.has_next(),
+			"has_previous": page_obj.has_previous(),
+		},
+	}, status=200)
 
-
+@jwt_required
+@role_required(UserRole.ADMIN)
 def get_product_summary(request):
 	if request.method != "GET":
 		return HttpResponseNotAllowed(["GET"])  
@@ -146,6 +182,8 @@ def get_product_summary(request):
 		status=200,
 	)
 
+@jwt_required
+@role_required(UserRole.ADMIN)
 def update_product(request, product_id):
 	if request.method not in ["PUT", "PATCH"]:
 		return HttpResponseNotAllowed(["PUT", "PATCH"])

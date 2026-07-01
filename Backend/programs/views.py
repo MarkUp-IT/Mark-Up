@@ -3,8 +3,11 @@ from .utils import get_request_data
 from .forms import CompetitionForm
 from .models import Competition
 from django.utils import timezone
+from accounts.decorators import jwt_required, role_required
+from accounts.models import UserRole
 
-
+@jwt_required
+@role_required(UserRole.ADMIN)
 def add_competition(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
@@ -33,6 +36,7 @@ def add_competition(request):
 		status=201,
 	)
 
+
 def get_competitions(request):
 	if request.method != "GET":
 		return HttpResponseNotAllowed(["GET"])
@@ -52,6 +56,8 @@ def get_competitions(request):
 
 	return JsonResponse({"competitions": data}, status=200)
 
+@jwt_required
+@role_required(UserRole.ADMIN)
 def get_competition_summary(request):
 	if request.method != "GET":
 		return HttpResponseNotAllowed(["GET"])
@@ -75,7 +81,8 @@ def get_competition_summary(request):
 		status=200,
 	)
 
-
+@jwt_required
+@role_required(UserRole.ADMIN)
 def update_competition(request, competition_id):
 	if request.method not in ["PUT", "PATCH"]:
 		return HttpResponseNotAllowed(["PUT", "PATCH"])
