@@ -91,7 +91,7 @@ export default function InfoLomba() {
     <div className="w-full font-inter text-black bg-white min-h-screen relative flex flex-row overflow-x-hidden">
       <Sidebar />
       <div className="ml-[288px]">
-        <Header judulHalaman="Competitions" />
+        <Header judulHalaman="Competition Info" />
         <div className="flex-1 flex items-center py-5 flex-col gap-5 px-10">
           <div className="flex flex-row items-center justify-between w-[1158px] mt-2">
             <div>

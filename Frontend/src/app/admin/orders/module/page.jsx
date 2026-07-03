@@ -59,7 +59,7 @@ export default function ModuleManagement() {
     <div className="w-full font-inter text-black bg-[#F8FAFC] min-h-screen relative flex flex-row overflow-x-hidden">
       <Sidebar />
       <div className="ml-[288px]">
-        <Header judulHalaman="Manajemen Konten" />
+        <Header judulHalaman="Order Management > Module" />
         <div className="flex-1 flex items-center py-5 flex-col gap-5 px-10 bg-white">
           {/* Title Area */}
           <div className="flex flex-col w-[1158px] mt-2 gap-1">

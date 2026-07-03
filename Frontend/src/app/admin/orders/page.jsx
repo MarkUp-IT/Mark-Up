@@ -102,7 +102,7 @@ export default function Produk() {
     <div className="w-full font-inter text-black bg-[#F8FAFC] min-h-screen relative flex flex-row overflow-x-hidden">
       <Sidebar />
       <div className="ml-[288px]">
-        <Header judulHalaman="Orders" />
+        <Header judulHalaman="Order Management" />
         <div className="flex-1 flex items-center py-5 flex-col gap-5 px-10 bg-white">
           <div className="flex flex-row items-center justify-between w-[1158px] mt-2">
             <div>

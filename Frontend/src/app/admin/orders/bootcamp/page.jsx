@@ -66,7 +66,7 @@ export default function BootcampPage() {
     <div className="w-full font-inter text-black bg-[#F8FAFC] min-h-screen relative flex flex-row overflow-x-hidden">
       <Sidebar />
       <div className="ml-[288px]">
-        <Header judulHalaman="Bootcamp Management" />
+        <Header judulHalaman="Order Management > Bootcamp" />
         <div className="flex-1 flex items-center py-5 flex-col gap-5 px-10 bg-white min-h-screen">
           {/* Title Area */}
           <div className="flex flex-row items-center justify-between w-[1158px] mt-2">
