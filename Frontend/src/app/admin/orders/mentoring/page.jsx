@@ -52,13 +52,13 @@ export default function Mentoring() {
     <div className="w-full font-inter text-black bg-[#F8FAFC] min-h-screen relative flex flex-row overflow-x-hidden">
       <Sidebar />
       <div className="ml-[288px]">
-        <Header judulHalaman="Mentoring Management" />
+        <Header judulHalaman="Order Management > Mentoring" />
         <div className="flex-1 flex items-center py-5 flex-col gap-5 px-10 bg-white">
           {/* Header */}
 
           {/* Title Area */}
           <div className="flex flex-col w-[1158px] mt-2 gap-1">
-            <p className="font-bold text-[25px]">Manajemen Konten Mentoring</p>
+            <p className="font-bold text-[25px]">Mentoring</p>
             <p className="text-[#64748B] text-[15px]">
               Sistem pemantauan distribusi link Zoom dan status pemenuhan sesi
               mentoring 1-on-1

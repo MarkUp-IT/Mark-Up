@@ -49,7 +49,7 @@ export default function Sidebar() {
   const currentPath = pathname || "/admin";
 
   return (
-    <div className="fixed top-0 left-0 w-[288px] h-screen bg-[#F8FAFC] border-r border-[#E2E8F0] flex flex-col z-50 justify-between py-8 px-4 z-10">
+    <div className="fixed top-0 left-0 w-[288px] h-screen bg-[#F8FAFC] border-r border-[#E2E8F0] flex flex-col z-50 justify-between py-8 px-4 z-10 overflow-y-auto no-scrollbar">
       <div>
         <div className="flex flex-col mb-10 px-4">
           <h1 className="text-[24px] font-black text-[#1E293B] tracking-tight">

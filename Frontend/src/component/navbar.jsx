@@ -15,7 +15,7 @@ export default function Navbar() {
     { nama: "Beranda", url: "/" },
     { nama: "Produk", url: "/produk" },
     { nama: "Info Lomba", url: "/info-lomba" },
-    { nama: "Mentor", url: "/mentor" },
+    { nama: "Mentors", url: "/mentors" },
     // { nama: "Tentang Kami", url: "/tentang-kami" },
   ];
 
