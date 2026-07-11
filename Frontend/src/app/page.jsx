@@ -5,7 +5,7 @@ import { motion, useInView, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import CountUp from "@/component/CountUp";
 import DarkVeil from "@/component/DarkVeil";
-import Navbar from "@/component/Navbar";
+import Navbar from "@/component/navbar";
 import Footer from "@/component/Footer";
 
 const hashtagsRow1 = [

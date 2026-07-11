@@ -170,12 +170,12 @@ export default function ProdukPage() {
         <div className="flex flex-wrap justify-center gap-2 md:gap-3 mb-10 w-full max-w-[800px]">
           {tabs.map((tab) => (
             <button
-              key={index}
-              onClick={() => setActiveTab(tab)}
+              key={tab.value}
+              onClick={() => setActiveTab(tab.value)}
               className={`px-5 py-2 rounded-full text-xs md:text-sm font-semibold transition-colors duration-300 ${focusRing} ${
-                activeTab === tab
+                activeTab === tab.value
                   ? "bg-[#530D8E] text-white"
-                  : "bg-[#1A1625]"
+                  : "bg-[#1A1625] border border-white/5 text-[#A19DAB] hover:bg-[#2A2438] hover:text-white"
               }`}
             >
               {tab.label}

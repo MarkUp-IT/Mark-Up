@@ -2,94 +2,19 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import Navbar from "@/component/Navbar";
+import Navbar from "@/component/navbar";
 import Footer from "@/component/Footer";
 import { motion, useReducedMotion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { api, ApiError } from "@/lib/api";
 
 // --- DATA MENTOR ---
 // role/photo/linkedin/instagram sengaja dikosongkan dulu (bukan di-invent) --
 // isi field ini dengan data asli begitu tersedia. Selama masih kosong, UI-nya
 // otomatis fallback ke avatar inisial (bukan foto) dan icon sosial jadi nonaktif
 // (bukan link mati yang keliatan aktif tapi nggak beneran nyambung ke mana-mana).
-const allMentors = [
-  {
-    name: "Vittorio Salim, FMVA",
-    role: "",
-    photo: "",
-    linkedin: "",
-    instagram: "",
-  },
-  {
-    name: "Muhammad Nabil Razhin",
-    role: "",
-    photo: "",
-    linkedin: "",
-    instagram: "",
-  },
-  {
-    name: "Andi Aliyah Shabrina",
-    role: "",
-    photo: "",
-    linkedin: "",
-    instagram: "",
-  },
-  {
-    name: "Syona Hana Arditaputri",
-    role: "",
-    photo: "",
-    linkedin: "",
-    instagram: "",
-  },
-  {
-    name: "Pratisara Khansa Teges Palupi",
-    role: "",
-    photo: "",
-    linkedin: "",
-    instagram: "",
-  },
-  {
-    name: "Imelda Felicia Dharmawan",
-    role: "",
-    photo: "",
-    linkedin: "",
-    instagram: "",
-  },
-  {
-    name: "Aarief Fawwaz Satriahutama",
-    role: "",
-    photo: "",
-    linkedin: "",
-    instagram: "",
-  },
-  {
-    name: "Dhilla Avrylia Utomo",
-    role: "",
-    photo: "",
-    linkedin: "",
-    instagram: "",
-  },
-  {
-    name: "Muhammad Adnan Bayu",
-    role: "",
-    photo: "",
-    linkedin: "",
-    instagram: "",
-  },
-  {
-    name: "Catherine Harijanto",
-    role: "",
-    photo: "",
-    linkedin: "",
-    instagram: "",
-  },
-  {
-    name: "Adena Laksita Paramesti",
-    role: "",
-    photo: "",
-    linkedin: "",
-    instagram: "",
-  },
-];
+
+
 
 // Beberapa gradient dari palet Mark-Up yang udah ada, dipakai bergantian buat
 // background avatar inisial biar nggak monoton semua kartu sama persis.
@@ -106,6 +31,15 @@ const CARD_BASE =
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B19EEF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#060010]";
 
+function mapApiMentor(item) {
+  return {
+    name: item.fullname,
+    role: item.role || "",
+    photo: item.photo_url || "",
+    linkedin: item.linkedin_url || "",
+    instagram: item.instagram_url || "",
+  };
+}
 // Ambil 2 huruf pertama dari nama depan+tengah, buang gelar (mis. ", FMVA")
 function getInitials(name) {
   const cleanName = name.split(",")[0].trim();
@@ -160,6 +94,32 @@ function SocialIcon({ href, iconSrc, label }) {
 
 export default function MentorPage() {
   const shouldReduceMotion = useReducedMotion();
+  const [mentors, setMentors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function fetchMentors() {
+      try {
+        setLoading(true);
+        const json = await api.get("/api/mentors/", { auth: false });
+        console.log(json);
+        const mapped = (json.mentors || []).map(mapApiMentor);
+        setMentors(mapped);
+        setError(null);
+      } catch (err) {
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "Gagal memuat data mentor. Silakan coba lagi."
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchMentors();
+  }, []);
 
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative overflow-x-hidden">
@@ -197,64 +157,74 @@ export default function MentorPage() {
 
         {/* Mentor List Section */}
         <div className="mentor-content flex flex-col items-center w-full max-w-[1200px]">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 md:gap-6 w-full">
-            {allMentors.map((mentor, index) => (
-              <motion.div
-                key={mentor.name}
-                initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: shouldReduceMotion ? 0.2 : 0.4,
-                  delay: shouldReduceMotion ? 0 : index * 0.05,
-                }}
-                viewport={{ once: true }}
-                className={`bg-[#120822]/60 backdrop-blur-md p-6 flex flex-col items-center text-center gap-3 ${CARD_BASE}`}
-              >
-                {/* Avatar: foto asli kalau ada, fallback ke inisial */}
-                <div
-                  className={`w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden shrink-0 ring-2 ring-white/10 flex items-center justify-center bg-gradient-to-br ${
-                    AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length]
-                  }`}
+          {loading && (
+            <p className="text-[#A19DAB] text-sm">Memuat data mentor...</p>
+          )}
+
+          {!loading && error && (
+            <p className="text-red-400 text-sm">{error}</p>
+          )}
+          
+          {!loading && !error && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 md:gap-6 w-full">
+              {mentors.map((mentor, index) => (
+                <motion.div
+                  key={mentor.name}
+                  initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: shouldReduceMotion ? 0.2 : 0.4,
+                    delay: shouldReduceMotion ? 0 : index * 0.05,
+                  }}
+                  viewport={{ once: true }}
+                  className={`bg-[#120822]/60 backdrop-blur-md p-6 flex flex-col items-center text-center gap-3 ${CARD_BASE}`}
                 >
-                  {mentor.photo ? (
-                    <img
-                      src={mentor.photo}
-                      alt={mentor.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-white font-poppins font-bold text-lg md:text-xl">
-                      {getInitials(mentor.name)}
-                    </span>
+                  {/* Avatar: foto asli kalau ada, fallback ke inisial */}
+                  <div
+                    className={`w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden shrink-0 ring-2 ring-white/10 flex items-center justify-center bg-gradient-to-br ${
+                      AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length]
+                    }`}
+                  >
+                    {mentor.photo ? (
+                      <img
+                        src={mentor.photo}
+                        alt={mentor.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-white font-poppins font-bold text-lg md:text-xl">
+                        {getInitials(mentor.name)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Nama */}
+                  <h3 className="font-poppins font-bold text-[15px] md:text-base text-white leading-snug px-1">
+                    {mentor.name}
+                  </h3>
+
+                  {/* Role, cuma tampil kalau datanya ada */}
+                  {mentor.role && (
+                    <p className="text-[#A19DAB] text-xs -mt-2">{mentor.role}</p>
                   )}
-                </div>
 
-                {/* Nama */}
-                <h3 className="font-poppins font-bold text-[15px] md:text-base text-white leading-snug px-1">
-                  {mentor.name}
-                </h3>
-
-                {/* Role, cuma tampil kalau datanya ada */}
-                {mentor.role && (
-                  <p className="text-[#A19DAB] text-xs -mt-2">{mentor.role}</p>
-                )}
-
-                {/* Sosial media */}
-                <div className="flex items-center gap-3 mt-1">
-                  <SocialIcon
-                    href={mentor.linkedin}
-                    iconSrc="/images/linkedin.svg"
-                    label={`LinkedIn ${mentor.name}`}
-                  />
-                  <SocialIcon
-                    href={mentor.instagram}
-                    iconSrc="/images/instagram.svg"
-                    label={`Instagram ${mentor.name}`}
-                  />
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                  {/* Sosial media */}
+                  <div className="flex items-center gap-3 mt-1">
+                    <SocialIcon
+                      href={mentor.linkedin}
+                      iconSrc="/images/linkedin.svg"
+                      label={`LinkedIn ${mentor.name}`}
+                    />
+                    <SocialIcon
+                      href={mentor.instagram}
+                      iconSrc="/images/instagram.svg"
+                      label={`Instagram ${mentor.name}`}
+                    />
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
