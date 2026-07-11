@@ -9,13 +9,13 @@ export default function Footer() {
       {/* Container Utama */}
       <div className="max-w-7xl mx-auto w-full px-6 md:px-10 flex flex-col md:flex-row justify-between gap-12 md:gap-16 mb-12">
         {/* Kolom 1: Branding & Deskripsi */}
-        <div className="flex flex-col gap-5 w-full md:max-w-[320px]">
+        <div className="flex flex-col gap-5 w-full md:max-w-[280px]">
           <Image
             src="/images/logo-markup.svg"
             width={170}
             height={100}
             alt="Logo Mark Up"
-            className="w-[120px] md:w-[170px] h-auto transition-all" // Logo mengecil dikit di HP
+            className="w-[120px] md:w-[170px] h-auto transition-all"
           />
           <p className="leading-relaxed text-[#EDEDF3]/80 text-justify">
             Mark-Up adalah wadah akselerasi talenta muda yang menyediakan
@@ -31,7 +31,7 @@ export default function Footer() {
                   src="/images/linkedin.svg"
                   width={14}
                   height={14}
-                  alt="Instagram"
+                  alt="LinkedIn"
                   className="invert group-hover:invert-0 transition-all"
                 />
               </div>
@@ -74,11 +74,12 @@ export default function Footer() {
                 Info Lomba
               </p>
             </Link>
-            <Link href="/mentor">
+            <Link href="/mentors">
               <p className="hover:text-white hover:font-semibold transition-all">
                 Mentor
               </p>
             </Link>
+            {/* Halaman /tentang-kami belum dibuat -- aktifkan kalau sudah ada */}
             {/* <Link href="/tentang-kami">
               <p className="hover:text-white hover:font-semibold transition-all">
                 Tentang Kami
@@ -87,7 +88,42 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* Kolom 3: Hubungi Kami */}
+        {/* Kolom 3: Bantuan */}
+        <div className="flex flex-col gap-6">
+          <p className="font-bold font-poppins tracking-widest text-white">
+            BANTUAN
+          </p>
+          <div className="flex flex-col gap-4 text-[#EDEDF3]/80">
+            <Link href="/faq">
+              <p className="hover:text-white hover:font-semibold transition-all">
+                FAQ
+              </p>
+            </Link>
+            <Link href="/contact">
+              <p className="hover:text-white hover:font-semibold transition-all">
+                Kontak Kami
+              </p>
+            </Link>
+            <Link href="/refund-policy">
+              <p className="hover:text-white hover:font-semibold transition-all">
+                Refund Policy
+              </p>
+            </Link>
+            <Link href="/terms-and-conditions">
+              <p className="hover:text-white hover:font-semibold transition-all">
+                Syarat & Ketentuan
+              </p>
+            </Link>
+            {/* Halaman /privacy-policy belum dibuat -- aktifkan kalau sudah ada */}
+            {/* <Link href="/privacy-policy">
+              <p className="hover:text-white hover:font-semibold transition-all">
+                Kebijakan Privasi
+              </p>
+            </Link> */}
+          </div>
+        </div>
+
+        {/* Kolom 4: Hubungi Kami */}
         <div className="flex flex-col gap-6">
           <p className="font-bold font-poppins tracking-widest text-white">
             HUBUNGI KAMI
@@ -108,7 +144,12 @@ export default function Footer() {
                   d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"
                 />
               </svg>
-              <p>markup.ofc@gmail.com</p>
+              <a
+                href="mailto:markup.ofc@gmail.com"
+                className="hover:text-white transition-colors"
+              >
+                markup.ofc@gmail.com
+              </a>
             </div>
             <div className="flex flex-row gap-3 items-start">
               <svg
@@ -125,7 +166,14 @@ export default function Footer() {
                   d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z"
                 />
               </svg>
-              <p>0895414588925</p>
+              <a
+                href="https://wa.me/62895414588925"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-white transition-colors"
+              >
+                0895-4145-88925
+              </a>
             </div>
             <div className="flex flex-row gap-3 items-start">
               <svg
@@ -160,7 +208,7 @@ export default function Footer() {
       <div className="w-full max-w-7xl mx-auto px-6 md:px-10">
         <hr className="w-full border-t border-white/10 my-6" />
         <p className="text-xs text-[#EDEDF3]/60 mb-2 md:mb-0 text-center md:text-left">
-          MARK-UP © 2026
+          MARK-UP © {new Date().getFullYear()}
         </p>
       </div>
     </div>

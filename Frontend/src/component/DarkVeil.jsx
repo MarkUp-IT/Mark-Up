@@ -1,5 +1,5 @@
-import { useRef, useEffect } from 'react';
-import { Renderer, Program, Mesh, Triangle, Vec2 } from 'ogl';
+import { useRef, useEffect } from "react";
+import { Renderer, Program, Mesh, Triangle, Vec2 } from "ogl";
 
 const vertex = `
 attribute vec2 position;
@@ -80,7 +80,7 @@ export default function DarkVeil({
   speed = 0.5,
   scanlineFrequency = 0,
   warpAmount = 0,
-  resolutionScale = 1
+  resolutionScale = 1,
 }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -89,7 +89,7 @@ export default function DarkVeil({
 
     const renderer = new Renderer({
       dpr: Math.min(window.devicePixelRatio, 2),
-      canvas
+      canvas,
     });
 
     const gl = renderer.gl;
@@ -105,42 +105,80 @@ export default function DarkVeil({
         uNoise: { value: noiseIntensity },
         uScan: { value: scanlineIntensity },
         uScanFreq: { value: scanlineFrequency },
-        uWarp: { value: warpAmount }
-      }
+        uWarp: { value: warpAmount },
+      },
     });
 
     const mesh = new Mesh(gl, { geometry, program });
 
-    const resize = () => {
-      const w = parent.clientWidth,
-        h = parent.clientHeight;
-      renderer.setSize(w * resolutionScale, h * resolutionScale);
-      program.uniforms.uResolution.value.set(w, h);
-    };
-
-    window.addEventListener('resize', resize);
-    resize();
+    // Kalau user set "reduce motion" di OS-nya, jangan jalankan animasi
+    // terus-terusan -> cukup render satu frame statis.
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
 
     const start = performance.now();
     let frame = 0;
+    let isVisible = true;
 
-    const loop = () => {
-      program.uniforms.uTime.value = ((performance.now() - start) / 1000) * speed;
+    const renderFrame = () => {
+      program.uniforms.uTime.value =
+        ((performance.now() - start) / 1000) * speed;
       program.uniforms.uHueShift.value = hueShift;
       program.uniforms.uNoise.value = noiseIntensity;
       program.uniforms.uScan.value = scanlineIntensity;
       program.uniforms.uScanFreq.value = scanlineFrequency;
       program.uniforms.uWarp.value = warpAmount;
       renderer.render({ scene: mesh });
+    };
+
+    const resize = () => {
+      const w = parent.clientWidth,
+        h = parent.clientHeight;
+      renderer.setSize(w * resolutionScale, h * resolutionScale);
+      program.uniforms.uResolution.value.set(w, h);
+      // Loop-nya nggak jalan kalau reduced motion, jadi perlu render manual
+      // biar kanvas tetap ke-update ukurannya pas resize.
+      if (prefersReducedMotion) renderFrame();
+    };
+
+    window.addEventListener("resize", resize);
+    resize();
+
+    const loop = () => {
+      // Skip render kalau canvas lagi di luar viewport atau tab di background
+      // -> hemat CPU/baterai, terutama di HP.
+      if (isVisible && !document.hidden) {
+        renderFrame();
+      }
       frame = requestAnimationFrame(loop);
     };
 
-    loop();
+    if (!prefersReducedMotion) {
+      loop();
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry.isIntersecting;
+      },
+      { threshold: 0 },
+    );
+    observer.observe(canvas);
 
     return () => {
       cancelAnimationFrame(frame);
-      window.removeEventListener('resize', resize);
+      window.removeEventListener("resize", resize);
+      observer.disconnect();
     };
-  }, [hueShift, noiseIntensity, scanlineIntensity, speed, scanlineFrequency, warpAmount, resolutionScale]);
+  }, [
+    hueShift,
+    noiseIntensity,
+    scanlineIntensity,
+    speed,
+    scanlineFrequency,
+    warpAmount,
+    resolutionScale,
+  ]);
   return <canvas ref={ref} className="w-full h-full block" />;
 }

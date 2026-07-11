@@ -1,11 +1,12 @@
 "use client";
 
+import { useRef } from "react";
+import { motion, useInView, useReducedMotion } from "framer-motion";
+import Link from "next/link";
 import CountUp from "@/component/CountUp";
 import DarkVeil from "@/component/DarkVeil";
-import Navbar from "@/component/navbar";
+import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
-import dynamic from "next/dynamic";
-import Image from "next/image";
 
 const hashtagsRow1 = [
   "#Mentoring",
@@ -65,16 +66,35 @@ const testimonials = [
 // Array untuk Logo Partner (9.png sampai 16.png)
 const partnerLogos = [9, 10, 11, 12, 13, 14, 15, 16];
 
+// Badge label kecil di atas tiap judul section, disamakan dengan pattern yang
+// sudah dipakai di Produk/Info Lomba/Mentor.
+const SectionEyebrow = ({ children }) => (
+  <div className="bg-[#08C7E1]/10 border border-[#08C7E1]/20 px-4 md:px-5 py-1.5 rounded-full flex justify-center items-center">
+    <p className="text-[#08C7E1] font-semibold tracking-wide text-[11px] md:text-[13px]">
+      {children}
+    </p>
+  </div>
+);
+
+// Token card konten. Radius disederhanakan jadi satu ukuran kecil yang konsisten
+// (6px -> 8px), dan hover DIBUAT DIAM -- cuma warna border yang berubah, tanpa
+// transform/translate/scale sama sekali.
+const CARD_BASE =
+  "rounded-md md:rounded-lg border border-[#B19EEF]/20 shadow-[0_0_30px_rgba(177,158,239,0.1)] hover:border-[#B19EEF]/50 transition-colors duration-300";
+
+// Card 3 & bento cards "Materi Komprehensif" berbagi warna dasar yang sama.
+const FEATURE_CARD_BG = "bg-gradient-to-br from-[#3B0E76] to-[#1A0A3A]";
+
 // Komponen TestiCard (Teks max 4 baris, ada ellipsis "...")
 const TestiCard = ({ data, dark }) => (
   <div
     className={`w-[320px] md:w-[450px] h-[220px] md:h-[260px] ${
       dark ? "bg-[#0A0514]" : "bg-[#120822]"
-    } border border-white/10 rounded-[24px] p-6 md:p-8 flex flex-col justify-between hover:border-[#B19EEF]/50 transition-colors mx-2 md:mx-3 shadow-md shrink-0`}
+    } border border-white/10 rounded-md md:rounded-lg p-6 md:p-8 flex flex-col justify-between hover:border-[#B19EEF]/50 transition-colors duration-300 mx-2 md:mx-3 shadow-md shrink-0`}
   >
-    {/* Kutipan Teks: Ditambah line-clamp-4, tanda kutip pakai string biasa */}
+    {/* Kutipan Teks: pakai tanda kutip kurawal, bukan literal backtick */}
     <p className="text-gray-300 text-xs md:text-sm leading-relaxed italic relative z-10 line-clamp-4">
-      `{data.text}`
+      &ldquo;{data.text}&rdquo;
     </p>
 
     <div className="flex flex-col mt-6 border-t border-white/5 pt-4">
@@ -107,10 +127,46 @@ const TestiCard = ({ data, dark }) => (
   </div>
 );
 
+// Glow ambient lembut, reuse teknik radial-gradient yang sama kayak di
+// background Produk/Info Lomba/Mentor.
+const AmbientGlow = ({ tint = "177,158,239", className = "" }) => (
+  <div
+    className={`absolute pointer-events-none -z-10 ${className}`}
+    style={{
+      background: `radial-gradient(circle, rgba(${tint},0.14) 0%, transparent 70%)`,
+      filter: "blur(60px)",
+    }}
+  />
+);
+
 export default function HomePage() {
+  const statsRef = useRef(null);
+  const isStatsInView = useInView(statsRef, { once: true, margin: "-100px" });
+
+  const reversedTestimonials = [...testimonials].reverse();
+
+  const shouldReduceMotion = useReducedMotion();
+  const fadeUpVariant = {
+    hidden: { opacity: 0, y: shouldReduceMotion ? 0 : 24 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: shouldReduceMotion ? 0 : 0.6, ease: "easeOut" },
+    },
+  };
+  const revealProps = {
+    initial: "hidden",
+    whileInView: "visible",
+    viewport: { once: true, margin: "-100px" },
+    variants: fadeUpVariant,
+  };
+
+  const focusRing =
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B19EEF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#060010]";
+
   return (
-    <div className="w-full font-jakarta text-white bg-black min-h-screen relative flex flex-col overflow-x-hidden">
-      <Navbar className="bg-white/10" />
+    <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col overflow-x-hidden">
+      <Navbar />
       <div className="absolute top-0 left-0 w-full h-[100dvh] md:h-screen flex flex-col z-0 overflow-hidden pointer-events-none">
         <DarkVeil
           hueShift={337}
@@ -125,6 +181,7 @@ export default function HomePage() {
       <div className="main-content flex flex-col gap-24 md:gap-32 items-center mt-24 md:mt-28 relative z-40 mb-24 w-full">
         {/* HERO SECTION */}
         <div className="hero-section py-8 md:py-[8vh] w-full px-6 md:px-[10vh] lg:px-[30vh] flex flex-col gap-4 md:gap-6 items-center">
+          <SectionEyebrow>Wadah Akselerasi Talenta Muda</SectionEyebrow>
           <h1 className="main-title inline text-4xl sm:text-5xl md:text-6xl text-center text-white font-bold font-poppins leading-tight">
             Tingkatkan{" "}
             <span className="text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff] block sm:inline">
@@ -136,7 +193,7 @@ export default function HomePage() {
               MARK-UP!
             </span>
           </h1>
-          <h1 className="w-full max-w-[700px] text-center font-light text-sm md:text-base leading-relaxed px-2">
+          <p className="w-full max-w-[700px] text-center font-light text-sm md:text-base leading-relaxed px-2">
             Maksimalkan{" "}
             <span className="font-bold text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff]">
               potensimu
@@ -144,12 +201,12 @@ export default function HomePage() {
             untuk menang. Dapatkan bimbingan personal, kelas terarah, dan modul
             praktis yang dirancang khusus untuk{" "}
             <span className="font-bold">mencetak para juara.</span>
-          </h1>
-          <a
+          </p>
+          <Link
             href="/produk"
-            className="bg-white py-3 px-6 md:py-2 md:px-5 rounded-xl md:rounded-md hover:scale-105 transition-all ease-in-out duration-200 overflow-hidden items-center flex text-black text-sm md:text-base font-bold gap-3 shadow-lg shadow-white/10"
+            className={`bg-white py-3 px-6 md:py-2 md:px-5 rounded-full hover:scale-105 transition-all ease-in-out duration-200 overflow-hidden items-center flex text-black text-sm md:text-base font-bold gap-3 shadow-lg shadow-white/10 ${focusRing}`}
           >
-            <h1>Gabung MarkUp Sekarang</h1>
+            <span>Gabung MarkUp Sekarang</span>
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="24"
@@ -160,9 +217,12 @@ export default function HomePage() {
             >
               <path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm45.66,109.66-32,32a8,8,0,0,1-11.32-11.32L148.69,136H88a8,8,0,0,1,0-16h60.69l-18.35-18.34a8,8,0,0,1,11.32-11.32l32,32A8,8,0,0,1,173.66,133.66Z"></path>
             </svg>
-          </a>
+          </Link>
 
-          <div className="numbering flex flex-row justify-center gap-8 md:gap-10 mt-4 w-full bg-white/5 md:bg-transparent py-4 rounded-2xl md:rounded-none backdrop-blur-sm md:backdrop-blur-none px-2">
+          <div
+            ref={statsRef}
+            className="numbering flex flex-row justify-center gap-8 md:gap-10 mt-4 w-full bg-white/5 md:bg-transparent py-4 rounded-lg md:rounded-none backdrop-blur-sm md:backdrop-blur-none px-2"
+          >
             <div className="alumni flex flex-col gap-1 items-center">
               <div className="alumni-num text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff] text-2xl md:text-4xl font-bold flex items-center">
                 <CountUp
@@ -171,13 +231,13 @@ export default function HomePage() {
                   separator=","
                   direction="up"
                   duration={1}
-                  startCounting={false}
+                  startCounting={isStatsInView}
                 />
-                <h1>+</h1>
+                <span>+</span>
               </div>
-              <h1 className="font-light text-[10px] md:text-sm text-center">
+              <p className="font-light text-[10px] md:text-sm text-center">
                 Alumni Hebat
-              </h1>
+              </p>
             </div>
             <div className="w-[1px] h-auto bg-gradient-to-b from-white/30 md:from-white to-transparent"></div>
             <div className="modul flex flex-col gap-1 items-center">
@@ -188,13 +248,13 @@ export default function HomePage() {
                   separator=","
                   direction="up"
                   duration={1}
-                  startCounting={false}
+                  startCounting={isStatsInView}
                 />
-                <h1>+</h1>
+                <span>+</span>
               </div>
-              <h1 className="font-light text-[10px] md:text-sm text-center">
+              <p className="font-light text-[10px] md:text-sm text-center">
                 Program & Layanan
-              </h1>
+              </p>
             </div>
             <div className="w-[1px] h-auto bg-gradient-to-b from-white/30 md:from-white to-transparent"></div>
             <div className="mentor flex flex-col gap-1 items-center">
@@ -205,37 +265,38 @@ export default function HomePage() {
                   separator=","
                   direction="up"
                   duration={1}
-                  startCounting={false}
+                  startCounting={isStatsInView}
                 />
-                <h1>+</h1>
+                <span>+</span>
               </div>
-              <h1 className="font-light text-[10px] md:text-sm text-center">
+              <p className="font-light text-[10px] md:text-sm text-center">
                 Mentor Praktisi
-              </h1>
+              </p>
             </div>
           </div>
         </div>
 
         {/* KEUNGGULAN SECTION */}
-        <div className="why-markup flex flex-col bg-gradient-to-br from-[#160C32] to-[#071526] w-[90%] md:w-full max-w-[1050px] p-6 md:p-10 justify-center items-center rounded-[24px] md:rounded-3xl gap-6 md:gap-8 mx-auto overflow-hidden relative shadow-2xl">
-          <div className="why-markup-title flex flex-col items-center gap-1 text-center">
-            <h1 className="uppercase font-bold text-[10px] md:text-xs tracking-widest text-gray-300">
-              Keunggulan Kami
-            </h1>
-            <h1 className="font-poppins font-bold text-2xl md:text-3xl">
+        <motion.div
+          {...revealProps}
+          className="why-markup flex flex-col w-[90%] md:w-full max-w-[1050px] justify-center items-center rounded-md md:rounded-lg gap-6 md:gap-8 mx-auto overflow-hidden relative shadow-2xl"
+        >
+          <div className="why-markup-title flex flex-col items-center gap-3 text-center">
+            <SectionEyebrow>Keunggulan Kami</SectionEyebrow>
+            <h2 className="font-poppins font-bold text-2xl md:text-4xl">
               Mengapa Harus dengan{" "}
               <span className="text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff]">
                 MARK-UP
               </span>
               ?
-            </h1>
+            </h2>
           </div>
 
-          <div className="why-markup-content grid grid-cols-1 md:grid-cols-3 gap-4 w-full relative z-10">
-            {/* Card 1 */}
-            <div className="md:row-span-3 p-6 md:p-8 gap-4 md:gap-5 justify-center rounded-[20px] md:rounded-[24px] border flex flex-col border-white/30 md:col-span-1 bg-white text-black">
+          <div className="why-markup-content grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6 w-full relative z-10">
+            {/* Card 1: sengaja beda sendiri (putih, lebih besar) -- "bintang" trio-nya */}
+            <div className="md:row-span-3 p-6 md:p-8 gap-4 md:gap-5 justify-center rounded-md md:rounded-lg border flex flex-col border-white/30 hover:border-[#B19EEF]/60 transition-colors duration-300 md:col-span-1 bg-white text-black">
               <div className="top flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-4">
-                <div className="p-3 w-12 h-12 md:w-16 md:h-16 shrink-0 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#FF9FFC] to-[#a98fff]">
+                <div className="p-3 w-12 h-12 md:w-16 md:h-16 shrink-0 rounded-lg flex items-center justify-center bg-gradient-to-br from-[#FF9FFC] to-[#a98fff]">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="24"
@@ -247,28 +308,30 @@ export default function HomePage() {
                     <path d="M242.63,96.44l-184-64A8,8,0,0,0,48,40V216a8,8,0,0,0,16,0V173.69l178.63-62.13a8,8,0,0,0,0-15.12ZM64,156.75V51.25L215.65,104Z"></path>
                   </svg>
                 </div>
-                <h1 className="font-poppins font-bold text-lg md:text-xl leading-tight">
+                <h3 className="font-poppins font-bold text-lg md:text-xl leading-tight">
                   Belajar dari Para Ahli
-                </h1>
+                </h3>
               </div>
-              <h1 className="font-light text-sm text-justify">
+              <p className="font-light text-sm text-justify">
                 Dapatkan arahan tajam dari mentor yang memiliki rekam jejak
                 juara dan pengalaman mendalam di industrinya.
-              </h1>
-              <a
-                href="/mentor"
-                className="w-full py-3 mt-4 md:mt-auto flex justify-center text-white bg-black rounded-xl hover:bg-gray-800 transition-colors"
+              </p>
+              <Link
+                href="/mentors"
+                className={`w-full py-3 mt-4 md:mt-auto flex justify-center text-white bg-black rounded-full hover:bg-gray-800 transition-colors ${focusRing}`}
               >
-                <h1 className="text-xs md:text-sm font-semibold">
+                <span className="text-xs md:text-sm font-semibold">
                   Kenalan dengan mentor
-                </h1>
-              </a>
+                </span>
+              </Link>
             </div>
 
             {/* Card 2 */}
-            <div className="md:row-span-2 p-6 md:p-8 gap-3 md:gap-4 rounded-[20px] md:rounded-[24px] border flex flex-col border-white/30 md:col-span-1 bg-gradient-to-t from-white/10 via-white/5 to-transparent">
+            <div
+              className={`md:row-span-2 p-6 md:p-8 gap-3 md:gap-4 flex flex-col md:col-span-1 bg-gradient-to-br from-[#2A2438] to-[#100A19] ${CARD_BASE}`}
+            >
               <div className="top flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-4">
-                <div className="p-3 w-12 h-12 md:w-16 md:h-16 shrink-0 rounded-xl flex items-center justify-center bg-white">
+                <div className="p-3 w-12 h-12 md:w-16 md:h-16 shrink-0 rounded-lg flex items-center justify-center bg-white">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="24"
@@ -280,20 +343,22 @@ export default function HomePage() {
                     <path d="M248,92.68a15.86,15.86,0,0,0-4.69-11.31L174.63,12.68a16,16,0,0,0-22.63,0L123.57,41.11l-58,21.77A16.06,16.06,0,0,0,55.35,75.23L32.11,214.68A8,8,0,0,0,40,224a8.4,8.4,0,0,0,1.32-.11l139.44-23.24a16,16,0,0,0,12.35-10.17l21.77-58L243.31,104A15.87,15.87,0,0,0,248,92.68Zm-69.87,92.19L63.32,204l47.37-47.37a28,28,0,1,0-11.32-11.32L52,192.7,71.13,77.86,126,57.29,198.7,130ZM112,132a12,12,0,1,1,12,12A12,12,0,0,1,112,132Zm96-15.32L139.31,48l24-24L232,92.68Z"></path>
                   </svg>
                 </div>
-                <h1 className="font-poppins font-bold text-lg md:text-xl leading-tight">
+                <h3 className="font-poppins font-bold text-lg md:text-xl leading-tight">
                   Kurikulum Yang Terstruktur
-                </h1>
+                </h3>
               </div>
-              <h1 className="font-light text-sm text-gray-300 text-justify">
+              <p className="font-light text-sm text-[#A19DAB] text-justify">
                 Materi yang terarah dengan studi kasus nyata untuk asah
                 kemampuan kompetisimu.
-              </h1>
+              </p>
             </div>
 
             {/* Card 3 */}
-            <div className="md:row-span-2 p-6 md:p-8 gap-3 md:gap-4 rounded-[20px] md:rounded-[24px] border flex flex-col border-white/30 md:col-span-1 bg-gradient-to-tr from-[#570A93] to-[#082CE1]">
+            <div
+              className={`md:row-span-2 p-6 md:p-8 gap-3 md:gap-4 flex flex-col md:col-span-1 ${FEATURE_CARD_BG} ${CARD_BASE}`}
+            >
               <div className="top flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-4">
-                <div className="p-3 w-12 h-12 md:w-16 md:h-16 shrink-0 rounded-xl flex items-center justify-center bg-white">
+                <div className="p-3 w-12 h-12 md:w-16 md:h-16 shrink-0 rounded-lg flex items-center justify-center bg-white">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="24"
@@ -305,20 +370,20 @@ export default function HomePage() {
                     <path d="M184,112a8,8,0,0,1-8,8H112a8,8,0,0,1,0-16h64A8,8,0,0,1,184,112Zm-8,24H112a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16Zm48-88V208a16,16,0,0,1-16,16H48a16,16,0,0,1-16-16V48A16,16,0,0,1,48,32H208A16,16,0,0,1,224,48ZM48,208H72V48H48Zm160,0V48H88V208H208Z"></path>
                   </svg>
                 </div>
-                <h1 className="font-poppins font-bold text-lg md:text-xl leading-tight">
+                <h3 className="font-poppins font-bold text-lg md:text-xl leading-tight">
                   Modul Praktis dan Teruji
-                </h1>
+                </h3>
               </div>
-              <h1 className="font-light text-sm text-gray-200 text-justify">
+              <p className="font-light text-sm text-[#A19DAB] text-justify">
                 Akses materi pembelajaran mandiri, kerangka penyelesaian
                 masalah, serta template presentasi yang siap pakai.
-              </h1>
+              </p>
             </div>
 
             {/* MARQUEE HASHTAGS */}
-            <div className="md:row-span-1 py-5 md:py-0 rounded-[20px] md:rounded-[24px] border border-white/30 md:col-span-2 bg-gradient-to-r from-[#2A2438] to-[#100A19] flex flex-col justify-center gap-2 md:gap-3 overflow-hidden w-full relative">
-              <div className="absolute left-0 top-0 bottom-0 w-8 md:w-12 bg-gradient-to-r from-[#2A2438] to-transparent z-10 rounded-l-[24px]"></div>
-              <div className="absolute right-0 top-0 bottom-0 w-8 md:w-12 bg-gradient-to-l from-[#100A19] to-transparent z-10 rounded-r-[24px]"></div>
+            <div className="md:row-span-1 py-5 md:py-0 rounded-md md:rounded-lg border border-[#B19EEF]/20 md:col-span-2 bg-gradient-to-r from-[#2A2438] to-[#100A19] flex flex-col justify-center gap-2 md:gap-3 overflow-hidden w-full relative">
+              <div className="absolute left-0 top-0 bottom-0 w-8 md:w-12 bg-gradient-to-r from-[#2A2438] to-transparent z-10 rounded-l-lg"></div>
+              <div className="absolute right-0 top-0 bottom-0 w-8 md:w-12 bg-gradient-to-l from-[#100A19] to-transparent z-10 rounded-r-lg"></div>
 
               {/* Baris 1: Ke Kiri */}
               <div className="flex w-full pt-1 md:pt-2 overflow-hidden">
@@ -356,67 +421,76 @@ export default function HomePage() {
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* SECTION 1: PARTNER KAMI */}
-        <div className="partner flex flex-col items-center gap-6 md:gap-10 w-full max-w-[800px] px-4">
-          <div className="partner-title flex flex-col items-center gap-1 text-center">
-            <h1 className="uppercase font-bold text-[10px] md:text-xs tracking-widest text-gray-400">
-              PARTNER KAMI
-            </h1>
-            <h1 className="font-poppins font-bold text-2xl md:text-3xl">
+        <motion.div
+          {...revealProps}
+          className="partner flex flex-col items-center gap-6 md:gap-10 w-full max-w-[800px] px-4"
+        >
+          <div className="partner-title flex flex-col items-center gap-3 text-center">
+            <SectionEyebrow>Partner Kami</SectionEyebrow>
+            <h2 className="font-poppins font-bold text-2xl md:text-4xl">
               Dipercaya oleh{" "}
-              <span className="text-transparent bg-gradient-to-br bg-clip-text from-[#B19EEF] to-[#a98fff]">
+              <span className="text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff]">
                 Ekosistem Hebat
               </span>
-            </h1>
+            </h2>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 w-full mt-2">
             {partnerLogos.map((num) => (
               <div
                 key={num}
-                className="bg-[#1A132F] border border-[#B19EEF]/30 rounded-[20px] md:rounded-[24px] flex-col hover:border-[#B19EEF]/80 relative shadow-[0_0_30px_rgba(177,158,239,0.1)] hover:scale-105 transition-all duration-300 flex items-center justify-center overflow-hidden p-3 md:p-4"
+                className={`bg-[#1A132F] flex-col relative flex items-center justify-center overflow-hidden p-3 md:p-4 ${CARD_BASE}`}
               >
                 <img
                   src={`/images/${num}.png`}
                   alt={`Partner ${num}`}
-                  className="w-full h-full object-contain transition-all duration-300"
+                  className="w-full h-full object-contain"
                 />
               </div>
             ))}
           </div>
-        </div>
+        </motion.div>
 
         {/* SECTION 2: MATERI KOMPREHENSIF (BENTO GRID) */}
-        <div className="flex flex-col items-center gap-8 md:gap-10 w-full max-w-[1050px] px-4">
-          <div className="flex flex-col items-center gap-1 text-center">
-            <h1 className="uppercase font-bold text-[10px] md:text-xs tracking-widest text-gray-400">
-              MATERI KOMPREHENSIF
-            </h1>
-            <h1 className="font-poppins font-bold text-2xl md:text-4xl">
+        <motion.div
+          {...revealProps}
+          className="flex flex-col items-center gap-8 md:gap-10 w-full max-w-[1050px] px-4 relative"
+        >
+          <AmbientGlow
+            tint="177,158,239"
+            className="left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px]"
+          />
+
+          <div className="flex flex-col items-center gap-3 text-center">
+            <SectionEyebrow>Materi Komprehensif</SectionEyebrow>
+            <h2 className="font-poppins font-bold text-2xl md:text-4xl">
               Rancang Strategi{" "}
               <span className="text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff]">
                 Menuju Kemenangan
               </span>
-            </h1>
+            </h2>
           </div>
 
-          <div className="flex flex-col md:flex-row gap-4 md:gap-5 w-full">
+          <div className="flex flex-col md:flex-row gap-5 md:gap-6 w-full">
             {/* Kiri: Studi Kasus */}
-            <div className="w-full md:w-[35%] bg-gradient-to-br from-[#3B0E76] to-[#1A0A3A] border border-[#B19EEF]/20 rounded-[20px] md:rounded-[24px] p-6 md:p-8 flex flex-col justify-between hover:border-[#B19EEF]/50 transition-colors min-h-[220px] md:min-h-auto">
+            <div
+              className={`w-full md:w-[35%] p-6 md:p-8 flex flex-col justify-between min-h-[220px] md:min-h-auto ${FEATURE_CARD_BG} ${CARD_BASE}`}
+            >
               <div>
                 <div className="flex gap-2 mb-4 md:mb-6">
                   <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-[#B19EEF]"></div>
                   <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-[#00C6E0]"></div>
                   <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-white"></div>
                 </div>
-                <h2 className="font-poppins font-bold text-2xl md:text-3xl mb-3 md:mb-4 leading-tight">
+                <h3 className="font-poppins font-bold text-2xl md:text-3xl mb-3 md:mb-4 leading-tight">
                   Studi Kasus
                   <br />
                   Komprehensif
-                </h2>
-                <p className="text-gray-300 text-xs text-justify md:text-sm leading-relaxed mb-6 md:mb-8">
+                </h3>
+                <p className="text-[#A19DAB] text-xs text-justify md:text-sm leading-relaxed mb-6 md:mb-8">
                   Bedah tuntas berbagai framework analisis bisnis, mulai dari
                   SWOT, Porter`s Five Forces, hingga strategi implementasi
                   solusi yang inovatif dan aplikatif.
@@ -425,12 +499,14 @@ export default function HomePage() {
             </div>
 
             {/* Kanan: Stack Vertical */}
-            <div className="w-full md:w-[65%] flex flex-col gap-4 md:gap-5">
-              <div className="w-full bg-gradient-to-br from-[#3B0E76] to-[#1A0A3A] border border-[#B19EEF]/20 rounded-[20px] md:rounded-[24px] p-6 md:p-8 flex flex-col items-center justify-center text-center hover:border-[#B19EEF]/50 transition-colors min-h-[180px] md:min-h-[200px]">
-                <h2 className="font-poppins font-bold text-2xl md:text-3xl mb-3 md:mb-4">
+            <div className="w-full md:w-[65%] flex flex-col gap-5 md:gap-6">
+              <div
+                className={`w-full p-6 md:p-8 flex flex-col items-center justify-center text-center min-h-[180px] md:min-h-[200px] ${FEATURE_CARD_BG} ${CARD_BASE}`}
+              >
+                <h3 className="font-poppins font-bold text-2xl md:text-3xl mb-3 md:mb-4">
                   Mentoring Eksklusif
-                </h2>
-                <p className="text-gray-300 text-justify text-xs md:text-sm leading-relaxed max-w-[500px]">
+                </h3>
+                <p className="text-[#A19DAB] text-justify text-xs md:text-sm leading-relaxed max-w-[500px]">
                   Dapatkan bimbingan intensif langsung dari para pemenang
                   kompetisi nasional dan internasional. Kami siap membantu
                   memvalidasi ide, mempertajam argumen, hingga memperbaiki
@@ -438,54 +514,61 @@ export default function HomePage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5 flex-1">
-                <div className="w-full bg-gradient-to-br from-[#3B0E76] to-[#1A0A3A] border border-[#B19EEF]/20 rounded-[20px] md:rounded-[24px] p-6 md:p-8 flex flex-col items-center justify-center text-center hover:border-[#B19EEF]/50 transition-colors min-h-[160px] md:min-h-[200px]">
-                  <h2 className="font-poppins font-bold text-xl md:text-2xl mb-2 md:mb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 md:gap-6 flex-1">
+                <div
+                  className={`w-full p-6 md:p-8 flex flex-col items-center justify-center text-center min-h-[160px] md:min-h-[200px] ${FEATURE_CARD_BG} ${CARD_BASE}`}
+                >
+                  <h3 className="font-poppins font-bold text-xl md:text-2xl mb-2 md:mb-3">
                     Materi Digital
-                  </h2>
-                  <p className="text-gray-300 text-justify text-xs md:text-sm leading-relaxed">
+                  </h3>
+                  <p className="text-[#A19DAB] text-justify text-xs md:text-sm leading-relaxed">
                     Akses eksklusif ke berbagai template winning deck, e-book
                     analisis, dan tutorial riset pasar mendalam.
                   </p>
                 </div>
-                <div className="w-full bg-gradient-to-br from-[#3B0E76] to-[#1A0A3A] border border-[#B19EEF]/20 rounded-[20px] md:rounded-[24px] p-6 md:p-8 flex flex-col items-center justify-center text-center hover:border-[#B19EEF]/50 transition-colors min-h-[160px] md:min-h-[200px]">
-                  <h1 className="font-poppins font-bold text-6xl sm:text-7xl md:text-8xl tracking-tighter mb-1 md:mb-2">
+                <div
+                  className={`w-full p-6 md:p-8 flex flex-col items-center justify-center text-center min-h-[160px] md:min-h-[200px] ${FEATURE_CARD_BG} ${CARD_BASE}`}
+                >
+                  <p className="font-poppins font-bold text-6xl sm:text-7xl md:text-8xl tracking-tighter mb-1 md:mb-2">
                     24/7
-                  </h1>
-                  <h2 className="font-poppins font-bold text-sm md:text-xl text-[#B19EEF]">
+                  </p>
+                  <p className="font-poppins font-bold text-sm md:text-xl text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff]">
                     Akses Materi
-                  </h2>
+                  </p>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        {/* SECTION 3: PRODUK & PANDUAN (Deskripsi Singkat per Kategori) */}
-        <div className="flex flex-col items-center gap-8 md:gap-12 w-full max-w-[1050px] px-4 mt-6 md:mt-10">
-          <div className="flex flex-col items-center gap-1 text-center">
-            <h1 className="uppercase font-bold text-[10px] md:text-xs tracking-widest text-gray-400">
-              LAYANAN UTAMA KAMI
-            </h1>
-            <h1 className="font-poppins font-bold text-2xl md:text-4xl">
+        {/* SECTION 3: PRODUK & PANDUAN */}
+        <motion.div
+          {...revealProps}
+          className="flex flex-col items-center gap-8 md:gap-12 w-full max-w-[1050px] px-4 mt-6 md:mt-10"
+        >
+          <div className="flex flex-col items-center gap-3 text-center">
+            <SectionEyebrow>Layanan Utama Kami</SectionEyebrow>
+            <h2 className="font-poppins font-bold text-2xl md:text-4xl">
               Eksplorasi{" "}
-              <span className="text-transparent bg-gradient-to-br bg-clip-text from-[#B19EEF] to-[#a98fff]">
+              <span className="text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff]">
                 Produk dan Program
               </span>{" "}
               Mark-Up
-            </h1>
+            </h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6 w-full">
             {/* Card 1: Mentoring */}
-            <div className="bg-[#1A132F] border border-[#B19EEF]/30 rounded-[20px] md:rounded-[24px] p-6 md:p-8 flex flex-col hover:border-[#B19EEF]/80 transition-colors relative shadow-[0_0_30px_rgba(177,158,239,0.1)]">
+            <div
+              className={`bg-[#1A132F] p-6 md:p-8 flex flex-col relative ${CARD_BASE}`}
+            >
               <span className="bg-[#3A3610] text-[#D1D83E] text-[10px] font-bold px-3 py-1 rounded-md self-start mb-4 md:mb-5">
                 Mentoring
               </span>
-              <h2 className="font-poppins font-bold text-xl md:text-2xl mb-2 md:mb-3">
+              <h3 className="font-poppins font-bold text-xl md:text-2xl mb-2 md:mb-3">
                 Private Mentoring
-              </h2>
-              <p className="text-gray-400 text-xs md:text-sm text-justify leading-relaxed flex-1">
+              </h3>
+              <p className="text-[#A19DAB] text-xs md:text-sm text-justify leading-relaxed flex-1">
                 Bimbingan eksklusif secara 1-on-1 bersama para juara kompetisi.
                 Mulai dari validasi ide, penyusunan strategi, bedah framework,
                 hingga simulasi pitching untuk mematangkan persiapan
@@ -494,14 +577,16 @@ export default function HomePage() {
             </div>
 
             {/* Card 2: Bootcamp */}
-            <div className="bg-[#1A132F] border border-[#B19EEF]/30 rounded-[20px] md:rounded-[24px] p-6 md:p-8 flex flex-col hover:border-[#B19EEF]/80 transition-colors relative shadow-[0_0_30px_rgba(177,158,239,0.1)]">
+            <div
+              className={`bg-[#1A132F] p-6 md:p-8 flex flex-col relative ${CARD_BASE}`}
+            >
               <span className="bg-[#0A4A5C] text-[#00C6D1] text-[10px] font-bold px-3 py-1 rounded-md self-start mb-4 md:mb-5">
                 Bootcamp
               </span>
-              <h2 className="font-poppins font-bold text-xl md:text-2xl mb-2 md:mb-3">
+              <h3 className="font-poppins font-bold text-xl md:text-2xl mb-2 md:mb-3">
                 Intensive Bootcamp
-              </h2>
-              <p className="text-gray-300 text-xs md:text-sm text-justify leading-relaxed flex-1">
+              </h3>
+              <p className="text-[#A19DAB] text-xs md:text-sm text-justify leading-relaxed flex-1">
                 Program pelatihan intensif berbasis project nyata. Dirancang
                 untuk membimbingmu dari pemahaman dasar hingga mahir dengan
                 kurikulum terstruktur, sesi kelas interaktif, dan penugasan
@@ -510,14 +595,16 @@ export default function HomePage() {
             </div>
 
             {/* Card 3: Modul */}
-            <div className="bg-[#1A132F] border border-[#B19EEF]/30 rounded-[20px] md:rounded-[24px] p-6 md:p-8 flex flex-col hover:border-[#B19EEF]/80 transition-colors relative shadow-[0_0_30px_rgba(177,158,239,0.1)]">
+            <div
+              className={`bg-[#1A132F] p-6 md:p-8 flex flex-col relative ${CARD_BASE}`}
+            >
               <span className="bg-[#3B0E76] text-[#B19EEF] text-[10px] font-bold px-3 py-1 rounded-md self-start mb-4 md:mb-5">
                 Modul
               </span>
-              <h2 className="font-poppins font-bold text-xl md:text-2xl mb-2 md:mb-3">
+              <h3 className="font-poppins font-bold text-xl md:text-2xl mb-2 md:mb-3">
                 E-Learning & Modul
-              </h2>
-              <p className="text-gray-400 text-xs md:text-sm text-justify leading-relaxed flex-1">
+              </h3>
+              <p className="text-[#A19DAB] text-xs md:text-sm text-justify leading-relaxed flex-1">
                 Akses mandiri ke berbagai aset pembelajaran digital. Dapatkan
                 modul materi komprehensif, template presentasi juara (winning
                 pitch deck), bank soal kompetisi, dan panduan framework
@@ -526,24 +613,27 @@ export default function HomePage() {
             </div>
           </div>
 
-          <a
+          <Link
             href="/produk"
-            className="bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold text-xs md:text-sm py-3 px-6 md:px-8 rounded-xl transition-colors"
+            className={`bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold text-xs md:text-sm py-3 px-6 md:px-8 rounded-full transition-colors ${focusRing}`}
           >
             Lihat Semua Paket
-          </a>
-        </div>
+          </Link>
+        </motion.div>
 
-        <div className="flex flex-col items-center gap-12 w-full max-w-[1050px] px-4 mt-6 md:mt-10">
-          <div className="w-full bg-gradient-to-r from-[#1E163B] to-[#121B3D] border border-white/10 rounded-[24px] md:rounded-[32px] p-8 md:p-14 mt-6 relative overflow-hidden">
-            <div className="flex flex-col items-center gap-1 md:gap-2 text-center mb-10 md:mb-16 relative z-10">
-              <h1 className="uppercase font-bold text-[10px] md:text-xs tracking-widest text-gray-400">
-                PANDUAN MEMULAI
-              </h1>
-              <h1 className="font-poppins font-bold text-2xl md:text-4xl">
+        <motion.div
+          {...revealProps}
+          className="flex flex-col items-center gap-12 w-full max-w-[1050px] px-4 mt-6 md:mt-10"
+        >
+          <div className="w-full bg-gradient-to-r from-[#1E163B] to-[#121B3D] border border-white/10 rounded-md md:rounded-lg p-8 md:p-14 mt-6 relative overflow-hidden">
+            <div className="flex flex-col items-center gap-3 text-center mb-10 md:mb-16 relative z-10">
+              <SectionEyebrow>Panduan Memulai</SectionEyebrow>
+              <h2 className="font-poppins font-bold text-2xl md:text-4xl">
                 Mulai dalam{" "}
-                <span className="text-[#B19EEF]">4 Tahapan Mudah</span>
-              </h1>
+                <span className="text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff]">
+                  4 Tahapan Mudah
+                </span>
+              </h2>
             </div>
 
             <div className="relative z-10 w-full flex flex-col md:flex-row justify-between items-start gap-8 md:gap-4">
@@ -582,7 +672,7 @@ export default function HomePage() {
                     <h3 className="font-poppins font-bold text-base md:text-lg mb-1 md:mb-2">
                       {step.title}
                     </h3>
-                    <p className="text-gray-400 text-[11px] md:text-xs leading-relaxed">
+                    <p className="text-[#A19DAB] text-[11px] md:text-xs leading-relaxed">
                       {step.desc}
                     </p>
                   </div>
@@ -590,20 +680,26 @@ export default function HomePage() {
               ))}
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* SECTION 4: TESTIMONIAL ALUMNI (RUNNING/MARQUEE 3 BARIS) */}
-        <div className="flex flex-col items-center gap-8 md:gap-10 w-full mt-4 md:mt-10 overflow-hidden relative">
-          <div className="flex flex-col items-center gap-1 text-center px-4">
-            <h1 className="uppercase font-bold text-[10px] md:text-xs tracking-widest text-gray-400">
-              SAATNYA KAMU YANG ADA DI ANTARANYA
-            </h1>
-            <h1 className="font-poppins font-bold text-2xl md:text-4xl">
+        <motion.div
+          {...revealProps}
+          className="flex flex-col items-center gap-8 md:gap-10 w-full mt-4 md:mt-10 overflow-hidden relative"
+        >
+          <AmbientGlow
+            tint="0,198,209"
+            className="left-1/2 top-0 -translate-x-1/2 w-[800px] h-[420px]"
+          />
+
+          <div className="flex flex-col items-center gap-3 text-center px-4">
+            <SectionEyebrow>Testimoni Alumni</SectionEyebrow>
+            <h2 className="font-poppins font-bold text-2xl md:text-4xl">
               Bukti Nyata dari{" "}
-              <span className="text-transparent bg-gradient-to-br bg-clip-text from-[#B19EEF] to-[#a98fff]">
+              <span className="text-transparent bg-gradient-to-br bg-clip-text from-[#FF9FFC] to-[#a98fff]">
                 Alumni MarkUp
               </span>
-            </h1>
+            </h2>
           </div>
 
           <div className="w-full flex flex-col gap-4 md:gap-5 py-2 md:py-4 relative">
@@ -626,7 +722,7 @@ export default function HomePage() {
                 className="flex animate-marquee-right"
                 style={{ transform: "translateX(-50%)" }}
               >
-                {[...testimonials.reverse(), ...testimonials].map((t, i) => (
+                {[...reversedTestimonials, ...testimonials].map((t, i) => (
                   <TestiCard key={`row2-${i}`} data={t} dark={false} />
                 ))}
               </div>
@@ -635,13 +731,13 @@ export default function HomePage() {
             {/* Baris 3: Jalan Kiri (Disembunyikan di Mobile biar ga kepanjangan) */}
             <div className="flex overflow-hidden hidden md:flex">
               <div className="flex animate-marquee-left-fast">
-                {[...testimonials.reverse(), ...testimonials].map((t, i) => (
+                {[...reversedTestimonials, ...testimonials].map((t, i) => (
                   <TestiCard key={`row3-${i}`} data={t} dark={false} />
                 ))}
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       <Footer />
@@ -669,13 +765,10 @@ export default function HomePage() {
         }
 
         /* ANIMATION CLASSES */
-        /* Hashtag Marquee Speed */
         .animate-marquee-left {
           animation: marqueeLeft 100s linear infinite;
           width: max-content;
         }
-        
-        /* Testimonial Rows Speed */
         .animate-marquee-right {
           animation: marqueeRight 100s linear infinite;
           width: max-content;
@@ -684,17 +777,23 @@ export default function HomePage() {
           animation: marqueeLeft 100s linear infinite;
           width: max-content;
         }
-        
-        /* Pause on Hover */
+
         .animate-marquee-left:hover,
         .animate-marquee-right:hover,
         .animate-marquee-left-fast:hover {
           animation-play-state: paused;
         }
 
-        /* Responsive Animation Speed Adjustment for Mobile */
         @media (max-width: 768px) {
            .animate-marquee-left, .animate-marquee-right { animation-duration: 50s; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .animate-marquee-left,
+          .animate-marquee-right,
+          .animate-marquee-left-fast {
+            animation: none;
+          }
         }
       `,
         }}

@@ -1,98 +1,54 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, Video, Clock, Calendar as CalendarIcon, User } from "lucide-react";
-import Sidebar from "@/component/mentor/Sidebar";
-import Header from "@/component/mentor/Header";
+import { useState } from "react";
+import Link from "next/link";
+import DashboardLayout from "@/component/mentor/DashboardLayout";
+import EmptyState from "@/component/mentor/EmptyState";
+
+const focusRing =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#148F89] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0F081C]";
+
+const FILTERS = ["all", "bootcamp", "mentoring"];
+
+const mentoringStatusBadge = {
+  upcoming: {
+    label: "Terjadwal",
+    className: "bg-[#3B82F6]/10 text-[#3B82F6] border border-[#3B82F6]/30",
+  },
+  completed: {
+    label: "Selesai",
+    className: "bg-[#148F89]/10 text-[#148F89] border border-[#148F89]/30",
+  },
+};
 
 export default function MentorDashboard() {
   const [activeFilter, setActiveFilter] = useState("all");
-  const [selectedBootcamp, setSelectedBootcamp] = useState(null);
-  const [selectedMentoring, setSelectedMentoring] = useState(null);
 
-  useEffect(() => {
-    if (selectedBootcamp || selectedMentoring) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "auto";
-    }
-    return () => {
-      document.body.style.overflow = "auto";
-    };
-  }, [selectedBootcamp, selectedMentoring]);
-
-  // --- MOCK DATA ---
+  // --- MOCK DATA (nanti ganti dengan query sesi & mentoring milik mentor yang login) ---
   const bootcampClasses = [
     {
       id: "BC-001",
       title: "Winner Class Dan Module (Debate)",
       description:
         "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor.",
+      imageClass: "from-[#4C1D95] to-[#0D9488]",
       currentSession: 5,
       totalSessions: 8,
-      sessions: [
-        {
-          id: 2,
-          title: "Introduction to Startup Ecosystem",
-          date: "Jul 6, 2026 - 10:00 AM",
-          status: "completed",
-        },
-        {
-          id: 3,
-          title: "Ideation & Value Proposition",
-          date: "Jul 6, 2026 - 10:00 AM",
-          status: "completed",
-        },
-        {
-          id: 4,
-          title: "Market Research & Validation",
-          date: "Jul 6, 2026 - 10:00 AM",
-          status: "completed",
-        },
-        {
-          id: 5,
-          title: "Market Research & Validation",
-          date: "Jul 6, 2026 - 10:00 AM",
-          status: "active",
-        },
-        {
-          id: 6,
-          title: "Market Research & Validation",
-          date: "Jul 6, 2026 - 10:00 AM",
-          status: "locked",
-        },
-      ],
     },
     {
       id: "BC-002",
       title: "Frontend Engineering Sprint",
       description:
         "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor.",
+      imageClass: "from-[#4C1D95] to-[#0D9488]",
       currentSession: 2,
       totalSessions: 6,
-      sessions: [
-        {
-          id: 1,
-          title: "HTML & CSS Fundamentals",
-          date: "Jul 2, 2026 - 08:00 AM",
-          status: "completed",
-        },
-        {
-          id: 2,
-          title: "React JS Deep Dive",
-          date: "Jul 9, 2026 - 08:00 AM",
-          status: "active",
-        },
-        {
-          id: 3,
-          title: "Next JS Framework",
-          date: "Jul 16, 2026 - 08:00 AM",
-          status: "locked",
-        },
-      ],
     },
   ];
 
+  // Mentoring beda bentuk datanya (mentee, jadwal, link zoom, catatan) --
+  // makanya UI-nya list inline langsung di halaman ini, BUKAN link ke halaman
+  // detail terpisah kayak Bootcamp.
   const mentoringClasses = [
     {
       id: "MT-001",
@@ -100,8 +56,8 @@ export default function MentorDashboard() {
       menteeName: "Affan Fathir D.",
       date: "Jul 12, 2026",
       time: "14:00 - 15:00 WIB",
-      zoomLink: "https://zoom.us/j/1234567890",
       status: "upcoming",
+      zoomLink: "https://zoom.us/j/1234567890",
       notes:
         "Student wants to discuss advanced validation strategies and startup pitching.",
     },
@@ -111,339 +67,180 @@ export default function MentorDashboard() {
       menteeName: "Sarah Jenkins",
       date: "Jul 14, 2026",
       time: "10:00 - 11:30 WIB",
-      zoomLink: "https://zoom.us/j/0987654321",
       status: "upcoming",
+      zoomLink: "https://zoom.us/j/0987654321",
       notes: "Reviewing resume and preparing for technical interviews.",
     },
   ];
 
-  const renderSessionButton = (status) => {
-    switch (status) {
-      case "completed":
-        return (
-          <button className="px-5 py-2 bg-[#2D3748] text-[#A0AEC0] text-[13px] font-medium rounded-[6px] cursor-not-allowed">
-            Completed
-          </button>
-        );
-      case "active":
-        return (
-          <button className="px-5 py-2 bg-[#148F89] text-white text-[13px] font-bold rounded-[6px] hover:bg-[#10756F] transition-colors shadow-sm">
-            Join Session
-          </button>
-        );
-      case "locked":
-        return (
-          <button className="px-5 py-2 bg-[#2D3748] text-[#A0AEC0] text-[13px] font-medium rounded-[6px] cursor-not-allowed">
-            Room Unavailable
-          </button>
-        );
-      default:
-        return null;
-    }
-  };
+  const totalNextClasses = bootcampClasses.length + mentoringClasses.length;
+
+  const showBootcamp = activeFilter === "all" || activeFilter === "bootcamp";
+  const showMentoring = activeFilter === "all" || activeFilter === "mentoring";
 
   return (
-    <div className="w-full font-inter text-white bg-[#0F081C] min-h-screen relative flex flex-row overflow-x-hidden">
-      <Sidebar />
-      <div className="ml-[288px] flex-1 flex flex-col absolute">
-        <Header pageTitle="Active Classes" />
-
-        {/* Main Content Area mirroring Admin's `flex-1 flex items-center py-5 flex-col gap-5 px-10` */}
-        <div className="flex-1 flex items-center py-5 flex-col gap-5 px-10 bg-[#0F081C]">
-          {/* Title Area */}
-          <div className="flex flex-col w-[1158px] mt-2 gap-1">
-            <p className="font-bold text-[25px]">Active Classes Overview</p>
-            <p className="text-[#9CA3AF] text-[15px]">
-              Manage your active classes and upcoming mentoring sessions.
+    <DashboardLayout title="Active Classes">
+      {/* Top Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex items-center gap-5 shadow-lg">
+          <div className="w-[60px] h-[60px] rounded-full border-[2px] border-[#148F89] flex items-center justify-center p-1 shrink-0">
+            <div className="w-full h-full rounded-full bg-[#1A1128] overflow-hidden">
+              <img
+                src="/images/pp.png"
+                alt="avatar"
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </div>
+          <div className="flex flex-col">
+            <h2 className="text-white font-bold text-[18px]">Hi Prabroro!</h2>
+            <p className="text-[#9CA3AF] text-[13px] leading-relaxed mt-1">
+              Ready for your next session?
             </p>
           </div>
+        </div>
 
-          {/* Stats Cards Section (Matched h-[140px], rounded-[9px], px-7) */}
-          <div className="w-[1158px] grid grid-cols-3 gap-5 mt-2">
-            <div className="bg-[#170F26] h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm border border-[#2D2342] relative overflow-hidden">
-              <div className="absolute -right-4 -top-4 w-24 h-24 bg-[#148F89]/10 rounded-full blur-2xl"></div>
-              <p className="text-[#9CA3AF] font-bold text-[14px] tracking-wide uppercase">
-                WELCOME BACK
-              </p>
-              <div className="flex flex-col mt-2">
-                <p className="font-bold text-[28px] text-white leading-tight">
-                  Hi Prabroro!
-                </p>
-                <span className="text-[#A0AEC0] text-[13px] font-medium mt-1">
-                  Ready for your next session?
-                </span>
-              </div>
-            </div>
+        <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col justify-center shadow-lg">
+          <p className="text-[#E2E8F0] font-medium text-[14px]">
+            Total Next Classes
+          </p>
+          <p className="text-[#148F89] font-bold text-[44px] leading-none mt-2">
+            {totalNextClasses}
+          </p>
+        </div>
 
-            <div className="bg-[#170F26] h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm border border-[#2D2342]">
-              <p className="text-[#9CA3AF] font-bold text-[14px] tracking-wide uppercase">
-                TOTAL NEXT CLASSES
-              </p>
-              <div className="flex flex-row items-baseline gap-2 mt-2">
-                <p className="font-bold text-[40px] text-[#148F89] leading-none">
-                  6
-                </p>
-                <span className="text-[#9CA3AF] text-[15px] font-medium lowercase">
-                  sessions
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-[#170F26] h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm border border-[#2D2342]">
-              <p className="text-[#9CA3AF] font-bold text-[14px] tracking-wide uppercase">
-                TOTAL COMPLETED
-              </p>
-              <div className="flex flex-row items-baseline gap-2 mt-2">
-                <p className="font-bold text-[40px] text-[#148F89] leading-none">
-                  3
-                </p>
-                <span className="text-[#9CA3AF] text-[15px] font-medium lowercase">
-                  classes
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Filters matched to Admin's rounded-[4px] and h-[43.5px] styling */}
-          <div className="w-[1158px] flex flex-row items-center justify-between mt-4">
-            <p className="font-bold text-[18px] text-white">
-              My Active Classes
-            </p>
-            <div className="h-[43.5px] bg-[#170F26] border border-[#2D2342] px-2 rounded-[6px] flex justify-center items-center gap-1 shadow-sm shrink-0">
-              {["all", "bootcamp", "mentoring"].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveFilter(tab)}
-                  className={`px-4 py-1.5 rounded-[4px] font-medium text-[13px] transition-all capitalize ${
-                    activeFilter === tab
-                      ? "bg-[#2D1B4E] text-white shadow-sm"
-                      : "text-[#A0AEC0] hover:bg-[#2D2342]"
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* --- BOOTCAMP SECTION --- */}
-          {(activeFilter === "all" || activeFilter === "bootcamp") && (
-            <div className="flex flex-col gap-4 w-[1158px] mt-2">
-              <div className="flex items-center gap-3 mb-2">
-                <div
-                  className={`w-[3px] md:w-1 h-5 md:h-6 rounded-full bg-[#00C6D1]`}
-                ></div>
-                <h1 className="font-semibold">Intensive Bootcamp</h1>
-              </div>
-              <div className="grid grid-cols-3 gap-5">
-                {bootcampClasses.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex flex-col rounded-[9px] overflow-hidden cursor-pointer group shadow-sm border border-[#2D2342] hover:border-[#4C1D95] transition-colors"
-                    onClick={() => setSelectedBootcamp(item)}
-                  >
-                    <div className="h-[120px] bg-gradient-to-br from-[#4C1D95] to-[#0D9488] relative">
-                      <div className="absolute top-3 right-3 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-                        <p className="text-[11px] font-bold text-white tracking-wider">
-                          SESSION {item.currentSession} / {item.totalSessions}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="bg-[#170F26] p-5 flex flex-col flex-1">
-                      <h4 className="font-bold text-[16px] text-white leading-snug group-hover:text-[#148F89] transition-colors">
-                        {item.title}
-                      </h4>
-                      <p className="text-[#9CA3AF] text-[13px] mt-2 leading-relaxed line-clamp-2">
-                        {item.description}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* --- PRIVATE MENTORING SECTION --- */}
-          {(activeFilter === "all" || activeFilter === "mentoring") && (
-            <div className="flex flex-col gap-4 w-[1158px] mt-2">
-              <div className="flex items-center gap-3 mb-2">
-                <div
-                  className={`w-[3px] md:w-1 h-5 md:h-6 rounded-full bg-[#D1D83E]`}
-                ></div>
-                <h1 className="font-semibold">Private Mentoring</h1>
-              </div>
-              <div className="grid grid-cols-3 gap-5">
-                {mentoringClasses.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex flex-col rounded-[9px] overflow-hidden cursor-pointer group shadow-sm border border-[#2D2342] hover:border-[#FBBF24]/50 transition-colors"
-                    onClick={() => setSelectedMentoring(item)}
-                  >
-                    <div className="h-[120px] bg-gradient-to-br from-[#4C1D95] to-[#2563EB]"></div>
-                    <div className="bg-[#170F26] p-5 flex flex-col flex-1 gap-3">
-                      <h4 className="font-bold text-[16px] text-white leading-snug group-hover:text-[#FBBF24] transition-colors line-clamp-2">
-                        {item.packageTitle}
-                      </h4>
-                      <div className="flex flex-col gap-2 mt-1">
-                        <div className="flex items-center gap-2 text-[#CBD5E1]">
-                          <User size={14} className="text-[#FBBF24]" />
-                          <span className="text-[12px] font-medium">
-                            {item.menteeName}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-[#CBD5E1]">
-                          <CalendarIcon size={14} className="text-[#FBBF24]" />
-                          <span className="text-[12px]">{item.date}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-[#CBD5E1]">
-                          <Clock size={14} className="text-[#FBBF24]" />
-                          <span className="text-[12px]">{item.time}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="h-10"></div>
+        <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col justify-center shadow-lg">
+          <p className="text-[#E2E8F0] font-medium text-[14px]">
+            Total Completed
+          </p>
+          <p className="text-[#148F89] font-bold text-[44px] leading-none mt-2">
+            3
+          </p>
         </div>
       </div>
 
-      {/* --- MODALS --- */}
-      {selectedBootcamp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-          <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => setSelectedBootcamp(null)}
-          ></div>
-          <div className="relative bg-[#170F26] w-full max-w-[800px] max-h-[85vh] rounded-[16px] border border-[#2D2342] flex flex-col shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="px-8 py-6 border-b border-[#2D2342] flex justify-between items-start bg-[#120B1C] rounded-t-[16px]">
-              <div className="flex flex-col gap-1 pr-6">
-                <h2 className="text-[20px] font-bold text-white">
-                  {selectedBootcamp.title}
-                </h2>
-                <p className="text-[#9CA3AF] text-[14px]">
-                  Manage and access all available sessions.
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedBootcamp(null)}
-                className="p-2 bg-[#2D2342] text-[#A0AEC0] hover:text-white rounded-[8px] transition-colors"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-8 overflow-y-scroll no-scrollbar flex flex-col gap-4 overflow-y-auto custom-scrollbar">
-              {selectedBootcamp.sessions.map((session) => (
-                <div
-                  key={session.id}
-                  className={`flex flex-row items-center justify-between p-5 rounded-[9px] border ${session.status === "active" ? "border-[#148F89] bg-[#148F89]/5" : "border-[#2D2342] bg-[#1A1128]"}`}
+      {/* Title & Filters */}
+      <div className="flex flex-col gap-5">
+        <h2 className="text-[22px] sm:text-[25px] font-bold text-white">
+          My Active Classes
+        </h2>
+        <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-1">
+          {FILTERS.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveFilter(tab)}
+              className={`shrink-0 px-6 py-2.5 rounded-[8px] text-[13px] font-medium capitalize transition-colors ${focusRing} ${
+                activeFilter === tab
+                  ? "bg-[#2D1B4E] text-white shadow-sm"
+                  : "bg-[#170F26] text-[#9CA3AF] border border-[#2D2342] hover:text-white"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* --- INTENSIVE BOOTCAMP (Link ke halaman detail) --- */}
+      {showBootcamp && (
+        <div className="flex flex-col gap-5">
+          <div className="border-l-[4px] border-[#00C6D1] pl-3">
+            <h3 className="text-[18px] font-bold text-white">
+              Intensive Bootcamp
+            </h3>
+          </div>
+          {bootcampClasses.length === 0 ? (
+            <EmptyState message="Belum ada kelas bootcamp yang ditugaskan ke kamu." />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {bootcampClasses.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/mentor/active-classes/${item.id}`}
+                  className={`flex flex-col rounded-[12px] overflow-hidden cursor-pointer group shadow-lg hover:shadow-[#148F89]/10 transition-all border border-[#2D2342] hover:border-[#4C1D95] ${focusRing}`}
                 >
-                  <div className="flex items-center gap-6">
-                    <div className="w-[80px]">
-                      <span className="text-[#E2E8F0] font-bold text-[14px] tracking-wide">
-                        SESSION {session.id}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span
-                        className={`font-bold text-[15px] ${session.status === "active" ? "text-white" : "text-[#E2E8F0]"}`}
-                      >
-                        {session.title}
-                      </span>
-                      <span className="text-[#9CA3AF] text-[13px]">
-                        {session.date}
-                      </span>
+                  <div
+                    className={`h-[140px] bg-gradient-to-br ${item.imageClass} relative`}
+                  >
+                    <div className="absolute top-3 right-3 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+                      <p className="text-[11px] font-bold text-white tracking-wider">
+                        SESSION {item.currentSession}/{item.totalSessions}
+                      </p>
                     </div>
                   </div>
-                  <div>{renderSessionButton(session.status)}</div>
-                </div>
+                  <div className="bg-[#170F26] p-5 flex flex-col flex-1">
+                    <h4 className="font-bold text-[16px] text-white leading-snug group-hover:text-[#148F89] transition-colors">
+                      {item.title}
+                    </h4>
+                    <p className="text-[#9CA3AF] text-[12px] mt-2 leading-relaxed">
+                      {item.description}
+                    </p>
+                  </div>
+                </Link>
               ))}
             </div>
-          </div>
+          )}
         </div>
       )}
 
-      {selectedMentoring && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-          <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => setSelectedMentoring(null)}
-          ></div>
-          <div className="relative bg-[#170F26] w-[550px] rounded-[16px] border border-[#2D2342] flex flex-col shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="px-8 py-6 border-b border-[#2D2342] flex justify-between items-start bg-[#120B1C] rounded-t-[16px]">
-              <div className="flex flex-col gap-1">
-                <h2 className="text-[20px] font-bold text-white">
-                  Mentoring Session
-                </h2>
-                <p className="text-[#148F89] text-[14px] font-semibold">
-                  {selectedMentoring.packageTitle}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedMentoring(null)}
-                className="p-2 bg-[#2D2342] text-[#A0AEC0] hover:text-white rounded-[8px] transition-colors"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-8 flex flex-col gap-6">
-              <div className="flex items-center gap-4 bg-[#1A1128] border border-[#2D2342] p-4 rounded-[9px]">
-                <div className="w-12 h-12 bg-gradient-to-tr from-[#FBBF24] to-[#F59E0B] rounded-[11.5px] flex items-center justify-center text-white font-bold text-lg">
-                  {selectedMentoring.menteeName.charAt(0)}
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[#9CA3AF] text-[12px] uppercase tracking-wider font-bold">
-                    Mentee
-                  </span>
-                  <span className="text-white text-[15px] font-semibold">
-                    {selectedMentoring.menteeName}
-                  </span>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[#64748B] text-[12px] font-bold uppercase tracking-wider">
-                    Date
-                  </span>
-                  <div className="flex items-center gap-2 text-white font-medium bg-[#1A1128] border border-[#2D2342] px-4 py-2.5 rounded-[6px] text-[13px]">
-                    <CalendarIcon size={16} className="text-[#FBBF24]" />
-                    {selectedMentoring.date}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[#64748B] text-[12px] font-bold uppercase tracking-wider">
-                    Time
-                  </span>
-                  <div className="flex items-center gap-2 text-white font-medium bg-[#1A1128] border border-[#2D2342] px-4 py-2.5 rounded-[6px] text-[13px]">
-                    <Clock size={16} className="text-[#FBBF24]" />
-                    {selectedMentoring.time}
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[#64748B] text-[12px] font-bold uppercase tracking-wider">
-                  Session Notes
-                </span>
-                <p className="text-[#E2E8F0] bg-[#1A1128] border border-[#2D2342] p-4 rounded-[6px] text-[13px] leading-relaxed">
-                  `{selectedMentoring.notes}`
-                </p>
-              </div>
-              <div className="mt-4 pt-6 border-t border-[#2D2342]">
-                <a
-                  href={selectedMentoring.zoomLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-[#148F89] hover:bg-[#10756F] text-[13px] text-white font-bold rounded-[6px] transition-colors shadow-sm"
-                >
-                  <Video size={18} /> Join Zoom Meeting
-                </a>
-              </div>
-            </div>
+      {/* --- PRIVATE MENTORING (inline row, BUKAN Link ke halaman lain) --- */}
+      {showMentoring && (
+        <div className="flex flex-col gap-5">
+          <div className="border-l-[4px] border-[#D1D83E] pl-3">
+            <h3 className="text-[18px] font-bold text-white">
+              Private Mentoring
+            </h3>
           </div>
+          {mentoringClasses.length === 0 ? (
+            <EmptyState message="Belum ada jadwal mentoring privat yang masuk." />
+          ) : (
+            <div className="flex flex-col gap-4">
+              {mentoringClasses.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5"
+                >
+                  <div className="flex flex-col gap-1">
+                    <h4 className="font-bold text-[15px] text-white">
+                      {item.packageTitle}
+                    </h4>
+                    <p className="text-[#9CA3AF] text-[12px]">
+                      Mentee: {item.menteeName}
+                    </p>
+                    <p className="text-[#9CA3AF] text-[12px]">
+                      {item.date} &middot; {item.time}
+                    </p>
+                    {item.notes && (
+                      <p className="text-[#9CA3AF] text-[12px] italic line-clamp-1 max-w-[420px]">
+                        &ldquo;{item.notes}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span
+                      className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${
+                        mentoringStatusBadge[item.status].className
+                      }`}
+                    >
+                      {mentoringStatusBadge[item.status].label}
+                    </span>
+                    {item.zoomLink && (
+                      <a
+                        href={item.zoomLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`px-4 py-2 rounded-[8px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors whitespace-nowrap ${focusRing}`}
+                      >
+                        Gabung Sesi
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
-    </div>
+    </DashboardLayout>
   );
 }

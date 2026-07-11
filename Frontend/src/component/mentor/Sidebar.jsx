@@ -1,89 +1,85 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
+  GraduationCap,
   CalendarDays,
-  Contact,
-  Users,
   ShieldCheck,
   Receipt,
   Settings,
+  LogOut,
+  X,
 } from "lucide-react";
 
-export default function Sidebar() {
-  const pathname = usePathname();
+const menuList = [
+  {
+    name: "Active Classes",
+    url: "/mentor/active-classes",
+    icon: GraduationCap,
+  },
+  {
+    name: "Mentoring Schedule",
+    url: "/mentor/mentoring-schedule",
+    icon: CalendarDays,
+  },
+  { name: "Certificates", url: "/mentor/certificates", icon: ShieldCheck },
+  { name: "Transactions", url: "/mentor/transactions", icon: Receipt },
+  { name: "Settings", url: "/mentor/settings", icon: Settings },
+];
 
-  const menuList = [
-    { name: "Active Classes", url: "/mentor/active-classes", icon: LayoutDashboard },
-    {
-      name: "Mentoring Schedule",
-      url: "/mentor/mentoring-schedule",
-      icon: CalendarDays,
-    },
-    { name: "Certificates", url: "/mentor/certificates", icon: ShieldCheck },
-    { name: "Transactions", url: "/mentor/transactions", icon: Receipt },
-    { name: "Settings", url: "/mentor/settings", icon: Settings },
-  ];
-
-  const currentPath = pathname || "/mentor/active-classes";
+export default function Sidebar({ isOpen = false, onClose = () => {} }) {
+  const pathname = usePathname() || "/mentor/active-classes";
 
   return (
-    <div className="fixed top-0 left-0 w-[288px] h-screen bg-[#1A1128] border-r border-white/5 flex flex-col justify-between py-8 px-4 z-50 overflow-y-auto no-scrollbar">
+    <div
+      className={`fixed top-0 left-0 w-[288px] h-screen bg-[#1A1128] border-r border-white/5 flex flex-col justify-between py-8 z-50 overflow-y-auto no-scrollbar transform transition-transform duration-300 ease-in-out
+      ${isOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
+    >
       <div>
-        {/* Brand Logo Area */}
-        <div className="flex flex-col mb-10 px-4">
-          <div className="flex items-center gap-2">
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 32 32"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <circle cx="6" cy="24" r="4" fill="#FBBF24" />
-              <path
-                d="M10 24L16 12L20 20L28 4"
-                stroke="#A855F7"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M14 28L20 16L24 24L32 8"
-                stroke="#3B82F6"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="opacity-80"
-              />
-            </svg>
+        {/* Brand Logo Area -- sama persis kayak Sidebar user (Image logo-single.svg),
+            cuma ditambah label peran "MENTOR" di bawahnya */}
+        <div className="flex items-center justify-between mb-2 px-8">
+          <div className="flex items-center gap-3">
+            <Image
+              src="/images/logo-single.svg"
+              alt="Mark-Up"
+              width={40}
+              height={40}
+            />
             <h1 className="text-[24px] font-black text-white tracking-tight">
               MARK-UP
             </h1>
           </div>
-          <span className="text-[11px] font-bold text-[#148F89] tracking-widest mt-1">
+          <button
+            onClick={onClose}
+            aria-label="Tutup menu"
+            className="lg:hidden text-[#9CA3AF] hover:text-white transition-colors"
+          >
+            <X size={22} />
+          </button>
+        </div>
+        <div className="px-8 mb-8">
+          <span className="text-[11px] font-bold text-[#148F89] tracking-widest">
             MENTOR
           </span>
         </div>
 
         {/* Navigation Menu */}
-        <nav className="flex flex-col gap-2">
+        <nav className="flex flex-col gap-2 px-4">
           {menuList.map((menu, index) => {
-            // Fallback for preview matching
-            const isPreviewActive =
-              menu.name === "Mentoring Schedule" && currentPath === "/";
-            const isActive = currentPath.includes(menu.url) || isPreviewActive;
+            const isActive = pathname.startsWith(menu.url);
             const Icon = menu.icon;
 
             return (
               <Link
                 key={index}
                 href={menu.url}
-                className={`flex items-center gap-3 px-4 py-3 rounded-[8px] cursor-pointer transition-all ${
+                onClick={onClose}
+                className={`flex items-center gap-3 px-4 py-3.5 rounded-[8px] cursor-pointer transition-all ${
                   isActive
-                    ? "bg-[#148F89] text-white shadow-sm"
+                    ? "bg-[#148F89] text-white shadow-md"
                     : "text-[#9CA3AF] hover:bg-white/5 hover:text-white"
                 }`}
               >
@@ -95,9 +91,12 @@ export default function Sidebar() {
         </nav>
       </div>
 
-      {/* Logout Button */}
-      <div className="px-4">
-        <button className="w-full bg-[#E11D48] text-white font-bold py-3 rounded-[8px] hover:bg-[#BE123C] transition-colors text-[14px] shadow-sm">
+      {/* Logout -- pakai treatment tombol yang sama kayak "Bantuan" di Sidebar
+          user (border + tint bg + teks warna), cuma pakai merah karena ini aksi
+          yang beda sifatnya */}
+      <div className="px-6 pb-2">
+        <button className="w-full flex items-center justify-center gap-2 border border-[#E11D48]/50 bg-[#E11D48]/10 text-[#E11D48] font-bold py-3 rounded-[8px] hover:bg-[#E11D48] hover:text-white transition-colors text-[14px]">
+          <LogOut size={16} />
           Logout
         </button>
       </div>
