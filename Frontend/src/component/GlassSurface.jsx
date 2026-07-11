@@ -11,23 +11,6 @@ import {
 
 /* eslint-disable react-hooks/exhaustive-deps */
 
-const useDarkMode = () => {
-  const [isDark, setIsDark] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    setIsDark(mediaQuery.matches);
-
-    const handler = (e) => setIsDark(e.matches);
-    mediaQuery.addEventListener("change", handler);
-    return () => mediaQuery.removeEventListener("change", handler);
-  }, []);
-
-  return isDark;
-};
-
 const GlassSurface = forwardRef(
   (
     {
@@ -62,7 +45,6 @@ const GlassSurface = forwardRef(
 
     const [svgSupported, setSvgSupported] = useState(false);
 
-    // Perbaikan: Hapus syntax TypeScript (HTMLDivElement) jika ini file .js/.jsx
     const containerRef = useRef(null);
     const feImageRef = useRef(null);
     const redChannelRef = useRef(null);
@@ -72,8 +54,6 @@ const GlassSurface = forwardRef(
 
     // Meneruskan ref dari parent ke containerRef internal
     useImperativeHandle(ref, () => containerRef.current);
-
-    const isDarkMode = useDarkMode();
 
     const generateDisplacementMap = () => {
       const rect = containerRef.current?.getBoundingClientRect();
@@ -187,6 +167,10 @@ const GlassSurface = forwardRef(
       return CSS.supports("backdrop-filter", "blur(10px)");
     };
 
+    // Situs ini fixed dark theme (nggak pernah punya light mode), jadi warna
+    // glass-nya dikunci ke varian dark selalu -> tidak lagi ngikutin
+    // prefers-color-scheme di OS user (yang sebelumnya bisa bikin efek glass
+    // salah warna kalau OS user di-set ke Light).
     const getContainerStyles = () => {
       const baseStyles = {
         ...style,
@@ -200,35 +184,27 @@ const GlassSurface = forwardRef(
       if (svgSupported) {
         return {
           ...baseStyles,
-          background: isDarkMode
-            ? `hsl(0 0% 0% / ${backgroundOpacity})`
-            : `hsl(0 0% 100% / ${backgroundOpacity})`,
+          background: `hsl(0 0% 0% / ${backgroundOpacity})`,
           backdropFilter: `url(#${filterId}) saturate(${saturation})`,
-          boxShadow: isDarkMode
-            ? `0 0 2px 1px rgba(255,255,255,0.1) inset, 0px 4px 16px rgba(0,0,0,0.2)`
-            : `0 0 2px 1px rgba(0,0,0,0.05) inset, 0px 4px 16px rgba(0,0,0,0.05)`,
+          boxShadow: `0 0 2px 1px rgba(255,255,255,0.1) inset, 0px 4px 16px rgba(0,0,0,0.2)`,
         };
-      } else {
-        const isDarkTheme = isDarkMode;
-        if (!backdropFilterSupported) {
-          return {
-            ...baseStyles,
-            background: isDarkTheme
-              ? "rgba(0, 0, 0, 0.7)"
-              : "rgba(255, 255, 255, 0.7)",
-            border: "1px solid rgba(255, 255, 255, 0.2)",
-          };
-        }
+      }
+
+      if (!backdropFilterSupported) {
         return {
           ...baseStyles,
-          background: isDarkTheme
-            ? "rgba(255, 255, 255, 0.05)"
-            : "rgba(255, 255, 255, 0.2)",
-          backdropFilter: "blur(12px) saturate(1.8)",
-          WebkitBackdropFilter: "blur(12px) saturate(1.8)",
+          background: "rgba(0, 0, 0, 0.7)",
           border: "1px solid rgba(255, 255, 255, 0.2)",
         };
       }
+
+      return {
+        ...baseStyles,
+        background: "rgba(255, 255, 255, 0.05)",
+        backdropFilter: "blur(12px) saturate(1.8)",
+        WebkitBackdropFilter: "blur(12px) saturate(1.8)",
+        border: "1px solid rgba(255, 255, 255, 0.2)",
+      };
     };
 
     return (
@@ -306,7 +282,9 @@ const GlassSurface = forwardRef(
             </filter>
           </defs>
         </svg>
-        <div className={`w-full h-full flex items-center justify-between rounded-[inherit] relative z-10 ${className}`}>
+        <div
+          className={`w-full h-full flex items-center justify-between rounded-[inherit] relative z-10 ${className}`}
+        >
           {children}
         </div>
       </div>

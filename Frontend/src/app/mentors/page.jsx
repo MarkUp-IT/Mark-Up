@@ -1,35 +1,175 @@
 "use client";
 
-import Navbar from "@/component/navbar";
+import Image from "next/image";
+import Link from "next/link";
+import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 
-// Data Mentor digabung semua karena All Role, format FULL CAPSLOCK
+// --- DATA MENTOR ---
+// role/photo/linkedin/instagram sengaja dikosongkan dulu (bukan di-invent) --
+// isi field ini dengan data asli begitu tersedia. Selama masih kosong, UI-nya
+// otomatis fallback ke avatar inisial (bukan foto) dan icon sosial jadi nonaktif
+// (bukan link mati yang keliatan aktif tapi nggak beneran nyambung ke mana-mana).
 const allMentors = [
-  { name: "VITTORIO SALIM, FMVA" },
-  { name: "MUHAMMAD NABIL RAZHIN" },
-  { name: "ANDI ALIYAH SHABRINA" },
-  { name: "SYONA HANA ARDITAPUTRI" },
-  { name: "PRATISARA KHANSA TEGES PALUPI" },
-  { name: "IMELDA FELICIA DHARMAWAN" },
-  { name: "AARIEF FAWWAZ SATRIAHUTAMA" },
-  { name: "DHILLA AVRYLIA UTOMO" },
-  { name: "MUHAMMAD ADNAN BAYU" },
-  { name: "CATHERINE HARIJANTO" },
-  { name: "ADENA LAKSITA PARAMESTI" },
+  {
+    name: "Vittorio Salim, FMVA",
+    role: "",
+    photo: "",
+    linkedin: "",
+    instagram: "",
+  },
+  {
+    name: "Muhammad Nabil Razhin",
+    role: "",
+    photo: "",
+    linkedin: "",
+    instagram: "",
+  },
+  {
+    name: "Andi Aliyah Shabrina",
+    role: "",
+    photo: "",
+    linkedin: "",
+    instagram: "",
+  },
+  {
+    name: "Syona Hana Arditaputri",
+    role: "",
+    photo: "",
+    linkedin: "",
+    instagram: "",
+  },
+  {
+    name: "Pratisara Khansa Teges Palupi",
+    role: "",
+    photo: "",
+    linkedin: "",
+    instagram: "",
+  },
+  {
+    name: "Imelda Felicia Dharmawan",
+    role: "",
+    photo: "",
+    linkedin: "",
+    instagram: "",
+  },
+  {
+    name: "Aarief Fawwaz Satriahutama",
+    role: "",
+    photo: "",
+    linkedin: "",
+    instagram: "",
+  },
+  {
+    name: "Dhilla Avrylia Utomo",
+    role: "",
+    photo: "",
+    linkedin: "",
+    instagram: "",
+  },
+  {
+    name: "Muhammad Adnan Bayu",
+    role: "",
+    photo: "",
+    linkedin: "",
+    instagram: "",
+  },
+  {
+    name: "Catherine Harijanto",
+    role: "",
+    photo: "",
+    linkedin: "",
+    instagram: "",
+  },
+  {
+    name: "Adena Laksita Paramesti",
+    role: "",
+    photo: "",
+    linkedin: "",
+    instagram: "",
+  },
 ];
 
-export default function MentorPage() {
+// Beberapa gradient dari palet Mark-Up yang udah ada, dipakai bergantian buat
+// background avatar inisial biar nggak monoton semua kartu sama persis.
+const AVATAR_GRADIENTS = [
+  "from-[#4A2CA1] to-[#17A9D4]",
+  "from-[#FF9FFC] to-[#a98fff]",
+  "from-[#3B0E76] to-[#1A0A3A]",
+  "from-[#570A93] to-[#082CE1]",
+];
+
+const CARD_BASE =
+  "rounded-md md:rounded-lg border border-[#B19EEF]/20 shadow-[0_0_30px_rgba(177,158,239,0.1)] hover:border-[#B19EEF]/50 transition-colors duration-300";
+
+const focusRing =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B19EEF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#060010]";
+
+// Ambil 2 huruf pertama dari nama depan+tengah, buang gelar (mis. ", FMVA")
+function getInitials(name) {
+  const cleanName = name.split(",")[0].trim();
+  const parts = cleanName.split(" ").filter(Boolean);
+  return parts
+    .slice(0, 2)
+    .map((p) => p[0])
+    .join("")
+    .toUpperCase();
+}
+
+// Tombol icon sosial: kalau URL belum ada, tetap ditampilkan (bukan disembunyikan)
+// tapi non-interaktif & pudar -- biar layout-nya kelihatan lengkap sambil jujur
+// soal mana yang belum siap dipakai.
+function SocialIcon({ href, iconSrc, label }) {
+  const iconButton = (
+    <div className="group/icon rounded-full bg-[#060010] w-8 h-8 border border-white/20 flex items-center justify-center hover:bg-white transition-colors">
+      <Image
+        src={iconSrc}
+        width={14}
+        height={14}
+        alt=""
+        className={
+          href
+            ? "invert group-hover/icon:invert-0 transition-all"
+            : "invert opacity-30"
+        }
+      />
+    </div>
+  );
+
+  if (!href) {
+    return (
+      <span title="Belum tersedia" className="cursor-not-allowed">
+        {iconButton}
+      </span>
+    );
+  }
+
   return (
-    <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col overflow-x-hidden">
+    <Link
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={label}
+      className={`rounded-full ${focusRing}`}
+    >
+      {iconButton}
+    </Link>
+  );
+}
+
+export default function MentorPage() {
+  const shouldReduceMotion = useReducedMotion();
+
+  return (
+    <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative overflow-x-hidden">
       {/* Background Glow */}
       <div
-        className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%]"
+        className="fixed top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%] pointer-events-none z-0"
         style={{
           background:
             "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
           filter: "blur(40px)",
-          zIndex: 0,
         }}
       />
 
@@ -55,28 +195,62 @@ export default function MentorPage() {
           </p>
         </div>
 
-        {/* Mentor List Section (Hanya Grid, Tanpa Judul Kategori) */}
+        {/* Mentor List Section */}
         <div className="mentor-content flex flex-col items-center w-full max-w-[1200px]">
-          {/* Grid responsif: 1 kolom (HP), 2 kolom (Tablet), 3 atau 4 kolom (Desktop) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 md:gap-6 w-full justify-items-center">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 md:gap-6 w-full">
             {allMentors.map((mentor, index) => (
               <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
+                key={mentor.name}
+                initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: index * 0.05 }}
+                transition={{
+                  duration: shouldReduceMotion ? 0.2 : 0.4,
+                  delay: shouldReduceMotion ? 0 : index * 0.05,
+                }}
                 viewport={{ once: true }}
-                className="w-full max-w-[320px] group cursor-default"
+                className={`bg-[#120822]/60 backdrop-blur-md p-6 flex flex-col items-center text-center gap-3 ${CARD_BASE}`}
               >
-                {/* Desain Card Minimalis Elegan */}
-                <div className="bg-[#120822]/60 backdrop-blur-md rounded-[16px] border border-white/10 p-6 flex flex-col items-center text-center hover:border-[#B19EEF]/60 transition-all duration-300 hover:-translate-y-2 relative overflow-hidden h-full min-h-[120px] justify-center shadow-lg">
-                  {/* Efek Glow Tipis di dalam card saat di-hover */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#B19EEF]/0 to-[#00C6D1]/0 group-hover:from-[#B19EEF]/10 group-hover:to-[#00C6D1]/5 transition-all duration-500"></div>
+                {/* Avatar: foto asli kalau ada, fallback ke inisial */}
+                <div
+                  className={`w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden shrink-0 ring-2 ring-white/10 flex items-center justify-center bg-gradient-to-br ${
+                    AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length]
+                  }`}
+                >
+                  {mentor.photo ? (
+                    <img
+                      src={mentor.photo}
+                      alt={mentor.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-white font-poppins font-bold text-lg md:text-xl">
+                      {getInitials(mentor.name)}
+                    </span>
+                  )}
+                </div>
 
-                  {/* Teks Nama Mentor (Lebih Bold & Rapi) */}
-                  <h3 className="font-poppins font-bold text-[17px] md:text-lg text-white group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-[#FF9FFC] group-hover:to-[#a98fff] group-hover:bg-clip-text transition-all duration-300 relative z-10 px-2 tracking-wide leading-snug">
-                    {mentor.name}
-                  </h3>
+                {/* Nama */}
+                <h3 className="font-poppins font-bold text-[15px] md:text-base text-white leading-snug px-1">
+                  {mentor.name}
+                </h3>
+
+                {/* Role, cuma tampil kalau datanya ada */}
+                {mentor.role && (
+                  <p className="text-[#A19DAB] text-xs -mt-2">{mentor.role}</p>
+                )}
+
+                {/* Sosial media */}
+                <div className="flex items-center gap-3 mt-1">
+                  <SocialIcon
+                    href={mentor.linkedin}
+                    iconSrc="/images/linkedin.svg"
+                    label={`LinkedIn ${mentor.name}`}
+                  />
+                  <SocialIcon
+                    href={mentor.instagram}
+                    iconSrc="/images/instagram.svg"
+                    label={`Instagram ${mentor.name}`}
+                  />
                 </div>
               </motion.div>
             ))}
