@@ -142,7 +142,7 @@ class MentoringSession(models.Model):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="mentoring_sessions",
+        related_name="mentor_mentoring_sessions",
     )
     mentoring_product = models.ForeignKey(
         "products.MentoringProduct",

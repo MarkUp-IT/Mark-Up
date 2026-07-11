@@ -1,123 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import Navbar from "@/component/Navbar";
+import { useState, useEffect } from "react";
+import Navbar from "@/component/navbar";
 import Footer from "@/component/Footer";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { SearchX } from "lucide-react";
+import { api, ApiError } from "@/lib/api";
 
-// --- DATA PRODUK ---
-const productData = [
-  // --- MODUL (DATA DUMMY BARU) ---
-  {
-    id: 1,
-    title: "Masterclass Business Case Competition (BCC)",
-    type: "Modul",
-    desc: "Panduan komprehensif memecahkan kasus bisnis dari nol, mulai dari problem solving hingga menyusun winning pitch deck untuk kompetisi.",
-    oldPrice: "Rp125.000",
-    newPrice: "Rp45.000",
-    sold: 28,
-    discount: "64%",
-    image: "", // Biarkan kosong agar pakai background gradient fallback
-    fullDesc:
-      "📚 E-Book Panduan Analisis Kasus (50+ Halaman)\n🎯 10 Winning Pitch Deck Finalis Nasional & Internasional\n📊 5 Template Presentasi Kasus Editable (Canva & PPT)\n📹 Video Bedah Kasus Eksklusif (45 Menit)\n\n📌 Modul ini dirancang khusus untuk pemula maupun peserta lomba Business Case yang ingin memahami kerangka berpikir sistematis (structured thinking) untuk memecahkan masalah bisnis dengan cepat dan tepat sasaran.\n\nCakupan Materi:\n1. Cara melakukan Root Cause Analysis (MECE, Issue Tree)\n2. Pemilihan framework yang tepat (SWOT, Porter's 5 Forces, 4P, dll)\n3. Menyusun strategi solusi dan rencana implementasi (Timeline & Budgeting)\n4. Teknik Storytelling & Visualisasi Data untuk Pitch Deck yang meyakinkan juri",
-    link: "https://docs.google.com/forms/d/e/1FAIpQLSfS5xo7AMuG2dDb417P_BoSuIQq6YUURagvopwxB5CDvwVhJQ/viewform",
-  },
-
-  // --- MENTORING (DATA ASLI) ---
-  {
-    id: 7,
-    title: "101 Career Mentoring",
-    type: "Mentoring",
-    desc: "Untuk kamu yang ingin serius membangun karier di bidang marketing, mulai dari personal branding sampai optimasi LinkedIn & CV.",
-    oldPrice: "",
-    newPrice: "Rp110.000",
-    sold: 12,
-    discount: "",
-    image: "/images/101.png",
-    fullDesc:
-      "⏱️ 1 sesi mentoring (60 menit) bersama mentor expert di bidang Marketing\n📄 Free Template CV ATS\n📚 Dapat modul eksklusif & template portofolio\n💬 CV Review Gratis\n👥 Akses komunitas dengan 100+ peserta aktif\n🌐 LinkedIn Mutual Network Access\n\n📌 Untuk kamu yang ingin serius membangun karier di bidang marketing, mulai dari personal branding sampai optimasi LinkedIn & CV — lengkap dengan bimbingan mentor dan tools praktis.",
-    link: "https://docs.google.com/forms/d/e/1FAIpQLSff6RdE3NsuXviLtgQ9KdGCTmmpsBi0fWYFpJpseA7hp1mZaw/viewform",
-  },
-  {
-    id: 8,
-    title: "Essential Sprint Registration",
-    type: "Mentoring",
-    desc: "Untuk tim yang sudah mendaftar lomba, butuh pendampingan strategis dalam waktu terbatas.",
-    oldPrice: "",
-    newPrice: "Rp150.000",
-    sold: 5,
-    discount: "",
-    image: "/images/ess.png",
-    fullDesc:
-      "💼 2 sesi mentoring (60 menit/sesi)\n🎁 Bonus 1 sesi jika tim lolos ke final\n💬 Gratis tanya-tanya via WhatsApp\n\n📌 Untuk tim yang sudah mendaftar lomba, butuh pendampingan strategis dalam waktu terbatas.\n\nCakupan:\n1. Bedah problem + analisis menggunakan framework\n2. Review & penyempurnaan solusi",
-    link: "https://docs.google.com/forms/d/1O7ZY9AFJqOz96w63URln-_k70OKiGgGTh8UCweNHyrY/viewform?edit_requested=true",
-  },
-  {
-    id: 9,
-    title: "Full-Throttle Coaching",
-    type: "Mentoring",
-    desc: "Untuk tim yang aktif mengikuti lomba, ingin memastikan solusi matang dan presentasi siap.",
-    oldPrice: "",
-    newPrice: "Rp195.000",
-    sold: 8,
-    discount: "",
-    image: "/images/full.png",
-    fullDesc:
-      "💼 3 sesi mentoring (60 menit/sesi)\n🎁 Bonus 1 sesi jika tim lolos ke final\n💬 Gratis tanya-tanya via WhatsApp\n\n📌 Untuk tim yang aktif mengikuti lomba, ingin memastikan solusi matang dan presentasi siap.\n\nCakupan:\n1. Bedah problem + analisis menggunakan framework\n2. Review & penyempurnaan solusi\n3. Review & latihan pitching",
-    link: "https://docs.google.com/forms/d/e/1FAIpQLSd4UX6iMc8rzftSFrfgZfsgN4M3-d-ZoZMF10gd_hKAOMrXnw/viewform",
-  },
-  {
-    id: 10,
-    title: "Bundling PowerPack (Newbie Friendly)",
-    type: "Mentoring",
-    desc: "Untuk kamu yang baru mulai ikut BCC, ingin belajar dari nol dengan guidance dan tools lengkap.",
-    oldPrice: "",
-    newPrice: "Rp300.000",
-    sold: 10,
-    discount: "",
-    image: "/images/bund.png",
-    fullDesc:
-      "💼 3 sesi mentoring (60 menit/sesi)\n📚 + Akses 10 deck finalis nasional & 10 framework analisis\n💬 Gratis tanya-tanya via WhatsApp\n\n📌 Untuk kamu yang baru mulai ikut BCC, ingin belajar dari nol dengan guidance dan tools lengkap.\n\nCakupan:\n1. Cara menentukan main problem, symtomps, root causes dari kasus yang diberikan\n2. Pemilihan framework yang tepat sesuai jenis kasus (fit-to-case)\n3. Menyusun solusi yang strategis dan realistis\n4. Rencana implementasi strategi yang realistis\n\nBonus Resource:\n1. 10 deck finalis nasional\n2. 10 framework analisis business case competition",
-    link: "https://docs.google.com/forms/d/e/1FAIpQLSfXvHI6DoEGxQgz0pfoX0bnbl34ly1nvdV79v082n0w_XBY1Q/viewform",
-  },
-  {
-    id: 11,
-    title: "BPC Kickstart (Individual)",
-    type: "Mentoring",
-    desc: "Mentoring ini bersifat individual, cocok untuk kamu yang baru mulai dan belum punya ide lomba.",
-    oldPrice: "",
-    newPrice: "Rp200.000",
-    sold: 3,
-    discount: "",
-    image: "/images/kick.png",
-    fullDesc:
-      "📚 2 sesi mentoring (60 menit/sesi)\n💬 Gratis tanya-tanya via WhatsApp\n\n📌 Mentoring ini bersifat individual (1 orang), cocok untuk kamu yang baru mulai dan belum punya ide lomba.\n\nCakupan:\n\n1. Ideation & Proposal Mapping\n🔍 Tujuan: Membantu mentee menemukan ide solusi yang relevan dan memahami cara menyusun proposal kompetisi.\n\n2. Pitching & QnA Preparation\n🎤 Tujuan: Membimbing mentee menyusun pitch deck dan melatih presentasi ide secara efektif.",
-    link: "https://docs.google.com/forms/d/e/1FAIpQLSdCkyZZPBl241VIexN9mM9XbUpgnQetySKPvcsA-zEknxn0HA/viewform",
-  },
-  {
-    id: 12,
-    title: "BPC Level-Up (Team Mentoring)",
-    type: "Mentoring",
-    desc: "Untuk tim yang sudah mendaftar lomba dan memiliki ide dasar, ingin mengasah proposal dan persiapan tampil.",
-    oldPrice: "",
-    newPrice: "Rp250.000",
-    sold: 7,
-    discount: "",
-    image: "/images/level.png",
-    fullDesc:
-      "📚 2 sesi mentoring (60 menit/sesi)\n🎁 Bonus 1 sesi jika tim lolos ke final\n💬 Gratis tanya-tanya via WhatsApp\n\n📌 Untuk tim yang sudah mendaftar lomba dan memiliki ide dasar, ingin mengasah proposal dan persiapan tampil di panggung pitching.\n\nCakupan:\n1. Sesi 1: Proposal Deep Dive & Strategic Input\n2. Sesi 2: Customized Mentoring (Pitching / Proposal / QnA)\n\n🎁 Bonus Mentoring (Free, untuk tim yang lolos ke final):\n🔥 Simulasi Final Presentation & QnA Battle",
-    link: "https://docs.google.com/forms/d/e/1FAIpQLSfS5xo7AMuG2dDb417P_BoSuIQq6YUURagvopwxB5CDvwVhJQ/viewform",
-  },
+const tabs = [
+  { label: "Semua", value: "Semua" },
+  { label: "Mentoring", value: "MENTORING" },
+  { label: "Bootcamp", value: "BOOTCAMP" },
+  { label: "Modul", value: "MODULE" },
 ];
 
-const tabs = ["Semua", "Mentoring", "Bootcamp", "Modul"];
-
 const sections = [
-  { title: "Private Mentoring", type: "Mentoring", lineStyle: "bg-[#D1D83E]" },
-  { title: "Intensive Bootcamp", type: "Bootcamp", lineStyle: "bg-[#00C6D1]" },
-  { title: "E-Learning & Modul", type: "Modul", lineStyle: "bg-[#B19EEF]" },
+  { title: "Private Mentoring", type: "MENTORING", lineStyle: "bg-[#D1D83E]" },
+  { title: "Intensive Bootcamp", type: "BOOTCAMP", lineStyle: "bg-[#00C6D1]" },
+  { title: "E-Learning & Modul", type: "MODULE", lineStyle: "bg-[#B19EEF]" },
 ];
 
 // Token card konten, disamakan persis dengan Homepage & Info Lomba: radius
@@ -127,6 +28,30 @@ const CARD_BASE =
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B19EEF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#060010]";
+function formatRupiah(value) {
+  if (!value) return "";
+  const num = Math.round(parseFloat(value));
+  return "Rp" + num.toLocaleString("id-ID");
+}
+
+
+function mapApiProduct(item) {
+  return {
+    id: item.id,
+    title: item.title,
+    type: item.type,
+    desc: item.description || "",
+    fullDesc: item.full_description || item.description || "",
+    oldPrice: item.original_price ? formatRupiah(item.original_price) : "",
+    newPrice: formatRupiah(item.new_price),
+    sold: item.sold_count || 0,
+    discount: item.discount_percent ? `${item.discount_percent}%` : "",
+    image: item.image_url || "",
+    link: item.registration_link || "#",
+  };
+}
+
+
 
 export default function ProdukPage() {
   const [activeTab, setActiveTab] = useState("Semua");
@@ -134,6 +59,31 @@ export default function ProdukPage() {
   const [selectedProduct, setSelectedProduct] = useState(null);
 
   const shouldReduceMotion = useReducedMotion();
+  const [productData, setProductData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function fetchProducts() {
+      try {
+        setLoading(true);
+        const json = await api.get("/api/products/?all=true", { auth: false });
+        const mapped = (json.products || []).map(mapApiProduct);
+        setProductData(mapped);
+        setError(null);
+      } catch (err) {
+        if (err instanceof ApiError) {
+          setError(err.message);
+        } else {
+          setError("Gagal memuat data produk. Silakan coba lagi.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchProducts();
+  }, []);
 
   // Filter Data
   const filteredProducts = productData.filter((p) => {
@@ -218,17 +168,17 @@ export default function ProdukPage() {
 
         {/* CATEGORY FILTERS */}
         <div className="flex flex-wrap justify-center gap-2 md:gap-3 mb-10 w-full max-w-[800px]">
-          {tabs.map((tab, index) => (
+          {tabs.map((tab) => (
             <button
               key={index}
               onClick={() => setActiveTab(tab)}
               className={`px-5 py-2 rounded-full text-xs md:text-sm font-semibold transition-colors duration-300 ${focusRing} ${
                 activeTab === tab
                   ? "bg-[#530D8E] text-white"
-                  : "bg-[#1A1625] border border-white/5 text-[#A19DAB] hover:bg-[#2A2438] hover:text-white"
+                  : "bg-[#1A1625]"
               }`}
             >
-              {tab}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -370,7 +320,8 @@ export default function ProdukPage() {
                   <p className="font-poppins font-bold text-3xl text-[#08C7E1]">
                     {selectedProduct.newPrice}
                   </p>
-                  {selectedProduct.oldPrice && (
+
+                  {selectedProduct.discount && (
                     <p className="text-gray-500 text-sm line-through decoration-gray-500">
                       {selectedProduct.oldPrice}
                     </p>
@@ -424,13 +375,13 @@ function ProductCard({ data, onClick, reduceMotion }) {
   let tagStyle = "";
   let priceColor = "";
 
-  if (data.type === "Bootcamp") {
+  if (data.type === "BOOTCAMP") {
     tagStyle = "bg-[#0A4A5C] text-[#00C6D1]";
     priceColor = "text-[#00C6D1]";
-  } else if (data.type === "Modul") {
+  } else if (data.type === "MODULE") {
     tagStyle = "bg-[#3B0E76] text-[#B19EEF]";
     priceColor = "text-[#B19EEF]";
-  } else if (data.type === "Mentoring") {
+  } else if (data.type === "MENTORING") {
     tagStyle = "bg-[#3A3610] text-[#D1D83E]";
     priceColor = "text-[#D1D83E]";
   }
@@ -497,16 +448,18 @@ function ProductCard({ data, onClick, reduceMotion }) {
         </p>
 
         <div className="mt-auto flex flex-col items-end">
-          {data.oldPrice && (
+          {data.discount && (
             <p className="text-gray-500 text-[10px] md:text-xs line-through decoration-gray-500 mb-0.5">
               {data.oldPrice}
             </p>
           )}
+
           <p
             className={`font-poppins font-bold text-2xl md:text-3xl ${priceColor} mb-1`}
           >
             {data.newPrice}
           </p>
+
           {data.sold > 0 && (
             <p className="text-gray-500 text-[9px] md:text-[10px]">
               {data.sold} Terjual

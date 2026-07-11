@@ -131,7 +131,7 @@ class MentoringSession(models.Model):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="mentoring_sessions",
+        related_name="program_mentoring_sessions",
     )
     mentor_profile = models.ForeignKey(
         "mentors.MentorProfile",

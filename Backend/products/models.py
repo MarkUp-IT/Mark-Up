@@ -1,4 +1,5 @@
 from __future__ import annotations
+from decimal import Decimal
 from django.core.validators import MinValueValidator, MaxValueValidator
 import uuid
 from django.db import models
@@ -41,8 +42,23 @@ class BaseProductDetail(BaseModel):
     explanation = models.TextField(default='')
     published_at = models.DateTimeField(blank=True, null=True)
     image_url = models.URLField(blank=True, null=True)
-    price = models.DecimalField(max_digits=12, decimal_places=2)
+    original_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    discount_percent = models.PositiveIntegerField(null=True, blank=True)
+    sold_count = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    registration_link = models.URLField(blank=True)
+
+    @property
+    def new_price(self):
+        if self.original_price is None:
+            return None
+
+        if self.discount_percent in (None, 0):
+            return self.original_price
+
+        discount_rate = Decimal(self.discount_percent) / Decimal("100")
+        discounted_price = self.original_price * (Decimal("1") - discount_rate)
+        return discounted_price.quantize(Decimal("0.01"))
 
     class Meta:
         abstract = True
