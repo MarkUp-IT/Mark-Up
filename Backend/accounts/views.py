@@ -5,7 +5,12 @@ from .forms import RegisterForm
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, UserRole
 from .decorators import jwt_required, role_required
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django.contrib.auth import authenticate
+from accounts.models import User
 
+@csrf_exempt
 def register_view(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
@@ -35,6 +40,7 @@ def register_view(request):
 		status=201,
 	)
 
+@csrf_exempt
 def login_view(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
@@ -46,17 +52,19 @@ def login_view(request):
 	email = request_data.get("email")
 	password = request_data.get("password")
 
-	if not email or not password:
-		return JsonResponse(
-			{"detail": "Email dan password wajib diisi."},
-			status=400,
-		)
+	try:
+		user_obj = User.objects.get(email=email)
+	except User.DoesNotExist:
+		user_obj = None
 
-	user = authenticate(
-		request,
-		username=email,
-		password=password,
-	)
+	if user_obj:
+		user = authenticate(
+			request,
+			username=user_obj.username,
+			password=password,
+		)
+	else:
+		user = None
 
 	if user is None:
 		return JsonResponse(

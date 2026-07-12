@@ -22,7 +22,7 @@ const menuItems = [
 
 export default function Navbar({
   variant = "glass",
-  isLoggedIn = true,
+  isLoggedIn = false,
   profileName = "Prabroro Subriantoro",
   email = "prabrorosub@gmail.com",
   avatarSrc = "https://api.dicebear.com/7.x/notionists/svg?seed=Prabroro%20Subriantoro&backgroundColor=2B3034",

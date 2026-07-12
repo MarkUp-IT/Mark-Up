@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
-import Navbar from "@/component/Navbar";
+import Navbar from "@/component/navbar";
 
 export default function DashboardLayout({ title, children }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
