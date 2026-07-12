@@ -3,28 +3,46 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
+import { FileText } from "lucide-react";
 import DashboardLayout from "@/component/user/DashboardLayout";
 import EmptyState from "@/component/user/EmptyState";
 
 const FILTERS = ["Semua", "Bootcamp", "Mentoring", "Modul"];
 
-const mentoringStatusBadge = {
-  upcoming: {
-    label: "Terjadwal",
-    className: "bg-[#3B82F6]/10 text-[#3B82F6] border border-[#3B82F6]/30",
-  },
-  completed: {
-    label: "Selesai",
-    className: "bg-[#148F89]/10 text-[#148F89] border border-[#148F89]/30",
-  },
-};
+// Card produk yang dipakai bareng buat Bootcamp/Mentoring/Modul -- satu
+// sumber kebenaran buat ukuran & style, biar nggak ada lagi yang beda-beda
+// tinggi/font antar kategori (atau antar halaman user vs mentor).
+function ProductCard({ id, title, description, imageClass, badge }) {
+  return (
+    <Link
+      href={`/user/my-products/${id}`}
+      className="flex flex-col h-full rounded-[12px] overflow-hidden group border border-[#2D2342] hover:border-[#4C1D95] transition-colors"
+    >
+      <div
+        className={`h-[140px] shrink-0 bg-gradient-to-br ${imageClass} relative`}
+      >
+        {badge && (
+          <div className="absolute top-3 right-3 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 flex items-center gap-1.5">
+            {badge}
+          </div>
+        )}
+      </div>
+      <div className="bg-[#170F26] p-5 flex flex-col flex-1 gap-2">
+        <h4 className="font-bold text-[16px] text-white leading-snug line-clamp-2 min-h-[44px] group-hover:text-[#148F89] transition-colors">
+          {title}
+        </h4>
+        <p className="text-[#9CA3AF] text-[12px] leading-relaxed line-clamp-2">
+          {description}
+        </p>
+      </div>
+    </Link>
+  );
+}
 
 export default function MyProducts() {
   const [activeFilter, setActiveFilter] = useState("Semua");
   const shouldReduceMotion = useReducedMotion();
 
-  // Reveal per-section (header, tiap grup produk), sama pattern kayak yang
-  // dipakai di halaman Mentor.
   const sectionReveal = {
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
     whileInView: { opacity: 1, y: 0 },
@@ -32,7 +50,6 @@ export default function MyProducts() {
     viewport: { once: true },
   };
 
-  // Stagger per-card di dalam grid, delay bertahap kayak grid mentor
   const cardReveal = (index) => ({
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
     whileInView: { opacity: 1, y: 0 },
@@ -51,6 +68,8 @@ export default function MyProducts() {
       description:
         "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor",
       imageClass: "from-[#4C1D95] to-[#0D9488]",
+      currentSession: 3,
+      totalSessions: 4,
     },
     {
       id: "BC-002",
@@ -58,20 +77,32 @@ export default function MyProducts() {
       description:
         "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor",
       imageClass: "from-[#4C1D95] to-[#0D9488]",
+      currentSession: 1,
+      totalSessions: 2,
     },
   ];
 
-  // Mentoring beda bentuk (ada jadwal + link sesi) -> tampil inline, BUKAN link
-  // ke halaman detail terpisah. Cuma Bootcamp & Modul yang punya halaman [id].
-  const mentoringClasses = [
+  // Mentoring sekarang jadi card + halaman detail, sama kayak Bootcamp --
+  // soalnya satu paket bisa berisi lebih dari 1 sesi (2x, 3x), jadi nggak
+  // pas lagi ditampilin sebagai 1 baris inline doang.
+  const mentoringPackages = [
     {
       id: "MT-001",
-      packageTitle: "1-on-1 Career Mentoring",
-      mentorName: "Kak Alya Hamidah",
-      date: "12 Jul 2026",
-      time: "14:00 WIB",
-      status: "upcoming",
-      zoomLink: "https://zoom.us/j/1234567890",
+      title: "1-on-1 Career Mentoring",
+      description:
+        "Bimbingan personal buat matangin CV, LinkedIn, dan strategi karier bareng mentor.",
+      imageClass: "from-[#4C1D95] to-[#CA8A04]",
+      currentSession: 1,
+      totalSessions: 1,
+    },
+    {
+      id: "MT-002",
+      title: "Bundling PowerPack (Newbie Friendly)",
+      description:
+        "Paket 3 sesi buat kamu yang baru mulai ikut BCC dari nol, lengkap sama akses deck finalis.",
+      imageClass: "from-[#4C1D95] to-[#CA8A04]",
+      currentSession: 2,
+      totalSessions: 3,
     },
   ];
 
@@ -100,7 +131,7 @@ export default function MyProducts() {
   ];
 
   const stats = [
-    { label: "Mentoring Aktif", value: mentoringClasses.length },
+    { label: "Mentoring Aktif", value: mentoringPackages.length },
     { label: "Bootcamp Aktif", value: bootcampClasses.length },
     { label: "Modul Aktif", value: moduleClasses.length },
   ];
@@ -127,7 +158,6 @@ export default function MyProducts() {
             </p>
           </div>
 
-          {/* Filter Tabs */}
           <div className="inline-flex items-center gap-1 bg-[#170F26] border border-[#2D2342] rounded-[10px] p-1 w-fit overflow-x-auto no-scrollbar">
             {FILTERS.map((f) => (
               <button
@@ -145,7 +175,6 @@ export default function MyProducts() {
           </div>
         </div>
 
-        {/* Stat Cards */}
         <div className="grid grid-cols-3 gap-4 shrink-0">
           {stats.map((s) => (
             <div
@@ -178,25 +207,24 @@ export default function MyProducts() {
               ctaHref="/produk"
             />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {bootcampClasses.map((item, index) => (
-                <motion.div key={item.id} {...cardReveal(index)}>
-                  <Link
-                    href={`/user/my-products/${item.id}`}
-                    className="flex flex-col rounded-[12px] overflow-hidden group border border-[#2D2342] hover:border-[#4C1D95] transition-colors"
-                  >
-                    <div
-                      className={`h-[180px] bg-gradient-to-br ${item.imageClass}`}
-                    />
-                    <div className="bg-[#170F26] p-5 flex flex-col gap-2">
-                      <h4 className="font-bold text-[17px] text-white leading-snug group-hover:text-[#148F89] transition-colors">
-                        {item.title}
-                      </h4>
-                      <p className="text-[#9CA3AF] text-[13px] leading-relaxed">
-                        {item.description}
+                <motion.div
+                  key={item.id}
+                  {...cardReveal(index)}
+                  className="h-full"
+                >
+                  <ProductCard
+                    id={item.id}
+                    title={item.title}
+                    description={item.description}
+                    imageClass={item.imageClass}
+                    badge={
+                      <p className="text-[11px] font-bold text-white tracking-wider">
+                        SESSION {item.currentSession}/{item.totalSessions}
                       </p>
-                    </div>
-                  </Link>
+                    }
+                  />
                 </motion.div>
               ))}
             </div>
@@ -204,7 +232,7 @@ export default function MyProducts() {
         </motion.div>
       )}
 
-      {/* --- PRIVATE MENTORING (inline) --- */}
+      {/* --- PRIVATE MENTORING (sekarang card + link ke detail, sama kayak Bootcamp) --- */}
       {showMentoring && (
         <motion.div {...sectionReveal} className="flex flex-col gap-5">
           <div className="border-l-[4px] border-[#D1D83E] pl-3">
@@ -212,50 +240,31 @@ export default function MyProducts() {
               On-Demand Mentoring
             </h3>
           </div>
-          {mentoringClasses.length === 0 ? (
+          {mentoringPackages.length === 0 ? (
             <EmptyState
               message="Kamu belum punya sesi mentoring."
               ctaLabel="Jelajahi Produk"
               ctaHref="/produk"
             />
           ) : (
-            <div className="flex flex-col gap-4">
-              {mentoringClasses.map((item, index) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {mentoringPackages.map((item, index) => (
                 <motion.div
                   key={item.id}
                   {...cardReveal(index)}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5"
+                  className="h-full"
                 >
-                  <div className="flex flex-col gap-1">
-                    <h4 className="font-bold text-[15px] text-white">
-                      {item.packageTitle}
-                    </h4>
-                    <p className="text-[#9CA3AF] text-[12px]">
-                      Mentor: {item.mentorName}
-                    </p>
-                    <p className="text-[#9CA3AF] text-[12px]">
-                      {item.date} &middot; {item.time}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span
-                      className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${
-                        mentoringStatusBadge[item.status].className
-                      }`}
-                    >
-                      {mentoringStatusBadge[item.status].label}
-                    </span>
-                    {item.zoomLink && (
-                      <a
-                        href={item.zoomLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-4 py-2 rounded-[8px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors whitespace-nowrap"
-                      >
-                        Gabung Sesi
-                      </a>
-                    )}
-                  </div>
+                  <ProductCard
+                    id={item.id}
+                    title={item.title}
+                    description={item.description}
+                    imageClass={item.imageClass}
+                    badge={
+                      <p className="text-[11px] font-bold text-white tracking-wider">
+                        SESI {item.currentSession}/{item.totalSessions}
+                      </p>
+                    }
+                  />
                 </motion.div>
               ))}
             </div>
@@ -263,7 +272,7 @@ export default function MyProducts() {
         </motion.div>
       )}
 
-      {/* --- E-LEARNING & MODUL --- */}
+      {/* --- E-LEARNING & MODUL (isinya file PDF, dikasih badge biar jelas) --- */}
       {showModul && (
         <motion.div {...sectionReveal} className="flex flex-col gap-5">
           <div className="border-l-[4px] border-[#B19EEF] pl-3">
@@ -278,25 +287,27 @@ export default function MyProducts() {
               ctaHref="/produk"
             />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {moduleClasses.map((item, index) => (
-                <motion.div key={item.id} {...cardReveal(index)}>
-                  <Link
-                    href={`/user/my-products/${item.id}`}
-                    className="flex flex-col rounded-[12px] overflow-hidden group border border-[#2D2342] hover:border-[#4C1D95] transition-colors"
-                  >
-                    <div
-                      className={`h-[180px] bg-gradient-to-br ${item.imageClass}`}
-                    />
-                    <div className="bg-[#170F26] p-5 flex flex-col gap-2">
-                      <h4 className="font-bold text-[17px] text-white leading-snug group-hover:text-[#148F89] transition-colors">
-                        {item.title}
-                      </h4>
-                      <p className="text-[#9CA3AF] text-[13px] leading-relaxed">
-                        {item.description}
-                      </p>
-                    </div>
-                  </Link>
+                <motion.div
+                  key={item.id}
+                  {...cardReveal(index)}
+                  className="h-full"
+                >
+                  <ProductCard
+                    id={item.id}
+                    title={item.title}
+                    description={item.description}
+                    imageClass={item.imageClass}
+                    badge={
+                      <>
+                        <FileText size={11} className="text-white" />
+                        <p className="text-[11px] font-bold text-white tracking-wider">
+                          PDF
+                        </p>
+                      </>
+                    }
+                  />
                 </motion.div>
               ))}
             </div>

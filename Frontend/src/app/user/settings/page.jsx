@@ -14,11 +14,12 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/component/user/DashboardLayout";
 
-function Field({ label, value, onChange, disabled, note }) {
+function Field({ label, value, onChange, disabled, note, type = "text" }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label className="text-[#E2E8F0] text-[13px] font-medium">{label}</label>
       <input
+        type={type}
         value={value}
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         disabled={disabled}
@@ -42,11 +43,16 @@ export default function Settings() {
     fullName: "Prabroro Subriantoro",
     phone: "0812-3456-7890",
     institution: "Universitas Airlangga",
+    currentStatus: "5", // Tambahan Data
+    linkedIn: "linkedin.com/in/prabrorosub", // Tambahan Data
   };
 
   const [fullName, setFullName] = useState(initialInfo.fullName);
   const [phone, setPhone] = useState(initialInfo.phone);
   const [institution, setInstitution] = useState(initialInfo.institution);
+  const [currentStatus, setCurrentStatus] = useState(initialInfo.currentStatus); // State Baru
+  const [linkedIn, setLinkedIn] = useState(initialInfo.linkedIn); // State Baru
+
   const [infoSaved, setInfoSaved] = useState(false);
 
   const [cvFileName, setCvFileName] = useState("CV_Prabroro_2026.pdf");
@@ -57,7 +63,9 @@ export default function Settings() {
   const isInfoDirty =
     fullName !== initialInfo.fullName ||
     phone !== initialInfo.phone ||
-    institution !== initialInfo.institution;
+    institution !== initialInfo.institution ||
+    currentStatus !== initialInfo.currentStatus ||
+    linkedIn !== initialInfo.linkedIn;
 
   const sectionReveal = {
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
@@ -147,14 +155,31 @@ export default function Settings() {
             label="Email"
             value={email}
             disabled
+            type="email"
             note="Hubungi support untuk mengubah email."
           />
           <Field label="Nomor WhatsApp" value={phone} onChange={setPhone} />
+
+          {/* Mulai Tambahan Data Baris #11, #13 */}
           <Field
-            label="Universitas / Institusi"
+            label="Universitas / Institusi Asal"
             value={institution}
             onChange={setInstitution}
           />
+          <Field
+            label="Semester Saat Ini"
+            value={currentStatus}
+            onChange={setCurrentStatus}
+            note="Contoh: Mahasiswa Semester 5, Fresh Graduate, dll."
+          />
+          <Field
+            label="URL LinkedIn"
+            value={linkedIn}
+            onChange={setLinkedIn}
+            type="url"
+            note="Format: linkedin.com/in/username"
+          />
+          {/* Akhir Tambahan Data */}
         </div>
 
         <div className="flex items-center gap-3">
