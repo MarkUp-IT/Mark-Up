@@ -1,56 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Navbar from "@/component/navbar";
 import Footer from "@/component/Footer";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Link from "next/link";
-import { SearchX } from "lucide-react";
+import { SearchX, Loader2 } from "lucide-react";
+import { api, ApiError } from "@/lib/api";
 
-const lombaData = [
-  {
-    id: 1,
-    title: "KOPMAVATION 1.0 Business Plan Competition",
-    category: "Business Plan",
-    organizer: "Kopma UMY",
-    date: "14/06/2026",
-    deadline: "31/03/2026",
-    fee: "Rp20.000 - Rp25.000",
-    prize: "Jutaan Rupiah",
-    level: "Nasional",
-    target: "Siswa SMA/SMK/MA",
-    image: "/images/kopmavation-poster.jpg",
-    link: "https://bit.ly/3OYVhAW",
-  },
-  {
-    id: 2,
-    title: "LDBI ASFERA 2k26 (Lomba Debat Bahasa Indonesia)",
-    category: "Debat",
-    organizer: "As-Syifa Boarding School Wanareja",
-    date: "16-17 April 2026",
-    deadline: "02/04/2026",
-    fee: "Rp250.000",
-    prize: "Rp1.500.000 + Piala",
-    level: "Nasional",
-    target: "Siswa SMA/SMK/MA",
-    image: "/images/asfera-debat.jpg",
-    link: "https://sprl.me/RegistrasiMCCDreamcareer",
-  },
-  {
-    id: 3,
-    title: "DreamCareer Mini Case Competition",
-    category: "Business Case",
-    organizer: "DreamCareer",
-    date: "15-17 Maret 2026",
-    deadline: "17/03/2026",
-    fee: "Rp50.000 - Rp75.000",
-    prize: "Jutaan Rupiah + Fast-track Magang",
-    level: "Nasional",
-    target: "Mahasiswa D3/D4/S1",
-    image: "/images/dreamcareer-case.jpg",
-    link: "https://asferaofficial2026.com",
-  },
-];
 
 const categories = [
   "Semua",
@@ -74,6 +31,9 @@ export default function InfoLombaPage() {
   const [activeCategory, setActiveCategory] = useState("Semua");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLomba, setSelectedLomba] = useState(null);
+  const [lombaData, setLombaData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const shouldReduceMotion = useReducedMotion();
 
@@ -114,6 +74,30 @@ export default function InfoLombaPage() {
         animate: { scale: 1, y: 0 },
         exit: { scale: 0.95, y: 20 },
       };
+  
+  useEffect(() => {
+    async function fetchCompetitions() {
+      try {
+        setLoading(true);
+        const json = await api.get("/api/programs/?all=true", {
+          auth: false,
+        });
+        const mapped = (json.competitions || []).map(mapApiCompetition);
+        setLombaData(mapped);
+        setError(null);
+      } catch (err) {
+        if (err instanceof ApiError) {
+          setError(err.message);
+        } else {
+          setError("Gagal memuat data lomba. Silakan coba lagi.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchCompetitions();
+  }, []);
 
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative overflow-x-hidden">
@@ -191,15 +175,29 @@ export default function InfoLombaPage() {
         </div>
 
         {/* COUNTER */}
-        <div className="w-full max-w-[1050px] flex justify-start mb-6">
-          <p className="text-[#A19DAB] text-sm">
-            Menampilkan{" "}
-            <span className="text-[#08C7E1] font-bold">
-              {filteredLomba.length}
-            </span>{" "}
-            lomba
-          </p>
-        </div>
+        {loading ? (
+          <div className="w-full max-w-[1050px] flex flex-col items-center justify-center gap-3 text-center py-16">
+            <Loader2 className="animate-spin text-[#A19DAB]" size={28} />
+            <p className="text-[#A19DAB] text-sm">Memuat data lomba...</p>
+          </div>
+        ) : error ? (
+          <div className="w-full max-w-[1050px] flex flex-col items-center justify-center gap-3 text-center py-16 px-6 border border-dashed border-[#3A3545] rounded-md md:rounded-lg bg-[#1A1625]/40">
+            <p className="text-red-400 text-sm">{error}</p>
+          </div>
+        ) : filteredLomba.length === 0 ? (
+          <div className="w-full max-w-[1050px] flex flex-col items-center justify-center gap-3 text-center py-16 px-6 border border-dashed border-[#3A3545] rounded-md md:rounded-lg bg-[#1A1625]/40">
+            <SearchX size={32} className="text-[#A19DAB]" />
+            <p className="text-[#A19DAB] text-sm max-w-[320px]">
+              {searchQuery
+                ? `Lomba dengan kata kunci "${searchQuery}" tidak ditemukan.`
+                : `Belum ada lomba untuk kategori "${activeCategory}".`}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-[1050px]">
+            {/* ...kode grid yang sudah ada, tidak berubah... */}
+          </div>
+        )}
 
         {/* GRID LOMBA */}
         {filteredLomba.length === 0 ? (
@@ -413,6 +411,45 @@ export default function InfoLombaPage() {
       </AnimatePresence>
     </div>
   );
+}
+
+function mapApiCompetition(item) {
+  return {
+    id: item.id,
+    title: item.title,
+    category: item.category || "Lainnya",
+    organizer: item.organizer || "-",
+    date: formatDate(item.date),
+    deadline: formatDate(item.deadline),
+    fee: formatRupiah(item.fee),
+    prize: formatRupiah(item.prize),
+    level: item.level || "-",
+    target: item.target || "-",
+    image: item.image || null,
+    link: item.link || "#",
+  };
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (isNaN(d)) return "-";
+  return d.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function formatRupiah(value) {
+  if (value === null || value === undefined) return "-";
+  const num = Number(value);
+  if (isNaN(num)) return "-";
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(num);
 }
 
 // --- KOMPONEN BANTUAN UNTUK BOX INFO DI MODAL ---

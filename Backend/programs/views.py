@@ -5,6 +5,7 @@ from .models import Competition
 from django.utils import timezone
 from accounts.decorators import jwt_required, role_required
 from accounts.models import UserRole
+from django.core.paginator import Paginator
 
 @jwt_required
 @role_required(UserRole.ADMIN)
@@ -38,23 +39,51 @@ def add_competition(request):
 
 
 def get_competitions(request):
-	if request.method != "GET":
-		return HttpResponseNotAllowed(["GET"])
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
 
-	competitions = Competition.objects.all().order_by("-created_at")
-	data = []
+    qs = Competition.objects.select_related("category").order_by("-deadline")
 
-	for c in competitions:
-		data.append({
-			"competition_id": str(c.id),
-			"category": c.category,
-			"title": c.title,
-			"image_url": c.image_url,
-			"organizer": c.organizer,
-			"deadline": c.deadline,
-		})
+    category = request.GET.get("category")
+    if category and category != "Semua":
+        qs = qs.filter(category__name=category)
 
-	return JsonResponse({"competitions": data}, status=200)
+    search = request.GET.get("search")
+    if search:
+        qs = qs.filter(title__icontains=search)
+
+    page_number = request.GET.get("page", 1)
+    page_size = request.GET.get("page_size", 12)
+    paginator = Paginator(qs, page_size)
+    page = paginator.get_page(page_number)
+
+    data = [
+        {
+            "id": str(c.id),
+            "title": c.title,
+            "category": c.category.name if c.category_id else None,
+            "organizer": c.organizer,
+            "date": c.event_date.isoformat() if c.event_date else None,
+            "deadline": c.deadline.isoformat() if c.deadline else None,
+            "fee": c.registration_fee,
+            "prize": c.prizepool,
+            "level": c.level,
+            "target": c.target_participant,
+            "image": c.image_url,
+            "link": c.registration_link,
+        }
+        for c in page.object_list
+    ]
+
+    return JsonResponse(
+        {
+            "competitions": data,
+            "page": page.number,
+            "total_pages": paginator.num_pages,
+            "total_items": paginator.count,
+        },
+        status=200,
+    )
 
 @jwt_required
 @role_required(UserRole.ADMIN)
