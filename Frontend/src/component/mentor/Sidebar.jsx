@@ -7,6 +7,7 @@ import {
   GraduationCap,
   CalendarDays,
   ShieldCheck,
+  Star,
   Receipt,
   Settings,
   LogOut,
@@ -25,6 +26,7 @@ const menuList = [
     icon: CalendarDays,
   },
   { name: "Certificates", url: "/mentor/certificates", icon: ShieldCheck },
+  { name: "Reviews", url: "/mentor/reviews", icon: Star },
   { name: "Transactions", url: "/mentor/transactions", icon: Receipt },
   { name: "Settings", url: "/mentor/settings", icon: Settings },
 ];

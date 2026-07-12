@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
@@ -25,6 +26,18 @@ export default function MentoringSchedule() {
     "18.00 WIB",
     "21.00 WIB",
   ]);
+
+  const shouldReduceMotion = useReducedMotion();
+
+  // Animasi cuma dipakai di judul & kontrol atas -- kalender (35 kotak) SENGAJA
+  // dibiarkan statis, soalnya ini halaman yang bakal sering dibuka berulang
+  // buat ngecek jadwal, stagger animation di tiap kotak bakal kerasa lambat.
+  const sectionReveal = {
+    initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
+    whileInView: { opacity: 1, y: 0 },
+    transition: { duration: shouldReduceMotion ? 0.2 : 0.4 },
+    viewport: { once: true },
+  };
 
   useEffect(() => {
     if (modalMode) {
@@ -147,17 +160,20 @@ export default function MentoringSchedule() {
   return (
     <DashboardLayout title="Jadwal Mentoring">
       {/* Title Area */}
-      <div className="flex flex-col gap-1">
+      <motion.div {...sectionReveal} className="flex flex-col gap-1">
         <h1 className="font-bold text-[22px] sm:text-[25px] text-white">
           Jadwal Mentoring
         </h1>
         <p className="text-[#9CA3AF] text-[14px] sm:text-[15px]">
           Atur hari dan jam ketersediaanmu untuk melakukan sesi mentoring
         </p>
-      </div>
+      </motion.div>
 
       {/* Calendar Controls */}
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
+      <motion.div
+        {...sectionReveal}
+        className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4"
+      >
         <div className="flex flex-col gap-1">
           <h2 className="font-bold text-[20px] sm:text-[24px] text-white">
             Juni 2026
@@ -189,9 +205,11 @@ export default function MentoringSchedule() {
             Pilih Rentang
           </button>
         </div>
-      </div>
+      </motion.div>
 
-      {/* Calendar Grid -- di layar sempit di-scroll horizontal */}
+      {/* Calendar Grid -- SENGAJA statis (tanpa scroll-reveal), lihat alasan
+          di komentar deklarasi sectionReveal di atas. Di layar sempit
+          bisa di-scroll horizontal */}
       <div className="w-full overflow-x-auto bg-[#170F26] rounded-[12px] border border-[#2D2342] shadow-lg">
         <div className="min-w-[700px]">
           {/* Days Header */}

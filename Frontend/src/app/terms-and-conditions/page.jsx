@@ -10,7 +10,7 @@ const sections = [
   {
     title: "Definisi",
     paragraphs: [
-      'Mark-Up ("kami", "Perusahaan") adalah platform mentoring dan pelatihan daring yang membantu pelajar dan mahasiswa mempersiapkan diri menghadapi kompetisi bisnis, studi kasus, debat, dan ajang sejenis, melalui layanan Bootcamp, Private Mentoring, dan modul E-Learning.',
+      'Mark-Up ("kami", "Perusahaan") adalah platform mentoring dan pelatihan daring yang membantu pelajar dan mahasiswa mempersiapkan diri menghadapi kompetisi bisnis, studi kasus, dan ajang sejenis, melalui layanan Bootcamp, Private Mentoring, dan modul E-Learning.',
       '"Pengguna" adalah setiap pihak yang mengakses atau menggunakan layanan Mark-Up, baik sebagai peserta ("User") maupun pemateri ("Mentor").',
     ],
   },

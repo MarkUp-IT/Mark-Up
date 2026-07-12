@@ -96,13 +96,13 @@ export default function Certificates() {
             <motion.div
               key={cert.id}
               {...cardReveal(index)}
-              className="flex flex-col rounded-[12px] overflow-hidden border border-[#2D2342] hover:border-[#148F89]/50 transition-colors"
+              className="flex flex-col h-full rounded-[12px] overflow-hidden border border-[#2D2342] hover:border-[#148F89]/50 transition-colors"
             >
-              <div className="h-[130px] bg-gradient-to-br from-[#4C1D95] to-[#0D9488] flex items-center justify-center">
+              <div className="h-[130px] shrink-0 bg-gradient-to-br from-[#4C1D95] to-[#0D9488] flex items-center justify-center">
                 <Award size={40} className="text-white/90" />
               </div>
-              <div className="bg-[#170F26] p-5 flex flex-col gap-3 flex-1">
-                <h4 className="font-bold text-[15px] text-white leading-snug">
+              <div className="bg-[#170F26] p-5 flex flex-col flex-1 gap-3">
+                <h4 className="font-bold text-[15px] text-white leading-snug line-clamp-2 min-h-[40px]">
                   {cert.productTitle}
                 </h4>
                 <div className="flex flex-col gap-0.5 text-[12px] text-[#9CA3AF]">

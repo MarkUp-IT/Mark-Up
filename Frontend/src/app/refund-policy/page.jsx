@@ -16,8 +16,8 @@ import Footer from "@/component/Footer";
 
 const ketentuanUmum = [
   "Permohonan pengembalian dana diajukan paling lambat 48 jam setelah transaksi berhasil.",
-  "Dana yang disetujui untuk dikembalikan akan dipotong biaya administrasi sebesar 10% dari total pembayaran.",
-  "Pengembalian dana hanya berlaku untuk kategori produk yang memenuhi syarat -- lihat rincian per kategori di bawah.",
+  "Dana yang disetujui untuk dikembalikan akan dipotong biaya administrasi sebesar 15% dari total pembayaran.",
+  "Pengembalian dana hanya berlaku untuk kategori produk yang memenuhi syarat, lihat rincian per kategori di bawah.",
 ];
 
 const kebijakanKategori = [
@@ -37,7 +37,7 @@ const kebijakanKategori = [
     icon: BookOpen,
     title: "E-Learning & Modul",
     eligible: false,
-    desc: 'Tidak dapat direfund. Modul bersifat instant delivery -- begitu pembayaran berhasil, seluruh materi langsung dan sepenuhnya bisa diakses, sehingga tidak dapat "dikembalikan" seperti produk fisik.',
+    desc: 'Tidak dapat direfund. Modul bersifat instant delivery, begitu pembayaran berhasil, seluruh materi langsung dan sepenuhnya bisa diakses, sehingga tidak dapat "dikembalikan" seperti produk fisik.',
   },
 ];
 

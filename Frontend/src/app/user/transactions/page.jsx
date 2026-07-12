@@ -88,7 +88,6 @@ export default function Transactions() {
         exit: { opacity: 0, scale: 0.96, y: 12 },
       };
 
-  // --- MOCK DATA (nanti ganti dengan query ke tabel transactions milik user login) ---
   const transactions = [
     {
       id: "TRX-20260701-001",
@@ -96,13 +95,12 @@ export default function Transactions() {
       productType: "bootcamp",
       createdAt: "1 Juli 2026, 14:32 WIB",
       status: "paid",
-      paymentMethod: "BCA Virtual Account",
-      subtotal: 250000,
-      discount: 25000,
-      discountCode: "MARKUP10",
+      paymentMethod: "QRIS",
+      subtotal: 110000,
+      discount: 0,
+      discountCode: null,
       tax: 0,
-      total: 225000,
-      invoiceUrl: "https://example.com/invoice/TRX-20260701-001.pdf",
+      total: 110000,
     },
     {
       id: "TRX-20260705-002",
@@ -110,7 +108,7 @@ export default function Transactions() {
       productType: "modul",
       createdAt: "5 Juli 2026, 09:10 WIB",
       status: "paid",
-      paymentMethod: "GoPay",
+      paymentMethod: "QRIS",
       subtotal: 125000,
       discount: 80000,
       discountCode: "LAUNCH",
@@ -124,14 +122,17 @@ export default function Transactions() {
       productType: "mentoring",
       createdAt: "9 Juli 2026, 20:45 WIB",
       status: "pending",
-      paymentMethod: "BCA Virtual Account",
+      paymentMethod: "QRIS",
       subtotal: 110000,
       discount: 0,
       discountCode: null,
       tax: 0,
       total: 110000,
       paymentUrl: "https://example.com/pay/TRX-20260709-003",
-      expiresAt: "10 Juli 2026, 20:45 WIB",
+      // QRIS dari iPaymu cuma valid sebentar (~30-60 menit), beda jauh dari
+      // VA bank yang bisa dikasih waktu berjam-jam -- makanya expiresAt di
+      // sini deket banget sama createdAt, bukan 24 jam kemudian kayak sebelumnya
+      expiresAt: "9 Juli 2026, 21:15 WIB",
     },
     {
       id: "TRX-20260628-004",
@@ -139,7 +140,7 @@ export default function Transactions() {
       productType: "mentoring",
       createdAt: "28 Juni 2026, 11:15 WIB",
       status: "expired",
-      paymentMethod: "BCA Virtual Account",
+      paymentMethod: "QRIS",
       subtotal: 300000,
       discount: 0,
       discountCode: null,
@@ -280,7 +281,7 @@ export default function Transactions() {
                   </span>
                   <span className="text-[#9CA3AF] text-[11px]">{tx.id}</span>
                 </div>
-                <h4 className="font-bold text-[15px] text-white">
+                <h4 className="font-bold text-[15px] text-white truncate max-w-[280px] sm:max-w-[360px]">
                   {tx.productTitle}
                 </h4>
                 <p className="text-[#9CA3AF] text-[12px]">{tx.createdAt}</p>
