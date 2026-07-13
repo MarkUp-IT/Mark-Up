@@ -2,13 +2,13 @@ from django.contrib.auth import authenticate
 from django.http import JsonResponse, HttpResponseNotAllowed
 from .utils import get_request_data
 from .forms import RegisterForm
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, UserRole
 from .decorators import jwt_required, role_required
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-from django.contrib.auth import authenticate
-from accounts.models import User
+import json
 
 @csrf_exempt
 def register_view(request):
@@ -136,3 +136,45 @@ def get_user_summary(request):
 		},
 		status=200,
 	)
+
+@jwt_required
+def get_current_user(request):
+
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    user = request.user
+
+    profile_name = (
+        getattr(user, "fullname", None)
+        or user.get_full_name()
+        or user.username
+    )
+
+    avatar_src = (
+        getattr(user, "profile_image_url", None)
+        or f"https://api.dicebear.com/7.x/notionists/svg?seed={profile_name}"
+    )
+
+    data = {
+        "id": str(user.id),
+        "profile_name": profile_name,
+        "email": user.email,
+        "avatar_src": avatar_src,
+        "dashboard_href": "/user/my-products",
+    }
+
+    return JsonResponse(
+        {
+            "is_logged_in": True,
+            "user": data,
+        }
+    )
+
+@csrf_exempt
+def logout_user(request):
+   
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    return JsonResponse({"detail": "Logout berhasil"}, status=200)

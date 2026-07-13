@@ -3,12 +3,12 @@
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { LayoutGrid, LogOut } from "lucide-react";
+import { api, ApiError, clearTokens } from "@/lib/api";
 
-// Dynamically import GlassSurface component to prevent SSR desync
 const GlassSurfaceDynamic = dynamic(() => import("@/component/GlassSurface"), {
   ssr: false,
 });
@@ -20,30 +20,78 @@ const menuItems = [
   { name: "Mentors", url: "/mentors" },
 ];
 
-export default function Navbar({
-  variant = "glass",
-  isLoggedIn = false,
-  profileName = "Prabroro Subriantoro",
-  email = "prabrorosub@gmail.com",
-  avatarSrc = "https://api.dicebear.com/7.x/notionists/svg?seed=Prabroro%20Subriantoro&backgroundColor=2B3034",
-  dashboardHref = "/user/my-products",
-  onLogout = () => {
-    console.log("Logout clicked!");
-  },
-}) {
+export default function Navbar({ variant = "glass" }) {
   const pathname = usePathname();
+  const router = useRouter();
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
 
-  // Close profile dropdown menu when clicking outside the boundary
+  // --- State auth, diganti dari props jadi hasil fetch ---
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [profile, setProfile] = useState({
+    profileName: "",
+    email: "",
+    avatarSrc: "",
+    dashboardHref: "/user/my-products",
+  });
+
+  useEffect(() => {
+    async function fetchCurrentUser() {
+      try {
+        setAuthLoading(true);
+        const json = await api.get("/api/accounts/me/", { auth: true });
+
+        if (json.is_logged_in && json.user) {
+          setIsLoggedIn(true);
+          setProfile({
+            profileName: json.user.profile_name,
+            email: json.user.email,
+            avatarSrc: json.user.avatar_src,
+            dashboardHref: json.user.dashboard_href || "/user/my-products",
+          });
+        } else {
+          setIsLoggedIn(false);
+        }
+      } catch (err) {
+        // Token invalid/expired atau belum login sama sekali -> anggap logged out,
+        // jangan tampilkan error ke user karena ini bagian dari navbar publik.
+        setIsLoggedIn(false);
+      } finally {
+        setAuthLoading(false);
+      }
+    }
+
+    fetchCurrentUser();
+  }, []);
+
+  async function handleLogout() {
+    try {
+      await api.post("/api/accounts/logout/", {}, { auth: true });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      clearTokens(); // <<< WAJIB
+
+      setIsLoggedIn(false);
+
+      setProfile({
+        profileName: "",
+        email: "",
+        avatarSrc: "",
+        dashboardHref: "/user/my-products",
+      });
+
+      router.push("/");
+    }
+  }
+
   useEffect(() => {
     if (!isProfileMenuOpen) return;
     const handleClickOutside = (e) => {
-      if (
-        profileMenuRef.current &&
-        !profileMenuRef.current.contains(e.target)
-      ) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
         setIsProfileMenuOpen(false);
       }
     };
@@ -51,7 +99,7 @@ export default function Navbar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isProfileMenuOpen]);
 
-  // ---- Reusable UI Potions Shared Across Variants ----
+  // ---- Reusable UI ----
   const logo = (
     <Link href="/" className="relative z-20">
       <Image
@@ -85,20 +133,9 @@ export default function Navbar({
     </div>
   );
 
-  // Recipe "kaca" yang dipakai bareng di badan navbar, dropdown profil, dan
-  // menu mobile -- biar ketiganya kerasa satu material yang sama, bukan cuma
-  // mirip-mirip lewat CSS blur doang.
   const GlassLayer = ({ borderRadius }) => (
-    <div
-      className="absolute inset-0 overflow-hidden pointer-events-none"
-      style={{ borderRadius }}
-    >
-      <GlassSurfaceDynamic
-        width="100%"
-        height="100%"
-        borderRadius={borderRadius}
-        distortionScale={300}
-      />
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ borderRadius }}>
+      <GlassSurfaceDynamic width="100%" height="100%" borderRadius={borderRadius} distortionScale={300} />
     </div>
   );
 
@@ -109,17 +146,11 @@ export default function Navbar({
         className="flex items-center gap-3 rounded-full pl-3 pr-1 py-1 hover:bg-white/10 transition-colors cursor-pointer"
       >
         <div className="hidden sm:flex flex-col text-right leading-tight">
-          <span className="text-[13px] font-bold text-white">
-            {profileName}
-          </span>
-          <span className="text-[11px] text-[#9CA3AF]">{email}</span>
+          <span className="text-[13px] font-bold text-white">{profile.profileName}</span>
+          <span className="text-[11px] text-[#9CA3AF]">{profile.email}</span>
         </div>
         <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-white/20 shrink-0">
-          <img
-            src={avatarSrc}
-            alt={profileName}
-            className="w-full h-full object-cover"
-          />
+          <img src={profile.avatarSrc} alt={profile.profileName} className="w-full h-full object-cover" />
         </div>
       </button>
 
@@ -135,7 +166,7 @@ export default function Navbar({
             <GlassLayer borderRadius={14} />
             <div className="relative z-10 p-2">
               <Link
-                href={dashboardHref}
+                href={profile.dashboardHref}
                 onClick={() => setIsProfileMenuOpen(false)}
                 className="flex items-center gap-3 px-4 py-3 rounded-[10px] text-white hover:bg-white/10 text-[14px] transition-colors"
               >
@@ -145,7 +176,7 @@ export default function Navbar({
               <button
                 onClick={() => {
                   setIsProfileMenuOpen(false);
-                  onLogout();
+                  handleLogout();
                 }}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-[10px] text-[#F87171] hover:bg-red-500/10 text-[14px] transition-colors"
               >
@@ -161,10 +192,7 @@ export default function Navbar({
 
   const authButtons = (
     <div className="hidden sm:flex items-center gap-4 relative z-20">
-      <Link
-        href="/login"
-        className="text-sm font-medium text-gray-200 hover:text-white transition-colors"
-      >
+      <Link href="/login" className="text-sm font-medium text-gray-200 hover:text-white transition-colors">
         Masuk
       </Link>
       <Link
@@ -177,47 +205,30 @@ export default function Navbar({
   );
 
   const hamburger = (
-    <button
-      className="lg:hidden text-white p-1 relative z-20"
-      onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-    >
+    <button className="lg:hidden text-white p-1 relative z-20" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
       {isMobileMenuOpen ? (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={2}
-          stroke="currentColor"
-          className="w-6 h-6"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M6 18L18 6M6 6l12 12"
-          />
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
       ) : (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={2}
-          stroke="currentColor"
-          className="w-6 h-6"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
-          />
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
         </svg>
       )}
     </button>
   );
 
+  // Selagi status auth masih dicek, tampilkan skeleton kecil biar nggak "flicker"
+  // dari authButtons -> profileButton begitu fetch selesai.
   const rightSection = (
     <div className="flex items-center gap-3 md:gap-5">
-      {isLoggedIn ? profileButton : authButtons}
+      {authLoading ? (
+        <div className="hidden sm:block w-24 h-8 rounded-full bg-white/10 animate-pulse" />
+      ) : isLoggedIn ? (
+        profileButton
+      ) : (
+        authButtons
+      )}
       {hamburger}
     </div>
   );
@@ -257,7 +268,7 @@ export default function Navbar({
               {isLoggedIn ? (
                 <>
                   <Link
-                    href={dashboardHref}
+                    href={profile.dashboardHref}
                     onClick={() => setIsMobileMenuOpen(false)}
                     className="w-full py-2.5 flex items-center justify-center gap-2 border border-white/20 rounded-full text-sm font-medium text-white hover:bg-white/10 transition-colors"
                   >
@@ -267,7 +278,7 @@ export default function Navbar({
                   <button
                     onClick={() => {
                       setIsMobileMenuOpen(false);
-                      onLogout();
+                      handleLogout();
                     }}
                     className="w-full py-2.5 flex items-center justify-center gap-2 bg-red-500/10 border border-red-500/30 text-[#FCA5A5] rounded-full text-sm font-bold"
                   >
@@ -277,16 +288,10 @@ export default function Navbar({
                 </>
               ) : (
                 <>
-                  <Link
-                    href="/login"
-                    className="w-full py-2.5 text-center border border-white/20 rounded-full text-sm font-medium text-white hover:bg-white/10 transition-colors"
-                  >
+                  <Link href="/login" className="w-full py-2.5 text-center border border-white/20 rounded-full text-sm font-medium text-white hover:bg-white/10 transition-colors">
                     Masuk
                   </Link>
-                  <Link
-                    href="/register"
-                    className="w-full py-2.5 text-center bg-[#E5DFFF] text-[#530D8E] rounded-full text-sm font-bold shadow-lg"
-                  >
+                  <Link href="/register" className="w-full py-2.5 text-center bg-[#E5DFFF] text-[#530D8E] rounded-full text-sm font-bold shadow-lg">
                     Daftar Sekarang
                   </Link>
                 </>
@@ -298,21 +303,12 @@ export default function Navbar({
     </AnimatePresence>
   );
 
-  // ---- VARIANT SOLID ----
-  // Lebar disamakan persis dengan varian glass (w-[95%] md:w-[90%]) --
-  // sebelumnya pakai w-full max-w-[1400px], rumus beda yang bikin lebarnya
-  // nggak konsisten dibanding halaman marketing tergantung ukuran layar.
   if (variant === "solid") {
     return (
       <div className="fixed top-0 left-0 z-[100] w-full flex justify-center mt-4 px-4 pointer-events-none">
         <nav className="relative pointer-events-auto text-white flex font-jakarta justify-between items-center border border-white/20 bg-white/10 backdrop-blur-md shadow-lg w-[95%] md:w-[90%] rounded-full z-50">
           <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none">
-            <GlassSurfaceDynamic
-              width="100%"
-              height="100%"
-              borderRadius={100}
-              distortionScale={300}
-            />
+            <GlassSurfaceDynamic width="100%" height="100%" borderRadius={100} distortionScale={300} />
           </div>
           <div className="relative z-10 flex items-center py-2 px-4 md:py-3 md:px-8 justify-between w-full">
             {logo}
@@ -325,17 +321,11 @@ export default function Navbar({
     );
   }
 
-  // ---- DEFAULT GLASS VARIANT ----
   return (
     <div className="fixed top-0 left-0 z-[100] flex w-full justify-center mt-4 px-4 pointer-events-none">
       <nav className="relative pointer-events-auto text-white flex font-jakarta justify-between items-center border border-white/20 bg-white/10 backdrop-blur-md shadow-lg w-[95%] md:w-[90%] rounded-full z-50">
         <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none">
-          <GlassSurfaceDynamic
-            width="100%"
-            height="100%"
-            borderRadius={100}
-            distortionScale={300}
-          />
+          <GlassSurfaceDynamic width="100%" height="100%" borderRadius={100} distortionScale={300} />
         </div>
         <div className="relative z-10 flex items-center py-2 px-4 md:py-3 md:px-8 justify-between w-full">
           {logo}

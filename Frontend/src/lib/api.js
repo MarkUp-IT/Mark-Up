@@ -74,7 +74,7 @@ function onRefreshed(newAccessToken) {
 
 async function refreshAccessToken() {
   const refresh = getRefreshToken();
-  if (!refresh) throw new ApiError("Tidak ada refresh token", { status: 401 });
+  if (!refresh) return null;
 
   const res = await fetch(`${API_BASE}/api/auth/refresh/`, {
     method: "POST",
@@ -85,7 +85,7 @@ async function refreshAccessToken() {
 
   if (!res.ok) {
     clearTokens();
-    throw new ApiError("Gagal refresh token", { status: res.status });
+    throw new ApiError("Sesi berakhir, silakan login kembali.", { status: res.status });
   }
 
   const data = await res.json();
@@ -147,7 +147,12 @@ export async function apiRequest(
   let { res, data } = await doFetch();
 
   if (res.status === 401 && auth && !path.includes("/auth/")) {
-    if (isRefreshing) {
+    const hasRefreshToken = Boolean(getRefreshToken());
+
+    if (!hasRefreshToken) {
+      clearTokens();
+      return null;
+    } else if (isRefreshing) {
       const newToken = await new Promise((resolve) => subscribeToRefresh(resolve));
       if (newToken) {
         ({ res, data } = await doFetch());
@@ -158,7 +163,9 @@ export async function apiRequest(
         const newToken = await refreshAccessToken();
         isRefreshing = false;
         onRefreshed(newToken);
-        ({ res, data } = await doFetch()); 
+        if (newToken) {
+          ({ res, data } = await doFetch());
+        }
       } catch (refreshErr) {
         isRefreshing = false;
         onRefreshed(null);

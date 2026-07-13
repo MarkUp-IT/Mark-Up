@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Navbar from "@/component/navbar";
+import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Link from "next/link";
@@ -294,7 +294,7 @@ export default function InfoLombaPage() {
                           Biaya Pendaftaran
                         </p>
                         <p className="text-white font-bold text-sm">
-                          {formatFee(lomba.feeMin, lomba.feeMax)}
+                          {formatRupiah(lomba.fee)}
                         </p>
                       </div>
                       <div className="flex flex-col text-right">
@@ -382,7 +382,7 @@ export default function InfoLombaPage() {
                   />
                   <InfoBox
                     title="Biaya"
-                    value={formatFee(selectedLomba.feeMin, selectedLomba.feeMax)}
+                    value={formatRupiah(selectedLomba.fee)}
                     icon={<WalletIcon />}
                   />
                   <InfoBox
@@ -423,16 +423,20 @@ function mapApiCompetition(item) {
   return {
     id: item.id,
     title: item.title,
-    category: item.category || "Lainnya",
-    organizer: item.organizer || "-",
-    date: formatDate(item.date),
+    category: item.category?.name ?? item.category ?? "Lainnya",
+    organizer: item.organizer ?? "-",
+
+    date: formatDate(item.event_date),
     deadline: formatDate(item.deadline),
-    fee: formatRupiah(item.fee),
-    prize: formatRupiah(item.prize),
-    level: item.level || "-",
-    target: item.target || "-",
-    image: item.image || null,
-    link: item.link || "#",
+
+    fee: item.registration_fee,
+    prize: formatRupiah(item.prizepool),
+
+    level: item.level ?? "-",
+    target: item.target_participant ?? "-",
+
+    image: item.image_url,
+    link: item.registration_link,
   };
 }
 
