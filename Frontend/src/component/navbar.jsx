@@ -15,8 +15,8 @@ const GlassSurfaceDynamic = dynamic(() => import("@/component/GlassSurface"), {
 
 const menuItems = [
   { name: "Beranda", url: "/" },
-  { name: "Produk", url: "/produk" },
-  { name: "Info Lomba", url: "/info-lomba" },
+  { name: "Produk", url: "/products" },
+  { name: "Info Lomba", url: "/competitions" },
   { name: "Mentors", url: "/mentors" },
 ];
 
