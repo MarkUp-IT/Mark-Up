@@ -10,6 +10,25 @@ import EmptyState from "@/component/mentor/EmptyState";
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#148F89] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0F081C]";
 
+// Disamain persis sama bootcamp_session_status & mentoring_session_status
+// yang beneran ada di database -- sebelumnya file ini pakai "active"/"locked"
+// yang nggak match ENUM manapun (itu konsep UI turunan, bukan status yang
+// disimpan).
+const statusMeta = {
+  completed: {
+    label: "Selesai",
+    className: "bg-[#148F89]/10 text-[#148F89] border border-[#148F89]/30",
+  },
+  scheduled: {
+    label: "Terjadwal",
+    className: "bg-[#3B82F6]/10 text-[#3B82F6] border border-[#3B82F6]/30",
+  },
+  waiting_schedule: {
+    label: "Belum Dijadwalkan",
+    className: "bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/30",
+  },
+};
+
 function formatDateTime(dateTimeStr) {
   if (!dateTimeStr) return null;
   return (
@@ -39,35 +58,35 @@ const classes = {
       {
         id: 2,
         title: "Introduction to Startup Ecosystem",
-        date: "Jul 6, 2026 - 10:00 AM",
+        startTime: "2026-07-06T10:00:00+07:00",
         status: "completed",
         recordingUrl: "https://example.com/rekaman/bc001-sesi-2",
       },
       {
         id: 3,
         title: "Ideation & Value Proposition",
-        date: "Jul 6, 2026 - 10:00 AM",
+        startTime: "2026-07-06T10:00:00+07:00",
         status: "completed",
         recordingUrl: "https://example.com/rekaman/bc001-sesi-3",
       },
       {
         id: 4,
         title: "Market Research & Validation",
-        date: "Jul 6, 2026 - 10:00 AM",
+        startTime: "2026-07-06T10:00:00+07:00",
         status: "completed",
         recordingUrl: "https://example.com/rekaman/bc001-sesi-4",
       },
       {
         id: 5,
-        title: "Market Research & Validation",
-        date: "Jul 6, 2026 - 10:00 AM",
-        status: "active",
+        title: "Customer Discovery Interview",
+        startTime: "2026-07-20T10:00:00+07:00",
+        status: "scheduled",
       },
       {
         id: 6,
-        title: "Market Research & Validation",
-        date: "Jul 6, 2026 - 10:00 AM",
-        status: "locked",
+        title: "MVP & Prototyping",
+        startTime: null,
+        status: "waiting_schedule",
       },
     ],
   },
@@ -83,21 +102,21 @@ const classes = {
       {
         id: 1,
         title: "HTML & CSS Fundamentals",
-        date: "Jul 2, 2026 - 08:00 AM",
+        startTime: "2026-07-02T08:00:00+07:00",
         status: "completed",
         recordingUrl: "https://example.com/rekaman/bc002-sesi-1",
       },
       {
         id: 2,
         title: "React JS Deep Dive",
-        date: "Jul 9, 2026 - 08:00 AM",
-        status: "active",
+        startTime: "2026-07-09T08:00:00+07:00",
+        status: "scheduled",
       },
       {
         id: 3,
         title: "Next JS Framework",
-        date: "Jul 16, 2026 - 08:00 AM",
-        status: "locked",
+        startTime: null,
+        status: "waiting_schedule",
       },
     ],
   },
@@ -111,7 +130,7 @@ const classes = {
       {
         id: 1,
         startTime: "2026-07-14T10:00:00+07:00",
-        status: "active",
+        status: "scheduled",
         zoomLink: "https://zoom.us/j/0987654321",
         menteeNotes: "Reviewing resume and preparing for technical interviews.",
       },
@@ -134,7 +153,7 @@ const classes = {
       {
         id: 2,
         startTime: "2026-07-12T14:00:00+07:00",
-        status: "active",
+        status: "scheduled",
         zoomLink: "https://zoom.us/j/1234567890",
         menteeNotes:
           "Student wants to discuss advanced validation strategies and startup pitching.",
@@ -148,7 +167,11 @@ const classes = {
   },
 };
 
-function renderSessionButton(status, recordingUrl) {
+// isMentoring dipakai buat nyesuain pesan "waiting_schedule" -- buat
+// mentoring, itu artinya mentee-nya sendiri yang belum milih jadwal (mentor
+// tinggal nunggu, nggak ada aksi yang bisa dilakuin). Buat bootcamp, itu
+// jadwal yang emang belum di-set admin.
+function renderSessionButton(status, recordingUrl, isMentoring) {
   switch (status) {
     case "completed":
       if (recordingUrl) {
@@ -169,10 +192,10 @@ function renderSessionButton(status, recordingUrl) {
           disabled
           className="px-5 py-2 bg-[#2D2342] text-[#9CA3AF] text-[13px] font-medium rounded-[8px] cursor-not-allowed"
         >
-          Completed
+          Selesai
         </button>
       );
-    case "active":
+    case "scheduled":
       return (
         <button
           className={`px-5 py-2 bg-[#148F89] text-white text-[13px] font-bold rounded-[8px] hover:bg-[#117A75] transition-colors shadow-sm ${focusRing}`}
@@ -180,14 +203,13 @@ function renderSessionButton(status, recordingUrl) {
           Join Session
         </button>
       );
-    case "locked":
+    case "waiting_schedule":
       return (
-        <button
-          disabled
-          className="px-5 py-2 bg-[#2D2342] text-[#9CA3AF] text-[13px] font-medium rounded-[8px] cursor-not-allowed"
-        >
-          Room Unavailable
-        </button>
+        <p className="text-[#6B7280] text-[12px] italic max-w-[200px] sm:text-right">
+          {isMentoring
+            ? "Menunggu mentee pilih jadwal"
+            : "Jadwal belum di-set admin"}
+        </p>
       );
     default:
       return null;
@@ -197,14 +219,7 @@ function renderSessionButton(status, recordingUrl) {
 export default function ClassDetail() {
   const params = useParams();
   const item = classes[params.id];
-  const shouldReduceMotion = useReducedMotion();
-
-  const sectionReveal = {
-    initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
-    whileInView: { opacity: 1, y: 0 },
-    transition: { duration: shouldReduceMotion ? 0.2 : 0.4 },
-    viewport: { once: true },
-  };
+  const shouldReduceMotion = useReducedMotion() ?? false;
 
   const itemReveal = (index) => ({
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
@@ -227,7 +242,7 @@ export default function ClassDetail() {
           Kembali ke Active Classes
         </Link>
         <EmptyState
-          message={`Kelas dengan ID "${params.id}" tidak ditemukan.`}
+          message={`Kelas dengan ID "${params?.id}" tidak ditemukan.`}
           ctaLabel="Lihat Semua Kelas"
           ctaHref="/mentor/active-classes"
         />
@@ -251,7 +266,7 @@ export default function ClassDetail() {
 
       {/* Banner -- statis, di atas fold */}
       <div
-        className={`rounded-[12px] overflow-hidden bg-gradient-to-br ${item.imageClass} p-6 sm:p-8 flex flex-col gap-2`}
+        className={`rounded-[12px] overflow-hidden bg-gradient-to-br ${item.imageClass || ""} p-6 sm:p-8 flex flex-col gap-2`}
       >
         <span className="self-start px-3 py-1 rounded-full text-[11px] font-semibold bg-white/20 text-white backdrop-blur-sm">
           {isBootcamp
@@ -276,7 +291,7 @@ export default function ClassDetail() {
                 key={session.id}
                 {...itemReveal(index)}
                 className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-5 rounded-[12px] border ${
-                  session.status === "active"
+                  session.status === "scheduled"
                     ? "border-[#148F89] bg-[#148F89]/5"
                     : "border-[#2D2342] bg-[#170F26]"
                 }`}
@@ -284,26 +299,37 @@ export default function ClassDetail() {
                 <div className="flex items-center gap-6 min-w-0">
                   <div className="w-[80px] shrink-0">
                     <span className="text-[#E2E8F0] font-bold text-[14px] tracking-wide">
-                      SESSION {session.id}
+                      SESI {session.id}
                     </span>
                   </div>
                   <div className="flex flex-col gap-1 min-w-0">
                     <span
                       className={`font-bold text-[15px] truncate ${
-                        session.status === "active"
+                        session.status === "scheduled"
                           ? "text-white"
                           : "text-[#E2E8F0]"
                       }`}
                     >
                       {session.title}
                     </span>
-                    <span className="text-[#9CA3AF] text-[13px]">
-                      {session.date}
-                    </span>
+                    {session.startTime && (
+                      <span className="text-[#9CA3AF] text-[13px]">
+                        {formatDateTime(session.startTime)}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="self-start sm:self-auto">
-                  {renderSessionButton(session.status, session.recordingUrl)}
+                <div className="flex items-center gap-3 self-start sm:self-auto shrink-0">
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap ${statusMeta[session.status]?.className || ""}`}
+                  >
+                    {statusMeta[session.status]?.label || session.status}
+                  </span>
+                  {renderSessionButton(
+                    session.status,
+                    session.recordingUrl,
+                    false,
+                  )}
                 </div>
               </motion.div>
             ))
@@ -312,7 +338,7 @@ export default function ClassDetail() {
                 key={session.id}
                 {...itemReveal(index)}
                 className={`flex flex-col sm:flex-row sm:items-start justify-between gap-3 p-5 rounded-[12px] border ${
-                  session.status === "active"
+                  session.status === "scheduled"
                     ? "border-[#148F89] bg-[#148F89]/5"
                     : "border-[#2D2342] bg-[#170F26]"
                 }`}
@@ -342,8 +368,17 @@ export default function ClassDetail() {
                     )}
                   </div>
                 </div>
-                <div className="self-start shrink-0">
-                  {renderSessionButton(session.status, session.recordingUrl)}
+                <div className="flex items-center gap-3 self-start shrink-0">
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap ${statusMeta[session.status]?.className || ""}`}
+                  >
+                    {statusMeta[session.status]?.label || session.status}
+                  </span>
+                  {renderSessionButton(
+                    session.status,
+                    session.recordingUrl,
+                    true,
+                  )}
                 </div>
               </motion.div>
             ))}

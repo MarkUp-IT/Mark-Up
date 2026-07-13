@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   Camera,
   ChevronRight,
@@ -63,7 +63,7 @@ const formatMonthYear = (dateStr) => {
 };
 
 export default function MentorSettings() {
-  const shouldReduceMotion = useReducedMotion();
+  const shouldReduceMotion = useReducedMotion() ?? false;
 
   // TODO: ganti semua data ini dengan data mentor dari session/auth context
   const email = "prabrorosub@gmail.com"; // readonly, ganti email lewat support
@@ -142,11 +142,10 @@ export default function MentorSettings() {
   };
 
   const modalMotion = shouldReduceMotion
-    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
     : {
         initial: { opacity: 0, scale: 0.96, y: 12 },
         animate: { opacity: 1, scale: 1, y: 0 },
-        exit: { opacity: 0, scale: 0.96, y: 12 },
       };
 
   const closeDeleteModal = () => {
@@ -325,18 +324,15 @@ export default function MentorSettings() {
           >
             Simpan Perubahan
           </button>
-          <AnimatePresence>
-            {infoSaved && (
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-[#148F89] text-[12px] font-medium"
-              >
-                Perubahan tersimpan.
-              </motion.span>
-            )}
-          </AnimatePresence>
+          {infoSaved && (
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-[#148F89] text-[12px] font-medium"
+            >
+              Perubahan tersimpan.
+            </motion.span>
+          )}
         </div>
       </motion.form>
 
@@ -387,18 +383,15 @@ export default function MentorSettings() {
           >
             Simpan Keahlian
           </button>
-          <AnimatePresence>
-            {expertiseSaved && (
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-[#148F89] text-[12px] font-medium"
-              >
-                Keahlian tersimpan.
-              </motion.span>
-            )}
-          </AnimatePresence>
+          {expertiseSaved && (
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-[#148F89] text-[12px] font-medium"
+            >
+              Keahlian tersimpan.
+            </motion.span>
+          )}
         </div>
       </motion.form>
 
@@ -518,18 +511,15 @@ export default function MentorSettings() {
           >
             Simpan Rekening
           </button>
-          <AnimatePresence>
-            {bankSaved && (
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-[#148F89] text-[12px] font-medium"
-              >
-                Rekening tersimpan.
-              </motion.span>
-            )}
-          </AnimatePresence>
+          {bankSaved && (
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-[#148F89] text-[12px] font-medium"
+            >
+              Rekening tersimpan.
+            </motion.span>
+          )}
         </div>
       </motion.form>
 
@@ -589,181 +579,173 @@ export default function MentorSettings() {
       </motion.div>
 
       {/* --- MODAL: Tambah/Edit Pengalaman --- */}
-      <AnimatePresence>
-        {showExpModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-            onClick={closeExpModal}
+      {showExpModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={closeExpModal}
+        >
+          <motion.form
+            {...modalMotion}
+            transition={{ duration: 0.18 }}
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={handleSubmitExperience}
+            className="bg-[#170F26] w-full max-w-[460px] max-h-[85vh] overflow-y-auto rounded-[16px] border border-[#2D2342] shadow-2xl"
           >
-            <motion.form
-              {...modalMotion}
-              transition={{ duration: 0.18 }}
-              onClick={(e) => e.stopPropagation()}
-              onSubmit={handleSubmitExperience}
-              className="bg-[#170F26] w-full max-w-[460px] max-h-[85vh] overflow-y-auto rounded-[16px] border border-[#2D2342] shadow-2xl"
-            >
-              <div className="sticky top-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
-                <h3 className="text-white font-bold text-[17px]">
-                  {editingExpId ? "Edit Pengalaman" : "Tambah Pengalaman"}
-                </h3>
-                <button
-                  type="button"
-                  onClick={closeExpModal}
-                  aria-label="Tutup"
-                  className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:text-white hover:bg-white/5 transition-colors"
-                >
-                  <X size={18} />
-                </button>
-              </div>
+            <div className="sticky top-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
+              <h3 className="text-white font-bold text-[17px]">
+                {editingExpId ? "Edit Pengalaman" : "Tambah Pengalaman"}
+              </h3>
+              <button
+                type="button"
+                onClick={closeExpModal}
+                aria-label="Tutup"
+                className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:text-white hover:bg-white/5 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-              <div className="p-6 flex flex-col gap-4">
-                <Field
-                  label="Judul / Posisi"
-                  value={expForm.title}
-                  onChange={(v) => setExpForm((f) => ({ ...f, title: v }))}
-                />
-                <Field
-                  label="Deskripsi"
-                  value={expForm.description}
-                  onChange={(v) =>
-                    setExpForm((f) => ({ ...f, description: v }))
-                  }
-                  textarea
-                />
+            <div className="p-6 flex flex-col gap-4">
+              <Field
+                label="Judul / Posisi"
+                value={expForm.title}
+                onChange={(v) => setExpForm((f) => ({ ...f, title: v }))}
+              />
+              <Field
+                label="Deskripsi"
+                value={expForm.description}
+                onChange={(v) => setExpForm((f) => ({ ...f, description: v }))}
+                textarea
+              />
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[#E2E8F0] text-[13px] font-medium">
-                      Mulai
-                    </label>
-                    <input
-                      type="date"
-                      value={expForm.startDate}
-                      onChange={(e) =>
-                        setExpForm((f) => ({
-                          ...f,
-                          startDate: e.target.value,
-                        }))
-                      }
-                      className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[13px] text-white outline-none focus:border-[#148F89]/60 transition-colors"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[#E2E8F0] text-[13px] font-medium">
-                      Selesai
-                    </label>
-                    <input
-                      type="date"
-                      value={expForm.endDate}
-                      disabled={expForm.isOngoing}
-                      onChange={(e) =>
-                        setExpForm((f) => ({ ...f, endDate: e.target.value }))
-                      }
-                      className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[13px] outline-none transition-colors ${
-                        expForm.isOngoing
-                          ? "text-[#6B7280] cursor-not-allowed"
-                          : "text-white focus:border-[#148F89]/60"
-                      }`}
-                    />
-                  </div>
-                </div>
-
-                <label className="flex items-center gap-2.5 cursor-pointer w-fit">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[#E2E8F0] text-[13px] font-medium">
+                    Mulai
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={expForm.isOngoing}
+                    type="date"
+                    value={expForm.startDate}
                     onChange={(e) =>
                       setExpForm((f) => ({
                         ...f,
-                        isOngoing: e.target.checked,
-                        endDate: e.target.checked ? "" : f.endDate,
+                        startDate: e.target.value,
                       }))
                     }
-                    className="w-4 h-4 rounded accent-[#148F89]"
+                    className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[13px] text-white outline-none focus:border-[#148F89]/60 transition-colors"
                   />
-                  <span className="text-[#E2E8F0] text-[13px]">
-                    Masih berlangsung sampai sekarang
-                  </span>
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={!expForm.title.trim() || !expForm.startDate}
-                  className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-2"
-                >
-                  {editingExpId ? "Simpan Perubahan" : "Tambah Pengalaman"}
-                </button>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[#E2E8F0] text-[13px] font-medium">
+                    Selesai
+                  </label>
+                  <input
+                    type="date"
+                    value={expForm.endDate}
+                    disabled={expForm.isOngoing}
+                    onChange={(e) =>
+                      setExpForm((f) => ({ ...f, endDate: e.target.value }))
+                    }
+                    className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[13px] outline-none transition-colors ${
+                      expForm.isOngoing
+                        ? "text-[#6B7280] cursor-not-allowed"
+                        : "text-white focus:border-[#148F89]/60"
+                    }`}
+                  />
+                </div>
               </div>
-            </motion.form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
+              <label className="flex items-center gap-2.5 cursor-pointer w-fit">
+                <input
+                  type="checkbox"
+                  checked={expForm.isOngoing}
+                  onChange={(e) =>
+                    setExpForm((f) => ({
+                      ...f,
+                      isOngoing: e.target.checked,
+                      endDate: e.target.checked ? "" : f.endDate,
+                    }))
+                  }
+                  className="w-4 h-4 rounded accent-[#148F89]"
+                />
+                <span className="text-[#E2E8F0] text-[13px]">
+                  Masih berlangsung sampai sekarang
+                </span>
+              </label>
+
+              <button
+                type="submit"
+                disabled={!expForm.title.trim() || !expForm.startDate}
+                className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-2"
+              >
+                {editingExpId ? "Simpan Perubahan" : "Tambah Pengalaman"}
+              </button>
+            </div>
+          </motion.form>
+        </motion.div>
+      )}
 
       {/* --- MODAL: Konfirmasi Hapus Akun --- */}
-      <AnimatePresence>
-        {showDeleteModal && (
+      {showDeleteModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={closeDeleteModal}
+        >
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-            onClick={closeDeleteModal}
+            {...modalMotion}
+            transition={{ duration: 0.18 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#170F26] w-full max-w-[420px] rounded-[16px] border border-red-500/30 shadow-2xl p-6 flex flex-col gap-4"
           >
-            <motion.div
-              {...modalMotion}
-              transition={{ duration: 0.18 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-[#170F26] w-full max-w-[420px] rounded-[16px] border border-red-500/30 shadow-2xl p-6 flex flex-col gap-4"
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="text-white font-bold text-[17px]">
-                  Hapus Akun Permanen
-                </h3>
-                <button
-                  onClick={closeDeleteModal}
-                  aria-label="Tutup"
-                  className="text-[#9CA3AF] hover:text-white transition-colors"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <p className="text-[#9CA3AF] text-[13px] leading-relaxed">
-                Tindakan ini tidak bisa dibatalkan. Semua sertifikat, riwayat
-                pendapatan, dan profil publikmu di halaman Mentors akan dihapus
-                permanen dari Mark-Up.
-              </p>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[#E2E8F0] text-[12px]">
-                  Ketik <span className="font-bold text-white">HAPUS</span>{" "}
-                  untuk konfirmasi
-                </label>
-                <input
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-2.5 text-[13px] text-white outline-none focus:border-red-500/50 transition-colors"
-                />
-              </div>
-              <div className="flex items-center gap-3 mt-1">
-                <button
-                  onClick={closeDeleteModal}
-                  className="flex-1 py-2.5 rounded-[8px] border border-[#2D2342] text-[#9CA3AF] text-[13px] font-semibold hover:text-white transition-colors"
-                >
-                  Batal
-                </button>
-                <button
-                  disabled={deleteConfirmText !== "HAPUS"}
-                  className="flex-1 py-2.5 rounded-[8px] bg-red-500 text-white text-[13px] font-semibold hover:bg-red-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Hapus Akun
-                </button>
-              </div>
-            </motion.div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-white font-bold text-[17px]">
+                Hapus Akun Permanen
+              </h3>
+              <button
+                onClick={closeDeleteModal}
+                aria-label="Tutup"
+                className="text-[#9CA3AF] hover:text-white transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-[#9CA3AF] text-[13px] leading-relaxed">
+              Tindakan ini tidak bisa dibatalkan. Semua sertifikat, riwayat
+              pendapatan, dan profil publikmu di halaman Mentors akan dihapus
+              permanen dari Mark-Up.
+            </p>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[#E2E8F0] text-[12px]">
+                Ketik <span className="font-bold text-white">HAPUS</span> untuk
+                konfirmasi
+              </label>
+              <input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-2.5 text-[13px] text-white outline-none focus:border-red-500/50 transition-colors"
+              />
+            </div>
+            <div className="flex items-center gap-3 mt-1">
+              <button
+                onClick={closeDeleteModal}
+                className="flex-1 py-2.5 rounded-[8px] border border-[#2D2342] text-[#9CA3AF] text-[13px] font-semibold hover:text-white transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                disabled={deleteConfirmText !== "HAPUS"}
+                className="flex-1 py-2.5 rounded-[8px] bg-red-500 text-white text-[13px] font-semibold hover:bg-red-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Hapus Akun
+              </button>
+            </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </motion.div>
+      )}
     </DashboardLayout>
   );
 }

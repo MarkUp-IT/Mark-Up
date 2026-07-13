@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
   Download,
@@ -15,6 +15,8 @@ import {
   X,
   CalendarClock,
   RotateCcw,
+  AlertCircle,
+  MoreVertical,
 } from "lucide-react";
 import DashboardLayout from "@/component/user/DashboardLayout";
 import EmptyState from "@/component/user/EmptyState";
@@ -28,15 +30,15 @@ const statusMeta = {
     label: "Terjadwal",
     className: "bg-[#3B82F6]/10 text-[#3B82F6] border border-[#3B82F6]/30",
   },
+  // Sengaja BUKAN "Menunggu Jadwal" -- itu kesannya pasif kayak nunggu orang
+  // lain. Padahal user sendiri yang harus milih jadwalnya (lihat tombol
+  // "Pilih Jadwal" di action area), jadi labelnya dibikin netral aja.
   waiting_schedule: {
-    label: "Menunggu Jadwal",
+    label: "Belum Dijadwalkan",
     className: "bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/30",
   },
 };
 
-// Batas waktu boleh ajukan refund/ganti jadwal: 3 jam sebelum sesi dimulai.
-// Dihitung dari waktu beneran (bukan flag hardcode), biar tombolnya otomatis
-// nonaktif sendiri begitu udah lewat dari batas.
 const CUTOFF_HOURS = 3;
 
 function hoursUntil(dateTimeStr) {
@@ -44,10 +46,10 @@ function hoursUntil(dateTimeStr) {
   return (new Date(dateTimeStr).getTime() - Date.now()) / (1000 * 60 * 60);
 }
 
-function isActionEligible(session) {
+function isRescheduleEligible(session) {
   return (
-    session.status === "scheduled" &&
-    hoursUntil(session.startTime) > CUTOFF_HOURS
+    session?.status === "scheduled" &&
+    hoursUntil(session?.startTime) > CUTOFF_HOURS
   );
 }
 
@@ -65,12 +67,27 @@ function formatDateTime(dateTimeStr) {
   );
 }
 
-// Dipakai buat contoh sesi yang sengaja kurang dari 3 jam lagi -- biar
-// keadaan "tombol nonaktif" beneran kedemo, bukan cuma teori.
 const inTwoHours = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
-// --- MOCK DATA (nanti ganti dengan query by id ke product_bootcamp/product_modul/
-// product_mentoring, join bootcamp_sessions/mentoring_sessions) ---
+// Jadwal tersedia per mentor -- nanti ganti query ke mentor_availabilities
+// WHERE mentor_profile_id = X AND is_booked = false. Dipakai buat "Pilih
+// Jadwal" (sesi yang belum pernah dijadwalin) DAN "Ganti Jadwal" (sesi yang
+// udah dijadwalin tapi mau dipindah) -- dua-duanya modal yang sama.
+const MENTOR_AVAILABILITY = {
+  "alya-hamidah": [
+    { id: "AV1", date: "Kamis, 24 Juli 2026", time: "19:00 WIB" },
+    { id: "AV2", date: "Sabtu, 26 Juli 2026", time: "10:00 WIB" },
+  ],
+  "adena-laksita": [
+    { id: "AV3", date: "Selasa, 22 Juli 2026", time: "13:00 WIB" },
+    { id: "AV4", date: "Kamis, 24 Juli 2026", time: "16:00 WIB" },
+  ],
+};
+
+// --- MOCK DATA (nanti ganti query by id, join bootcamp_sessions/
+// mentoring_sessions). Sesi ke-1 tiap paket mentoring udah kepilih waktu
+// checkout, sesi berikutnya sengaja "waiting_schedule" -- itu yang mau
+// dipilih user sendiri belakangan dari halaman ini. ---
 const products = {
   "BC-001": {
     type: "bootcamp",
@@ -82,28 +99,32 @@ const products = {
       {
         title: "Pengenalan Motion & Framework Debat",
         mentor: "Kak Alya Hamidah",
-        date: "2 Juni 2026, 19:00 WIB",
+        mentorId: "alya-hamidah",
+        startTime: "2026-06-02T19:00:00+07:00",
         status: "completed",
         recordingUrl: "https://example.com/rekaman/sesi-1",
       },
       {
         title: "Case Building & Argumentasi",
         mentor: "Kak Alya Hamidah",
-        date: "9 Juni 2026, 19:00 WIB",
+        mentorId: "alya-hamidah",
+        startTime: "2026-06-09T19:00:00+07:00",
         status: "completed",
         recordingUrl: "https://example.com/rekaman/sesi-2",
       },
       {
         title: "POI (Point of Information) dan Rebuttal",
         mentor: "Kak Adena Laksita",
-        date: "16 Juni 2026, 19:00 WIB",
+        mentorId: "adena-laksita",
+        startTime: "2026-07-20T19:00:00+07:00",
         status: "scheduled",
         meetingLink: "https://meet.google.com/abc-defg-hij",
       },
       {
         title: "Simulasi Debat Penuh & Evaluasi",
         mentor: "Kak Adena Laksita",
-        date: null,
+        mentorId: "adena-laksita",
+        startTime: null,
         status: "waiting_schedule",
       },
     ],
@@ -118,14 +139,16 @@ const products = {
       {
         title: "Pengenalan Motion & Framework Debat",
         mentor: "Kak Alya Hamidah",
-        date: "5 Juli 2026, 19:00 WIB",
+        mentorId: "alya-hamidah",
+        startTime: inTwoHours,
         status: "scheduled",
         meetingLink: "https://meet.google.com/klm-nopq-rst",
       },
       {
         title: "Case Building & Argumentasi",
         mentor: "Kak Alya Hamidah",
-        date: null,
+        mentorId: "alya-hamidah",
+        startTime: null,
         status: "waiting_schedule",
       },
     ],
@@ -160,6 +183,7 @@ const products = {
       {
         id: 1,
         mentor: "Kak Alya Hamidah",
+        mentorId: "alya-hamidah",
         startTime: "2026-07-25T14:00:00+07:00",
         status: "scheduled",
         zoomLink: "https://zoom.us/j/1234567890",
@@ -170,12 +194,13 @@ const products = {
     type: "mentoring",
     title: "Bundling PowerPack (Newbie Friendly)",
     description:
-      "Paket 3 sesi buat kamu yang baru mulai ikut BCC dari nol, lengkap sama akses deck finalis.",
+      "Paket 3 sesi buat kamu yang baru mulai ikut BCC dari nol, lengkap sama akses deck finalis. Sesi pertama udah dijadwalin pas checkout, sesi berikutnya kamu pilih sendiri di sini begitu udah siap.",
     imageClass: "from-[#4C1D95] to-[#CA8A04]",
     sessions: [
       {
         id: 1,
         mentor: "Kak Adena Laksita",
+        mentorId: "adena-laksita",
         startTime: "2026-06-10T10:00:00+07:00",
         status: "completed",
         recordingUrl: "https://example.com/rekaman/mt002-sesi-1",
@@ -183,6 +208,7 @@ const products = {
       {
         id: 2,
         mentor: "Kak Adena Laksita",
+        mentorId: "adena-laksita",
         startTime: inTwoHours,
         status: "scheduled",
         zoomLink: "https://zoom.us/j/1112223333",
@@ -190,6 +216,7 @@ const products = {
       {
         id: 3,
         mentor: "Kak Adena Laksita",
+        mentorId: "adena-laksita",
         startTime: null,
         status: "waiting_schedule",
       },
@@ -199,15 +226,22 @@ const products = {
 
 export default function ProductDetail() {
   const params = useParams();
-  const product = products[params.id];
-  const shouldReduceMotion = useReducedMotion();
+  const product = products[params?.id];
+  const shouldReduceMotion = useReducedMotion() ?? false;
 
-  const [actionModal, setActionModal] = useState(null); // { type: "refund"|"reschedule", sessionIndex }
-  const [reason, setReason] = useState("");
-  const [preferredDate, setPreferredDate] = useState("");
-  const [preferredTime, setPreferredTime] = useState("");
-  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
-  const [actionSuccess, setActionSuccess] = useState(false);
+  // --- Refund (satu-satunya, level produk, bukan per-sesi) ---
+  const [refundMenuOpen, setRefundMenuOpen] = useState(false);
+  const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [refundReason, setRefundReason] = useState("");
+  const [refundSubmitting, setRefundSubmitting] = useState(false);
+  const [refundSuccess, setRefundSuccess] = useState(false);
+
+  // --- Pilih Jadwal / Ganti Jadwal (per-sesi) ---
+  const [scheduleModal, setScheduleModal] = useState(null); // { session, sessionKey, isInitial }
+  const [selectedSlotId, setSelectedSlotId] = useState("");
+  const [scheduleSubmitting, setScheduleSubmitting] = useState(false);
+  const [scheduleSuccess, setScheduleSuccess] = useState(false);
+  const [openSessionMenuKey, setOpenSessionMenuKey] = useState(null);
 
   const sectionReveal = {
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
@@ -226,34 +260,14 @@ export default function ProductDetail() {
     viewport: { once: true },
   });
 
+  // Nggak pakai <AnimatePresence>/prop `exit` -- itu yang kemarin bikin
+  // crash "reading 'type' of null". Modal muncul/hilang langsung.
   const modalMotion = shouldReduceMotion
-    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
     : {
         initial: { opacity: 0, scale: 0.96, y: 12 },
         animate: { opacity: 1, scale: 1, y: 0 },
-        exit: { opacity: 0, scale: 0.96, y: 12 },
       };
-
-  const openActionModal = (type, sessionIndex) => {
-    setActionModal({ type, sessionIndex });
-    setReason("");
-    setPreferredDate("");
-    setPreferredTime("");
-    setActionSuccess(false);
-  };
-
-  const closeActionModal = () => setActionModal(null);
-
-  const handleSubmitAction = (e) => {
-    e.preventDefault();
-    setIsSubmittingAction(true);
-    // TODO: panggil API pengajuan refund/reschedule beneran (buat notifikasi
-    // ke admin/mentor buat ditindaklanjuti)
-    setTimeout(() => {
-      setIsSubmittingAction(false);
-      setActionSuccess(true);
-    }, 900);
-  };
 
   if (!product) {
     return (
@@ -266,7 +280,7 @@ export default function ProductDetail() {
           Kembali ke Produk Saya
         </Link>
         <EmptyState
-          message={`Produk dengan ID "${params.id}" tidak ditemukan.`}
+          message={`Produk dengan ID "${params?.id}" tidak ditemukan.`}
           ctaLabel="Lihat Semua Produk"
           ctaHref="/user/my-products"
         />
@@ -290,6 +304,163 @@ export default function ProductDetail() {
         ? "Mentoring"
         : "Modul";
 
+  // Eligibility refund LEVEL PRODUK: dihitung dari sesi terjadwal PALING
+  // DEKAT. Kalau belum ada sesi yang dijadwalin sama sekali, refund selalu
+  // boleh (belum ada yang "mepet waktu"). Modul nggak pernah nampilin ini
+  // sama sekali (instant delivery, nggak bisa di-refund per kebijakan).
+  const nextScheduled = hasSessions
+    ? product.sessions
+        .filter((s) => s.status === "scheduled" && s.startTime)
+        .sort((a, b) => new Date(a.startTime) - new Date(b.startTime))[0]
+    : null;
+  const refundEligible =
+    !nextScheduled || hoursUntil(nextScheduled.startTime) > CUTOFF_HOURS;
+
+  const openScheduleModal = (session, sessionKey, isInitial) => {
+    setOpenSessionMenuKey(null);
+    setScheduleModal({ session, sessionKey, isInitial });
+    setSelectedSlotId("");
+    setScheduleSuccess(false);
+  };
+  const closeScheduleModal = () => setScheduleModal(null);
+
+  const handleSubmitSchedule = (e) => {
+    e.preventDefault();
+    if (!selectedSlotId) return;
+    setScheduleSubmitting(true);
+    // TODO: panggil API beneran -- kalau isInitial, insert startTime baru ke
+    // mentoring_sessions/bootcamp_sessions; kalau bukan, update yang udah
+    // ada + set mentor_availabilities lama balik jadi kosong
+    setTimeout(() => {
+      setScheduleSubmitting(false);
+      setScheduleSuccess(true);
+    }, 800);
+  };
+
+  const openRefundModal = () => {
+    setRefundMenuOpen(false);
+    setRefundModalOpen(true);
+    setRefundReason("");
+    setRefundSuccess(false);
+  };
+  const closeRefundModal = () => setRefundModalOpen(false);
+
+  const handleSubmitRefund = (e) => {
+    e.preventDefault();
+    if (!refundEligible) return;
+    setRefundSubmitting(true);
+    // TODO: panggil API pengajuan refund beneran, buat SELURUH produk
+    setTimeout(() => {
+      setRefundSubmitting(false);
+      setRefundSuccess(true);
+    }, 900);
+  };
+
+  const availableSlots = scheduleModal?.session?.mentorId
+    ? MENTOR_AVAILABILITY[scheduleModal.session.mentorId] || []
+    : [];
+
+  // Area aksi per-sesi -- BEDA PERLAKUAN antara bootcamp & mentoring:
+  //
+  // Bootcamp: jadwalnya diatur ADMIN, user cuma bisa Daftar (implisit,
+  // udah beli) -> Join Sesi -> atau Ajukan Refund (level produk). User
+  // SAMA SEKALI nggak bisa pilih/ganti jadwal sendiri di sini.
+  //
+  // Mentoring: 1-on-1, user emang yang milih jadwalnya sendiri dari slot
+  // yang dibuka mentor -- jadi "Pilih Jadwal"/"Ganti Jadwal" cuma muncul
+  // di sini.
+  const renderSessionAction = (session, sessionKey, productType) => {
+    if (session.status === "waiting_schedule") {
+      if (productType === "bootcamp") {
+        // Bukan tombol -- ini bukan aksi yang bisa user lakuin, cuma info.
+        return (
+          <span className="text-[#6B7280] text-[11px] italic whitespace-nowrap">
+            Menunggu jadwal dari admin
+          </span>
+        );
+      }
+      return (
+        <button
+          onClick={() => openScheduleModal(session, sessionKey, true)}
+          className="px-4 py-2 rounded-[8px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors whitespace-nowrap"
+        >
+          Pilih Jadwal
+        </button>
+      );
+    }
+
+    if (session.status === "completed") {
+      return session.recordingUrl ? (
+        <a
+          href={session.recordingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-[8px] border border-[#2D2342] text-[#E2E8F0] text-[12px] font-semibold hover:border-[#148F89]/50 hover:text-white transition-colors whitespace-nowrap"
+        >
+          <PlayCircle size={14} />
+          Rekaman
+        </a>
+      ) : null;
+    }
+
+    // status === "scheduled"
+    const joinLink = session.meetingLink || session.zoomLink;
+    const eligible =
+      productType === "mentoring" && isRescheduleEligible(session);
+    const isMenuOpen = openSessionMenuKey === sessionKey;
+
+    return (
+      <div className="flex items-center gap-2">
+        {joinLink && (
+          <a
+            href={joinLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 rounded-[8px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors whitespace-nowrap"
+          >
+            Gabung Sesi
+          </a>
+        )}
+        {eligible && (
+          <div className="relative">
+            <button
+              onClick={() =>
+                setOpenSessionMenuKey(isMenuOpen ? null : sessionKey)
+              }
+              className="w-8 h-8 rounded-[8px] border border-[#2D2342] flex items-center justify-center hover:border-[#148F89]/50 transition-colors"
+              aria-label="Opsi sesi"
+            >
+              <MoreVertical size={14} className="text-[#9CA3AF]" />
+            </button>
+            {isMenuOpen && (
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setOpenSessionMenuKey(null)}
+              />
+            )}
+            {isMenuOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.15 }}
+                style={{ width: "160px" }}
+                className="absolute top-9 right-0 bg-[#170F26] border border-[#2D2342] rounded-[8px] shadow-xl overflow-hidden z-20"
+              >
+                <button
+                  onClick={() => openScheduleModal(session, sessionKey, false)}
+                  className="w-full flex items-center gap-2 text-left px-3.5 py-2.5 text-[12px] text-white hover:bg-white/5 transition-colors"
+                >
+                  <CalendarClock size={13} />
+                  Ganti Jadwal
+                </button>
+              </motion.div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <DashboardLayout title="Detail Produk">
       <Link
@@ -300,13 +471,51 @@ export default function ProductDetail() {
         Kembali ke Produk Saya
       </Link>
 
-      {/* Banner -- statis, di atas fold */}
+      {/* Banner -- titik-tiga refund (LEVEL PRODUK, cuma 1) di pojok kanan atas */}
       <div
-        className={`rounded-[12px] overflow-hidden bg-gradient-to-br ${product.imageClass} p-6 sm:p-8 flex flex-col gap-2`}
+        className={`relative rounded-[12px] overflow-hidden bg-gradient-to-br ${product.imageClass || ""} p-6 sm:p-8 flex flex-col gap-2`}
       >
-        <span className="self-start px-3 py-1 rounded-full text-[11px] font-semibold bg-white/20 text-white backdrop-blur-sm">
-          {typeLabel}
-        </span>
+        <div className="flex items-start justify-between gap-3">
+          <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-white/20 text-white backdrop-blur-sm w-fit">
+            {typeLabel}
+          </span>
+
+          {hasSessions && (
+            <div className="relative shrink-0">
+              <button
+                onClick={() => setRefundMenuOpen((v) => !v)}
+                className="w-8 h-8 rounded-full bg-black/30 backdrop-blur-md border border-white/20 flex items-center justify-center hover:bg-black/50 transition-colors"
+                aria-label="Opsi produk"
+              >
+                <MoreVertical size={16} className="text-white" />
+              </button>
+              {refundMenuOpen && (
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setRefundMenuOpen(false)}
+                />
+              )}
+              {refundMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.15 }}
+                  style={{ width: "170px" }}
+                  className="absolute top-10 right-0 bg-[#170F26] border border-[#2D2342] rounded-[8px] shadow-xl overflow-hidden z-20"
+                >
+                  <button
+                    onClick={openRefundModal}
+                    className="w-full flex items-center gap-2 text-left px-3.5 py-2.5 text-[12px] text-red-400 hover:bg-white/5 transition-colors"
+                  >
+                    <RotateCcw size={13} />
+                    Ajukan Refund
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          )}
+        </div>
+
         <h2 className="text-white font-bold text-[20px] sm:text-[24px]">
           {product.title}
         </h2>
@@ -345,71 +554,54 @@ export default function ProductDetail() {
             </h3>
 
             {product.type === "bootcamp" &&
-              product.sessions.map((session, idx) => (
-                <motion.div
-                  key={idx}
-                  {...itemReveal(idx)}
-                  className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                >
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-[#0F081C] border border-[#2D2342] flex items-center justify-center shrink-0 text-[#9CA3AF] text-[13px] font-semibold">
-                      {idx + 1}
-                    </div>
-                    <div className="flex flex-col gap-1 min-w-0">
-                      <h4 className="text-white font-semibold text-[14px] truncate">
-                        {session.title}
-                      </h4>
-                      <p className="text-[#9CA3AF] text-[12px] flex items-center gap-1.5">
-                        <Users size={12} />
-                        {session.mentor}
-                      </p>
-                      {session.date && (
+              product.sessions.map((session, idx) => {
+                const sessionKey = `bc-${idx}`;
+                return (
+                  <motion.div
+                    key={idx}
+                    {...itemReveal(idx)}
+                    className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                  >
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-[#0F081C] border border-[#2D2342] flex items-center justify-center shrink-0 text-[#9CA3AF] text-[13px] font-semibold">
+                        {idx + 1}
+                      </div>
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <h4 className="text-white font-semibold text-[14px] truncate">
+                          {session.title}
+                        </h4>
                         <p className="text-[#9CA3AF] text-[12px] flex items-center gap-1.5">
-                          <Clock size={12} />
-                          {session.date}
+                          <Users size={12} />
+                          {session.mentor}
                         </p>
-                      )}
+                        {session.startTime && (
+                          <p className="text-[#9CA3AF] text-[12px] flex items-center gap-1.5">
+                            <Clock size={12} />
+                            {formatDateTime(session.startTime)}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span
-                      className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${statusMeta[session.status].className}`}
-                    >
-                      {statusMeta[session.status].label}
-                    </span>
-                    {session.status === "scheduled" && session.meetingLink && (
-                      <a
-                        href={session.meetingLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-4 py-2 rounded-[8px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors whitespace-nowrap"
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span
+                        className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${statusMeta[session.status]?.className || ""}`}
                       >
-                        Gabung Sesi
-                      </a>
-                    )}
-                    {session.status === "completed" && session.recordingUrl && (
-                      <a
-                        href={session.recordingUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-[8px] border border-[#2D2342] text-[#E2E8F0] text-[12px] font-semibold hover:border-[#148F89]/50 hover:text-white transition-colors whitespace-nowrap"
-                      >
-                        <PlayCircle size={14} />
-                        Rekaman
-                      </a>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
+                        {statusMeta[session.status]?.label || session.status}
+                      </span>
+                      {renderSessionAction(session, sessionKey, "bootcamp")}
+                    </div>
+                  </motion.div>
+                );
+              })}
 
             {product.type === "mentoring" &&
               product.sessions.map((session, idx) => {
-                const eligible = isActionEligible(session);
+                const sessionKey = `mt-${idx}`;
                 return (
                   <motion.div
-                    key={session.id}
+                    key={session.id ?? idx}
                     {...itemReveal(idx)}
-                    className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col sm:flex-row sm:items-start justify-between gap-4"
+                    className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                   >
                     <div className="flex items-start gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-full bg-[#0F081C] border border-[#2D2342] flex items-center justify-center shrink-0 text-[#9CA3AF] text-[13px] font-semibold">
@@ -431,62 +623,13 @@ export default function ProductDetail() {
                         )}
                       </div>
                     </div>
-
-                    <div className="flex flex-col items-start sm:items-end gap-2 shrink-0">
+                    <div className="flex items-center gap-3 shrink-0">
                       <span
-                        className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${statusMeta[session.status].className}`}
+                        className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${statusMeta[session.status]?.className || ""}`}
                       >
-                        {statusMeta[session.status].label}
+                        {statusMeta[session.status]?.label || session.status}
                       </span>
-
-                      {session.status === "scheduled" && session.zoomLink && (
-                        <a
-                          href={session.zoomLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-4 py-2 rounded-[8px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors whitespace-nowrap"
-                        >
-                          Gabung Sesi
-                        </a>
-                      )}
-                      {session.status === "completed" &&
-                        session.recordingUrl && (
-                          <a
-                            href={session.recordingUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-[8px] border border-[#2D2342] text-[#E2E8F0] text-[12px] font-semibold hover:border-[#148F89]/50 hover:text-white transition-colors whitespace-nowrap"
-                          >
-                            <PlayCircle size={14} />
-                            Rekaman
-                          </a>
-                        )}
-
-                      {session.status === "scheduled" &&
-                        (eligible ? (
-                          <div className="flex items-center gap-2.5 text-[11px]">
-                            <button
-                              onClick={() => openActionModal("reschedule", idx)}
-                              className="flex items-center gap-1 text-[#9CA3AF] hover:text-white underline underline-offset-2 transition-colors"
-                            >
-                              <CalendarClock size={12} />
-                              Ganti Jadwal
-                            </button>
-                            <span className="text-[#3A3545]">&middot;</span>
-                            <button
-                              onClick={() => openActionModal("refund", idx)}
-                              className="flex items-center gap-1 text-[#9CA3AF] hover:text-[#F87171] underline underline-offset-2 transition-colors"
-                            >
-                              <RotateCcw size={12} />
-                              Ajukan Refund
-                            </button>
-                          </div>
-                        ) : (
-                          <p className="text-[#6B7280] text-[11px] italic max-w-[200px] text-right">
-                            Refund/ganti jadwal ditutup, kurang dari 3 jam
-                            sebelum sesi
-                          </p>
-                        ))}
+                      {renderSessionAction(session, sessionKey, "mentoring")}
                     </div>
                   </motion.div>
                 );
@@ -495,7 +638,6 @@ export default function ProductDetail() {
         </>
       ) : (
         <>
-          {/* Akses File Modul */}
           <motion.div
             {...sectionReveal}
             className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
@@ -570,144 +712,217 @@ export default function ProductDetail() {
         </>
       )}
 
-      {/* --- MODAL: Ajukan Refund / Ganti Jadwal --- */}
-      <AnimatePresence>
-        {actionModal && (
+      {/* --- MODAL: Pilih Jadwal / Ganti Jadwal (per-sesi) --- */}
+      {!!scheduleModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={closeScheduleModal}
+        >
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-            onClick={closeActionModal}
+            {...modalMotion}
+            transition={{ duration: 0.18 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#170F26] w-full max-w-[420px] max-h-[85vh] overflow-y-auto rounded-[16px] border border-[#2D2342] shadow-2xl"
           >
-            <motion.div
-              {...modalMotion}
-              transition={{ duration: 0.18 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-[#170F26] w-full max-w-[440px] max-h-[85vh] overflow-y-auto rounded-[16px] border border-[#2D2342] shadow-2xl"
-            >
-              {actionSuccess ? (
-                <div className="p-8 flex flex-col items-center text-center gap-4">
-                  <div className="w-14 h-14 rounded-full bg-[#148F89]/10 border border-[#148F89]/30 flex items-center justify-center">
-                    <Check size={26} className="text-[#148F89]" />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-bold text-[17px]">
-                      {actionModal.type === "refund"
-                        ? "Pengajuan Refund Terkirim"
-                        : "Permintaan Ganti Jadwal Terkirim"}
-                    </h3>
-                    <p className="text-[#9CA3AF] text-[13px] mt-2 leading-relaxed">
-                      {actionModal.type === "refund"
-                        ? "Tim kami akan memproses dalam 1-14 hari kerja sesuai Refund Policy, dengan potongan biaya administrasi 10%."
-                        : "Mentor akan mengonfirmasi jadwal barumu maksimal 1x24 jam lewat email/WhatsApp."}
-                    </p>
-                  </div>
+            {scheduleSuccess ? (
+              <div className="p-8 flex flex-col items-center text-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-[#148F89]/10 border border-[#148F89]/30 flex items-center justify-center">
+                  <Check size={26} className="text-[#148F89]" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-[17px]">
+                    Jadwal Berhasil{" "}
+                    {scheduleModal.isInitial ? "Dipilih" : "Diubah"}
+                  </h3>
+                  <p className="text-[#9CA3AF] text-[13px] mt-2 leading-relaxed">
+                    Jadwal langsung aktif — mentor emang udah bersedia di slot
+                    yang kamu pilih. Link sesinya bisa langsung kamu pakai pas
+                    waktunya tiba.
+                  </p>
+                </div>
+                <button
+                  onClick={closeScheduleModal}
+                  className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors mt-2"
+                >
+                  Tutup
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitSchedule}>
+                <div className="sticky top-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
+                  <h3 className="text-white font-bold text-[16px]">
+                    {scheduleModal.isInitial ? "Pilih Jadwal" : "Ganti Jadwal"}
+                  </h3>
                   <button
-                    onClick={closeActionModal}
-                    className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors mt-2"
+                    type="button"
+                    onClick={closeScheduleModal}
+                    aria-label="Tutup"
+                    className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:text-white hover:bg-white/5 transition-colors"
                   >
-                    Tutup
+                    <X size={18} />
                   </button>
                 </div>
-              ) : (
-                <form onSubmit={handleSubmitAction}>
-                  <div className="sticky top-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
-                    <h3 className="text-white font-bold text-[17px]">
-                      {actionModal.type === "refund"
-                        ? "Ajukan Refund"
-                        : "Ganti Jadwal Sesi"}
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={closeActionModal}
-                      aria-label="Tutup"
-                      className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:text-white hover:bg-white/5 transition-colors"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
 
-                  <div className="p-6 flex flex-col gap-4">
-                    {actionModal.type === "refund" ? (
-                      <p className="text-[#9CA3AF] text-[12px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3 leading-relaxed">
-                        Dana yang disetujui akan dipotong biaya administrasi 10%
-                        sesuai{" "}
-                        <Link
-                          href="/refund-policy"
-                          className="text-[#08C7E1] hover:underline"
+                <div className="p-6 flex flex-col gap-3">
+                  <label className="text-[#E2E8F0] text-[13px] font-medium">
+                    Slot tersedia — {scheduleModal.session?.mentor}
+                  </label>
+                  {availableSlots.length === 0 ? (
+                    <p className="text-[#9CA3AF] text-[12px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
+                      Belum ada jadwal kosong dari mentor ini saat ini. Coba
+                      lagi nanti atau hubungi tim kami.
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {availableSlots.map((slot) => (
+                        <button
+                          key={slot.id}
+                          type="button"
+                          onClick={() => setSelectedSlotId(slot.id)}
+                          className={`flex items-center justify-between gap-3 px-4 py-3 rounded-[8px] border text-left transition-colors ${
+                            selectedSlotId === slot.id
+                              ? "border-[#148F89] bg-[#148F89]/10"
+                              : "border-[#2D2342] hover:border-[#148F89]/50"
+                          }`}
                         >
-                          Refund Policy
-                        </Link>{" "}
-                        kami.
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-[#E2E8F0] text-[13px] font-medium">
-                            Tanggal Baru
-                          </label>
-                          <input
-                            type="date"
-                            value={preferredDate}
-                            onChange={(e) => setPreferredDate(e.target.value)}
-                            required
-                            className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3 py-2.5 text-[13px] text-white outline-none focus:border-[#148F89]/60 transition-colors"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-[#E2E8F0] text-[13px] font-medium">
-                            Jam
-                          </label>
-                          <input
-                            type="time"
-                            value={preferredTime}
-                            onChange={(e) => setPreferredTime(e.target.value)}
-                            required
-                            className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3 py-2.5 text-[13px] text-white outline-none focus:border-[#148F89]/60 transition-colors"
-                          />
-                        </div>
-                      </div>
-                    )}
+                          <div className="flex flex-col">
+                            <span className="text-white text-[13px] font-semibold">
+                              {slot.date}
+                            </span>
+                            <span className="text-[#9CA3AF] text-[12px]">
+                              {slot.time}
+                            </span>
+                          </div>
+                          {selectedSlotId === slot.id && (
+                            <Check
+                              size={16}
+                              className="text-[#148F89] shrink-0"
+                            />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
+                  <button
+                    type="submit"
+                    disabled={!selectedSlotId || scheduleSubmitting}
+                    className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-1"
+                  >
+                    {scheduleSubmitting ? "Menyimpan..." : "Konfirmasi Jadwal"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* --- MODAL: Ajukan Refund (level produk, cuma 1) --- */}
+      {refundModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={closeRefundModal}
+        >
+          <motion.div
+            {...modalMotion}
+            transition={{ duration: 0.18 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#170F26] w-full max-w-[420px] rounded-[16px] border border-[#2D2342] shadow-2xl"
+          >
+            {refundSuccess ? (
+              <div className="p-8 flex flex-col items-center text-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-[#148F89]/10 border border-[#148F89]/30 flex items-center justify-center">
+                  <Check size={26} className="text-[#148F89]" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-[17px]">
+                    Pengajuan Refund Terkirim
+                  </h3>
+                  <p className="text-[#9CA3AF] text-[13px] mt-2 leading-relaxed">
+                    Tim kami akan memproses dalam 1-14 hari kerja sesuai Refund
+                    Policy, dengan potongan biaya administrasi 10%.
+                  </p>
+                </div>
+                <button
+                  onClick={closeRefundModal}
+                  className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors mt-2"
+                >
+                  Tutup
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
+                  <h3 className="text-white font-bold text-[16px]">
+                    Ajukan Refund
+                  </h3>
+                  <button
+                    onClick={closeRefundModal}
+                    aria-label="Tutup"
+                    className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:text-white hover:bg-white/5 transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {!refundEligible ? (
+                  <div className="p-6 flex flex-col gap-4">
+                    <p className="flex items-start gap-2 text-[#F59E0B] text-[12px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3 leading-relaxed">
+                      <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                      Refund ditutup — sesi berikutnya kurang dari 3 jam lagi.
+                      Coba ajukan lagi setelah sesi itu lewat.
+                    </p>
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={handleSubmitRefund}
+                    className="p-6 flex flex-col gap-4"
+                  >
+                    <p className="text-[#9CA3AF] text-[12px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3 leading-relaxed">
+                      Ini bakal ngajuin refund buat SELURUH produk ini, dana
+                      yang disetujui dipotong biaya administrasi 10% sesuai{" "}
+                      <Link
+                        href="/refund-policy"
+                        className="text-[#08C7E1] hover:underline"
+                      >
+                        Refund Policy
+                      </Link>{" "}
+                      kami.
+                    </p>
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[#E2E8F0] text-[13px] font-medium">
-                        {actionModal.type === "refund"
-                          ? "Alasan Pengajuan"
-                          : "Alasan (opsional)"}
+                        Alasan Pengajuan
                       </label>
                       <textarea
-                        value={reason}
-                        onChange={(e) => setReason(e.target.value)}
-                        required={actionModal.type === "refund"}
+                        value={refundReason}
+                        onChange={(e) => setRefundReason(e.target.value)}
+                        required
                         rows={4}
-                        placeholder={
-                          actionModal.type === "refund"
-                            ? "Ceritakan alasanmu mengajukan refund..."
-                            : "Kasih tau alasan pindah jadwal (opsional)..."
-                        }
+                        placeholder="Ceritakan alasanmu mengajukan refund..."
                         className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[13px] text-white placeholder:text-[#6B7280] outline-none focus:border-[#148F89]/60 transition-colors resize-none"
                       />
                     </div>
-
                     <button
                       type="submit"
-                      disabled={isSubmittingAction}
+                      disabled={refundSubmitting}
                       className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isSubmittingAction
+                      {refundSubmitting
                         ? "Mengirim..."
-                        : actionModal.type === "refund"
-                          ? "Kirim Pengajuan Refund"
-                          : "Kirim Permintaan"}
+                        : "Kirim Pengajuan Refund"}
                     </button>
-                  </div>
-                </form>
-              )}
-            </motion.div>
+                  </form>
+                )}
+              </>
+            )}
           </motion.div>
-        )}
-      </AnimatePresence>
+        </motion.div>
+      )}
     </DashboardLayout>
   );
 }

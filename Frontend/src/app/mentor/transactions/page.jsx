@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Search, X } from "lucide-react";
 import DashboardLayout from "@/component/mentor/DashboardLayout";
 import EmptyState from "@/component/mentor/EmptyState";
@@ -50,7 +50,7 @@ export default function MentorTransactions() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("Semua");
   const [selectedPayout, setSelectedPayout] = useState(null);
-  const shouldReduceMotion = useReducedMotion();
+  const shouldReduceMotion = useReducedMotion() ?? false;
 
   useEffect(() => {
     document.body.style.overflow = selectedPayout ? "hidden" : "auto";
@@ -77,11 +77,10 @@ export default function MentorTransactions() {
   });
 
   const modalMotion = shouldReduceMotion
-    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
     : {
         initial: { opacity: 0, scale: 0.96, y: 12 },
         animate: { opacity: 1, scale: 1, y: 0 },
-        exit: { opacity: 0, scale: 0.96, y: 12 },
       };
 
   // --- MOCK DATA ---
@@ -309,113 +308,109 @@ export default function MentorTransactions() {
       )}
 
       {/* --- POPUP DETAIL --- */}
-      <AnimatePresence>
-        {selectedPayout && (
+      {selectedPayout && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={() => setSelectedPayout(null)}
+        >
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-            onClick={() => setSelectedPayout(null)}
+            {...modalMotion}
+            transition={{ duration: 0.18 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#170F26] w-full max-w-[460px] max-h-[85vh] overflow-y-auto rounded-[16px] border border-[#2D2342] shadow-2xl"
           >
-            <motion.div
-              {...modalMotion}
-              transition={{ duration: 0.18 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-[#170F26] w-full max-w-[460px] max-h-[85vh] overflow-y-auto rounded-[16px] border border-[#2D2342] shadow-2xl"
-            >
-              <div className="sticky top-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
-                <h3 className="text-white font-bold text-[17px]">
-                  Detail Pendapatan
-                </h3>
-                <button
-                  onClick={() => setSelectedPayout(null)}
-                  aria-label="Tutup"
-                  className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:text-white hover:bg-white/5 transition-colors"
+            <div className="sticky top-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
+              <h3 className="text-white font-bold text-[17px]">
+                Detail Pendapatan
+              </h3>
+              <button
+                onClick={() => setSelectedPayout(null)}
+                aria-label="Tutup"
+                className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:text-white hover:bg-white/5 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 flex flex-col gap-5">
+              {/* Sesi + status */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <span
+                    className={`self-start px-2.5 py-1 rounded-md text-[10px] font-bold w-fit ${typeMeta[selectedPayout.type].className}`}
+                  >
+                    {typeMeta[selectedPayout.type].label}
+                  </span>
+                  <h4 className="font-bold text-[17px] text-white leading-snug">
+                    {selectedPayout.title}
+                  </h4>
+                </div>
+                <span
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0 ${statusMeta[selectedPayout.status].className}`}
                 >
-                  <X size={18} />
-                </button>
+                  {statusMeta[selectedPayout.status].detailLabel}
+                </span>
               </div>
 
-              <div className="p-6 flex flex-col gap-5">
-                {/* Sesi + status */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <span
-                      className={`self-start px-2.5 py-1 rounded-md text-[10px] font-bold w-fit ${typeMeta[selectedPayout.type].className}`}
-                    >
-                      {typeMeta[selectedPayout.type].label}
-                    </span>
-                    <h4 className="font-bold text-[17px] text-white leading-snug">
-                      {selectedPayout.title}
-                    </h4>
-                  </div>
-                  <span
-                    className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0 ${statusMeta[selectedPayout.status].className}`}
-                  >
-                    {statusMeta[selectedPayout.status].detailLabel}
+              {/* Info umum */}
+              <div className="flex flex-col gap-2 text-[13px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#9CA3AF]">No. Transaksi</span>
+                  <span className="text-white font-medium">
+                    {selectedPayout.id}
                   </span>
                 </div>
-
-                {/* Info umum */}
-                <div className="flex flex-col gap-2 text-[13px]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#9CA3AF]">No. Transaksi</span>
-                    <span className="text-white font-medium">
-                      {selectedPayout.id}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#9CA3AF]">Tanggal Sesi</span>
-                    <span className="text-white font-medium">
-                      {selectedPayout.sessionDate}
-                    </span>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[#9CA3AF]">Tanggal Sesi</span>
+                  <span className="text-white font-medium">
+                    {selectedPayout.sessionDate}
+                  </span>
                 </div>
-
-                {/* Rincian keuangan */}
-                <div className="flex flex-col gap-2 pt-4 border-t border-[#2D2342] text-[13px]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#9CA3AF]">Pendapatan Kotor</span>
-                    <span className="text-white">
-                      {formatCurrency(selectedPayout.grossAmount)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#9CA3AF]">
-                      Potongan Platform ({selectedPayout.platformFeePercent}%)
-                    </span>
-                    <span className="text-[#EF4444]">
-                      -{formatCurrency(selectedPayout.platformFeeAmount)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between pt-2 border-t border-[#2D2342]">
-                    <span className="text-white font-semibold text-[14px]">
-                      Diterima (Net)
-                    </span>
-                    <span className="text-[#148F89] font-bold text-[18px]">
-                      {formatCurrency(selectedPayout.netAmount)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Info pencairan */}
-                {selectedPayout.status === "paid" ? (
-                  <p className="text-[#9CA3AF] text-[12px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
-                    Dicairkan {selectedPayout.paidAt} ke{" "}
-                    {selectedPayout.bankInfo}
-                  </p>
-                ) : (
-                  <p className="text-[#F59E0B] text-[12px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3">
-                    Belum dicairkan. Estimasi transfer 1-14 hari kerja setelah
-                    sesi selesai diverifikasi.
-                  </p>
-                )}
               </div>
-            </motion.div>
+
+              {/* Rincian keuangan */}
+              <div className="flex flex-col gap-2 pt-4 border-t border-[#2D2342] text-[13px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#9CA3AF]">Pendapatan Kotor</span>
+                  <span className="text-white">
+                    {formatCurrency(selectedPayout.grossAmount)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[#9CA3AF]">
+                    Potongan Platform ({selectedPayout.platformFeePercent}%)
+                  </span>
+                  <span className="text-[#EF4444]">
+                    -{formatCurrency(selectedPayout.platformFeeAmount)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-[#2D2342]">
+                  <span className="text-white font-semibold text-[14px]">
+                    Diterima (Net)
+                  </span>
+                  <span className="text-[#148F89] font-bold text-[18px]">
+                    {formatCurrency(selectedPayout.netAmount)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Info pencairan */}
+              {selectedPayout.status === "paid" ? (
+                <p className="text-[#9CA3AF] text-[12px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
+                  Dicairkan {selectedPayout.paidAt} ke {selectedPayout.bankInfo}
+                </p>
+              ) : (
+                <p className="text-[#F59E0B] text-[12px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3">
+                  Belum dicairkan. Estimasi transfer 1-14 hari kerja setelah
+                  sesi selesai diverifikasi.
+                </p>
+              )}
+            </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </motion.div>
+      )}
     </DashboardLayout>
   );
 }
