@@ -1,24 +1,198 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Navbar from "@/component/navbar";
+import { useState } from "react";
+import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Link from "next/link";
-import { SearchX } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { SearchX, FileText, Check } from "lucide-react";
 
-const tabs = [
-  { label: "Semua", value: "Semua" },
-  { label: "Mentoring", value: "MENTORING" },
-  { label: "Bootcamp", value: "BOOTCAMP" },
-  { label: "Modul", value: "MODULE" },
+// --- HELPER ---
+// Semua harga disimpan sebagai ANGKA (bukan string "Rp45.000" kayak
+// sebelumnya) -- diformat & dihitung diskonnya di komponen, biar mock data
+// ini match persis sama tipe kolom `price`/`original_price` (numeric) di
+// database, bukan string yang udah diformat duluan.
+const formatRupiah = (value) =>
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(value);
+
+const getDiscountPercent = (price, originalPrice) => {
+  if (!originalPrice || originalPrice <= price) return null;
+  return Math.round(((originalPrice - price) / originalPrice) * 100);
+};
+
+// --- DATA PRODUK ---
+const productData = [
+  // --- MODUL ---
+  // Modul isinya SATU file utama (PDF) + beberapa resource bonus terpisah
+  // (masing-masing file sendiri) -- matching product_modul.file_pdf_url +
+  // tabel modul_resources yang baru.
+  {
+    id: 1,
+    title: "Masterclass Business Case Competition (BCC)",
+    type: "Modul",
+    desc: "Panduan komprehensif memecahkan kasus bisnis dari nol, mulai dari problem solving hingga menyusun winning pitch deck untuk kompetisi.",
+    price: 45000,
+    originalPrice: 125000,
+    soldCount: 28,
+    image: "",
+    mainFile: {
+      title: "E-Book Panduan Analisis Kasus (50+ Halaman)",
+      fileUrl: "https://example.com/modul/bcc-ebook.pdf",
+    },
+    resources: [
+      {
+        title: "10 Winning Pitch Deck Finalis Nasional & Internasional",
+        fileUrl: "https://example.com/modul/bcc-pitchdecks.zip",
+      },
+      {
+        title: "5 Template Presentasi Kasus Editable (Canva & PPT)",
+        fileUrl: "https://example.com/modul/bcc-templates.zip",
+      },
+      {
+        title: "Video Bedah Kasus Eksklusif (45 Menit)",
+        fileUrl: "https://example.com/modul/bcc-video.mp4",
+      },
+    ],
+    chapters: [
+      "Cara melakukan Root Cause Analysis (MECE, Issue Tree)",
+      "Pemilihan framework yang tepat (SWOT, Porter's 5 Forces, 4P, dll)",
+      "Menyusun strategi solusi dan rencana implementasi (Timeline & Budgeting)",
+      "Teknik Storytelling & Visualisasi Data untuk Pitch Deck yang meyakinkan juri",
+    ],
+    link: "https://docs.google.com/forms/d/e/1FAIpQLSfS5xo7AMuG2dDb417P_BoSuIQq6YUURagvopwxB5CDvwVhJQ/viewform",
+  },
+
+  // --- MENTORING ---
+  // sessionCount matching product_mentoring.session_count yang baru
+  {
+    id: 7,
+    title: "101 Career Mentoring",
+    type: "Mentoring",
+    desc: "Untuk kamu yang ingin serius membangun karier di bidang marketing, mulai dari personal branding sampai optimasi LinkedIn & CV.",
+    price: 110000,
+    originalPrice: null,
+    soldCount: 12,
+    sessionCount: 1,
+    image: "/images/101.png",
+    highlights: [
+      "1 sesi mentoring (60 menit) bersama mentor expert di bidang Marketing",
+      "Free Template CV ATS",
+      "Dapat modul eksklusif & template portofolio",
+      "CV Review Gratis",
+      "Akses komunitas dengan 100+ peserta aktif",
+      "LinkedIn Mutual Network Access",
+    ],
+    link: "https://docs.google.com/forms/d/e/1FAIpQLSff6RdE3NsuXviLtgQ9KdGCTmmpsBi0fWYFpJpseA7hp1mZaw/viewform",
+  },
+  {
+    id: 8,
+    title: "Essential Sprint Registration",
+    type: "Mentoring",
+    desc: "Untuk tim yang sudah mendaftar lomba, butuh pendampingan strategis dalam waktu terbatas.",
+    price: 150000,
+    originalPrice: null,
+    soldCount: 5,
+    sessionCount: 2,
+    image: "/images/ess.png",
+    highlights: [
+      "2 sesi mentoring (60 menit/sesi)",
+      "Bonus 1 sesi jika tim lolos ke final",
+      "Gratis tanya-tanya via WhatsApp",
+      "Sesi 1: Bedah problem + analisis menggunakan framework",
+      "Sesi 2: Review & penyempurnaan solusi",
+    ],
+    link: "https://docs.google.com/forms/d/1O7ZY9AFJqOz96w63URln-_k70OKiGgGTh8UCweNHyrY/viewform?edit_requested=true",
+  },
+  {
+    id: 9,
+    title: "Full-Throttle Coaching",
+    type: "Mentoring",
+    desc: "Untuk tim yang aktif mengikuti lomba, ingin memastikan solusi matang dan presentasi siap.",
+    price: 195000,
+    originalPrice: null,
+    soldCount: 8,
+    sessionCount: 3,
+    image: "/images/full.png",
+    highlights: [
+      "3 sesi mentoring (60 menit/sesi)",
+      "Bonus 1 sesi jika tim lolos ke final",
+      "Gratis tanya-tanya via WhatsApp",
+      "Sesi 1: Bedah problem + analisis menggunakan framework",
+      "Sesi 2: Review & penyempurnaan solusi",
+      "Sesi 3: Review & latihan pitching",
+    ],
+    link: "https://docs.google.com/forms/d/e/1FAIpQLSd4UX6iMc8rzftSFrfgZfsgN4M3-d-ZoZMF10gd_hKAOMrXnw/viewform",
+  },
+  {
+    id: 10,
+    title: "Bundling PowerPack (Newbie Friendly)",
+    type: "Mentoring",
+    desc: "Untuk kamu yang baru mulai ikut BCC, ingin belajar dari nol dengan guidance dan tools lengkap.",
+    price: 300000,
+    originalPrice: null,
+    soldCount: 10,
+    sessionCount: 3,
+    image: "/images/bund.png",
+    highlights: [
+      "3 sesi mentoring (60 menit/sesi)",
+      "Akses 10 deck finalis nasional & 10 framework analisis",
+      "Gratis tanya-tanya via WhatsApp",
+      "Sesi 1: Menentukan main problem, symptoms, root causes dari kasus",
+      "Sesi 2: Pemilihan framework yang tepat sesuai jenis kasus (fit-to-case)",
+      "Sesi 3: Menyusun solusi strategis & rencana implementasi yang realistis",
+    ],
+    link: "https://docs.google.com/forms/d/e/1FAIpQLSfXvHI6DoEGxQgz0pfoX0bnbl34ly1nvdV79v082n0w_XBY1Q/viewform",
+  },
+  {
+    id: 11,
+    title: "BPC Kickstart (Individual)",
+    type: "Mentoring",
+    desc: "Mentoring ini bersifat individual, cocok untuk kamu yang baru mulai dan belum punya ide lomba.",
+    price: 200000,
+    originalPrice: null,
+    soldCount: 3,
+    sessionCount: 2,
+    image: "/images/kick.png",
+    highlights: [
+      "2 sesi mentoring (60 menit/sesi), bersifat individual (1 orang)",
+      "Gratis tanya-tanya via WhatsApp",
+      "Sesi 1 — Ideation & Proposal Mapping: menemukan ide solusi yang relevan dan cara menyusun proposal kompetisi",
+      "Sesi 2 — Pitching & QnA Preparation: menyusun pitch deck dan melatih presentasi ide secara efektif",
+    ],
+    link: "https://docs.google.com/forms/d/e/1FAIpQLSdCkyZZPBl241VIexN9mM9XbUpgnQetySKPvcsA-zEknxn0HA/viewform",
+  },
+  {
+    id: 12,
+    title: "BPC Level-Up (Team Mentoring)",
+    type: "Mentoring",
+    desc: "Untuk tim yang sudah mendaftar lomba dan memiliki ide dasar, ingin mengasah proposal dan persiapan tampil.",
+    price: 250000,
+    originalPrice: null,
+    soldCount: 7,
+    sessionCount: 2,
+    image: "/images/level.png",
+    highlights: [
+      "2 sesi mentoring (60 menit/sesi)",
+      "Bonus 1 sesi jika tim lolos ke final",
+      "Gratis tanya-tanya via WhatsApp",
+      "Sesi 1: Proposal Deep Dive & Strategic Input",
+      "Sesi 2: Customized Mentoring (Pitching / Proposal / QnA)",
+      "Bonus (gratis, untuk tim yang lolos final): Simulasi Final Presentation & QnA Battle",
+    ],
+    link: "https://docs.google.com/forms/d/e/1FAIpQLSfS5xo7AMuG2dDb417P_BoSuIQq6YUURagvopwxB5CDvwVhJQ/viewform",
+  },
 ];
 
+const tabs = ["Semua", "Mentoring", "Bootcamp", "Modul"];
+
 const sections = [
-  { title: "Private Mentoring", type: "MENTORING", lineStyle: "bg-[#D1D83E]" },
-  { title: "Intensive Bootcamp", type: "BOOTCAMP", lineStyle: "bg-[#00C6D1]" },
-  { title: "E-Learning & Modul", type: "MODULE", lineStyle: "bg-[#B19EEF]" },
+  { title: "Private Mentoring", type: "Mentoring", lineStyle: "bg-[#D1D83E]" },
+  { title: "Intensive Bootcamp", type: "Bootcamp", lineStyle: "bg-[#00C6D1]" },
+  { title: "E-Learning & Modul", type: "Modul", lineStyle: "bg-[#B19EEF]" },
 ];
 
 // Token card konten, disamakan persis dengan Homepage & Info Lomba: radius
@@ -28,30 +202,6 @@ const CARD_BASE =
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B19EEF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#060010]";
-function formatRupiah(value) {
-  if (!value) return "";
-  const num = Math.round(parseFloat(value));
-  return "Rp" + num.toLocaleString("id-ID");
-}
-
-
-function mapApiProduct(item) {
-  return {
-    id: item.id,
-    title: item.title,
-    type: item.type,
-    desc: item.description || "",
-    fullDesc: item.full_description || item.description || "",
-    oldPrice: item.original_price ? formatRupiah(item.original_price) : "",
-    newPrice: formatRupiah(item.new_price),
-    sold: item.sold_count || 0,
-    discount: item.discount_percent ? `${item.discount_percent}%` : "",
-    image: item.image_url || "",
-    link: item.registration_link || "#",
-  };
-}
-
-
 
 export default function ProdukPage() {
   const [activeTab, setActiveTab] = useState("Semua");
@@ -59,31 +209,6 @@ export default function ProdukPage() {
   const [selectedProduct, setSelectedProduct] = useState(null);
 
   const shouldReduceMotion = useReducedMotion();
-  const [productData, setProductData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    async function fetchProducts() {
-      try {
-        setLoading(true);
-        const json = await api.get("/api/products/?all=true", { auth: false });
-        const mapped = (json.products || []).map(mapApiProduct);
-        setProductData(mapped);
-        setError(null);
-      } catch (err) {
-        if (err instanceof ApiError) {
-          setError(err.message);
-        } else {
-          setError("Gagal memuat data produk. Silakan coba lagi.");
-        }
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchProducts();
-  }, []);
 
   // Filter Data
   const filteredProducts = productData.filter((p) => {
@@ -109,16 +234,19 @@ export default function ProdukPage() {
       };
 
   return (
-    <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative overflow-x-hidden">
-      {/* Background Glow */}
-      <div
-        className="fixed top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%] pointer-events-none z-0"
-        style={{
-          background:
-            "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
-          filter: "blur(40px)",
-        }}
-      />
+    <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col">
+      {/* Background Glow -- overflow-hidden di-scope ke wrapper kecil ini
+          doang (bukan di root), biar nggak ganggu scroll/sticky halaman. */}
+      <div className="absolute inset-x-0 top-0 h-[400px] overflow-hidden pointer-events-none z-0">
+        <div
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%]"
+          style={{
+            background:
+              "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
+            filter: "blur(40px)",
+          }}
+        />
+      </div>
 
       <Navbar />
 
@@ -168,17 +296,17 @@ export default function ProdukPage() {
 
         {/* CATEGORY FILTERS */}
         <div className="flex flex-wrap justify-center gap-2 md:gap-3 mb-10 w-full max-w-[800px]">
-          {tabs.map((tab) => (
+          {tabs.map((tab, index) => (
             <button
-              key={tab.value}
-              onClick={() => setActiveTab(tab.value)}
+              key={index}
+              onClick={() => setActiveTab(tab)}
               className={`px-5 py-2 rounded-full text-xs md:text-sm font-semibold transition-colors duration-300 ${focusRing} ${
-                activeTab === tab.value
+                activeTab === tab
                   ? "bg-[#530D8E] text-white"
                   : "bg-[#1A1625] border border-white/5 text-[#A19DAB] hover:bg-[#2A2438] hover:text-white"
               }`}
             >
-              {tab.label}
+              {tab}
             </button>
           ))}
         </div>
@@ -318,24 +446,113 @@ export default function ProdukPage() {
 
                 <div className="flex items-center gap-3 mb-6 border-b border-white/10 pb-4">
                   <p className="font-poppins font-bold text-3xl text-[#08C7E1]">
-                    {selectedProduct.newPrice}
+                    {formatRupiah(selectedProduct.price)}
                   </p>
-
-                  {selectedProduct.discount && (
-                    <p className="text-gray-500 text-sm line-through decoration-gray-500">
-                      {selectedProduct.oldPrice}
-                    </p>
+                  {selectedProduct.originalPrice > selectedProduct.price && (
+                    <>
+                      <p className="text-gray-500 text-sm line-through decoration-gray-500">
+                        {formatRupiah(selectedProduct.originalPrice)}
+                      </p>
+                      <p className="text-[#FF8A93] text-xs font-bold">
+                        -
+                        {getDiscountPercent(
+                          selectedProduct.price,
+                          selectedProduct.originalPrice,
+                        )}
+                        %
+                      </p>
+                    </>
                   )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar text-sm text-gray-300 leading-relaxed whitespace-pre-wrap mb-6">
-                  {selectedProduct.fullDesc || selectedProduct.desc}
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar text-sm text-gray-300 leading-relaxed mb-6">
+                  <p className="mb-4">{selectedProduct.desc}</p>
+
+                  {/* --- MODUL: file utama + bundle resource, masing-masing
+                      punya link download sendiri (bukan 1 blok teks) --- */}
+                  {selectedProduct.type === "Modul" && (
+                    <>
+                      <p className="text-white font-semibold text-xs uppercase tracking-wide mb-2">
+                        Isi Bundle (
+                        {1 + (selectedProduct.resources?.length || 0)} File)
+                      </p>
+                      <ul className="flex flex-col gap-2 mb-5">
+                        <li className="flex items-center gap-2 text-gray-300">
+                          <FileText
+                            size={14}
+                            className="text-[#08C7E1] shrink-0"
+                          />
+                          {selectedProduct.mainFile.title}
+                          <span className="text-[10px] text-[#08C7E1] font-semibold ml-auto shrink-0">
+                            Materi Utama
+                          </span>
+                        </li>
+                        {selectedProduct.resources.map((res, idx) => (
+                          <li
+                            key={idx}
+                            className="flex items-center gap-2 text-gray-300"
+                          >
+                            <FileText
+                              size={14}
+                              className="text-[#B19EEF] shrink-0"
+                            />
+                            {res.title}
+                          </li>
+                        ))}
+                      </ul>
+
+                      {selectedProduct.chapters && (
+                        <>
+                          <p className="text-white font-semibold text-xs uppercase tracking-wide mb-2">
+                            Cakupan Materi
+                          </p>
+                          <ol className="flex flex-col gap-2">
+                            {selectedProduct.chapters.map((chapter, idx) => (
+                              <li
+                                key={idx}
+                                className="flex items-start gap-2 text-gray-300"
+                              >
+                                <span className="text-[#B19EEF] font-bold shrink-0">
+                                  {idx + 1}.
+                                </span>
+                                {chapter}
+                              </li>
+                            ))}
+                          </ol>
+                        </>
+                      )}
+                    </>
+                  )}
+
+                  {/* --- MENTORING: highlight per poin, jumlah sesi kelihatan
+                      jelas di judul section --- */}
+                  {selectedProduct.type === "Mentoring" &&
+                    selectedProduct.highlights && (
+                      <>
+                        <p className="text-white font-semibold text-xs uppercase tracking-wide mb-2">
+                          {selectedProduct.sessionCount}x Sesi Mentoring &mdash;
+                          Yang Kamu Dapatkan
+                        </p>
+                        <ul className="flex flex-col gap-2">
+                          {selectedProduct.highlights.map((point, idx) => (
+                            <li
+                              key={idx}
+                              className="flex items-start gap-2 text-gray-300"
+                            >
+                              <Check
+                                size={14}
+                                className="text-[#D1D83E] shrink-0 mt-0.5"
+                              />
+                              {point}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
                 </div>
 
                 <Link
-                  href={selectedProduct.link || "#"}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={`/checkout/${selectedProduct.id}`}
                   className={`w-full bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold py-3 rounded-full transition-colors mt-auto text-center shrink-0 ${focusRing}`}
                 >
                   Beli Sekarang
@@ -375,16 +592,20 @@ function ProductCard({ data, onClick, reduceMotion }) {
   let tagStyle = "";
   let priceColor = "";
 
-  if (data.type === "BOOTCAMP") {
+  if (data.type === "Bootcamp") {
     tagStyle = "bg-[#0A4A5C] text-[#00C6D1]";
     priceColor = "text-[#00C6D1]";
-  } else if (data.type === "MODULE") {
+  } else if (data.type === "Modul") {
     tagStyle = "bg-[#3B0E76] text-[#B19EEF]";
     priceColor = "text-[#B19EEF]";
-  } else if (data.type === "MENTORING") {
+  } else if (data.type === "Mentoring") {
     tagStyle = "bg-[#3A3610] text-[#D1D83E]";
     priceColor = "text-[#D1D83E]";
   }
+
+  const discountPercent = getDiscountPercent(data.price, data.originalPrice);
+  const fileCount =
+    data.type === "Modul" ? 1 + (data.resources?.length || 0) : null;
 
   const entranceMotion = reduceMotion
     ? {
@@ -428,10 +649,10 @@ function ProductCard({ data, onClick, reduceMotion }) {
               {data.type}
             </p>
           </div>
-          {data.discount && (
+          {discountPercent && (
             <div className="bg-[#FF6B6B]/20 px-3 py-1 rounded-md border border-[#FF6B6B]/30 shadow-lg">
               <p className="text-[9px] md:text-[10px] font-bold text-[#FF8A93] tracking-wider">
-                {data.discount}
+                -{discountPercent}%
               </p>
             </div>
           )}
@@ -439,30 +660,42 @@ function ProductCard({ data, onClick, reduceMotion }) {
       </div>
 
       <div className="p-5 md:p-6 flex flex-col flex-1 bg-[#120822] relative z-10">
-        <h3 className="font-poppins font-bold text-lg md:text-xl text-white mb-2 leading-tight">
+        <h3 className="font-poppins font-bold text-lg md:text-xl text-white mb-2 leading-tight line-clamp-2 min-h-[28px] md:min-h-[32px]">
           {data.title}
         </h3>
 
-        <p className="text-gray-400 text-xs leading-relaxed line-clamp-3 mb-6">
+        <p className="text-gray-400 text-xs leading-relaxed line-clamp-3 mb-3">
           {data.desc}
         </p>
 
+        {/* Indikator jumlah file (Modul) atau jumlah sesi (Mentoring) --
+            biar jelas dari katalog doang, sebelum buka modal */}
+        {fileCount && (
+          <p className="flex items-center gap-1.5 text-[#B19EEF] text-[10px] font-semibold mb-4">
+            <FileText size={12} />
+            {fileCount} File dalam Bundle
+          </p>
+        )}
+        {data.type === "Mentoring" && data.sessionCount && (
+          <p className="text-[#D1D83E] text-[10px] font-semibold mb-4">
+            {data.sessionCount}x Sesi Mentoring
+          </p>
+        )}
+
         <div className="mt-auto flex flex-col items-end">
-          {data.discount && (
+          {data.originalPrice > data.price && (
             <p className="text-gray-500 text-[10px] md:text-xs line-through decoration-gray-500 mb-0.5">
-              {data.oldPrice}
+              {formatRupiah(data.originalPrice)}
             </p>
           )}
-
           <p
             className={`font-poppins font-bold text-2xl md:text-3xl ${priceColor} mb-1`}
           >
-            {data.newPrice}
+            {formatRupiah(data.price)}
           </p>
-
-          {data.sold > 0 && (
+          {data.soldCount > 0 && (
             <p className="text-gray-500 text-[9px] md:text-[10px]">
-              {data.sold} Terjual
+              {data.soldCount} Terjual
             </p>
           )}
         </div>

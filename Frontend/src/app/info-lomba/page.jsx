@@ -100,16 +100,22 @@ export default function InfoLombaPage() {
   }, []);
 
   return (
-    <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative overflow-x-hidden">
-      {/* Background Glow */}
-      <div
-        className="fixed top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%] pointer-events-none z-0"
-        style={{
-          background:
-            "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
-          filter: "blur(40px)",
-        }}
-      />
+    <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col">
+      {/* Background Glow -- overflow-hidden di-scope ke wrapper kecil ini
+          doang (bukan di root). Naruh overflow-x-hidden di root itu jebakan
+          CSS: overflow-x selain "visible" bikin overflow-y otomatis "auto",
+          yang diam-diam ngerubah div ini jadi scroll container sendiri, dan
+          bisa ganggu scroll/sticky behavior halaman. */}
+      <div className="absolute inset-x-0 top-0 h-[400px] overflow-hidden pointer-events-none z-0">
+        <div
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%]"
+          style={{
+            background:
+              "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
+            filter: "blur(40px)",
+          }}
+        />
+      </div>
 
       <Navbar />
 
@@ -240,7 +246,7 @@ export default function InfoLombaPage() {
 
                   {/* Info Content */}
                   <div className="p-6 flex flex-col gap-3">
-                    <h3 className="font-poppins font-bold text-xl text-white">
+                    <h3 className="font-poppins font-bold text-xl text-white line-clamp-2 min-h-[56px]">
                       {lomba.title}
                     </h3>
 
@@ -288,7 +294,7 @@ export default function InfoLombaPage() {
                           Biaya Pendaftaran
                         </p>
                         <p className="text-white font-bold text-sm">
-                          {lomba.fee}
+                          {formatFee(lomba.feeMin, lomba.feeMax)}
                         </p>
                       </div>
                       <div className="flex flex-col text-right">
@@ -376,7 +382,7 @@ export default function InfoLombaPage() {
                   />
                   <InfoBox
                     title="Biaya"
-                    value={selectedLomba.fee}
+                    value={formatFee(selectedLomba.feeMin, selectedLomba.feeMax)}
                     icon={<WalletIcon />}
                   />
                   <InfoBox
