@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import Navbar from "@/component/navbar";
+import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 import { motion, useReducedMotion } from "framer-motion";
 import { useState, useEffect } from "react";
@@ -13,8 +13,6 @@ import { api, ApiError } from "@/lib/api";
 // isi field ini dengan data asli begitu tersedia. Selama masih kosong, UI-nya
 // otomatis fallback ke avatar inisial (bukan foto) dan icon sosial jadi nonaktif
 // (bukan link mati yang keliatan aktif tapi nggak beneran nyambung ke mana-mana).
-
-
 
 // Beberapa gradient dari palet Mark-Up yang udah ada, dipakai bergantian buat
 // background avatar inisial biar nggak monoton semua kartu sama persis.
@@ -111,7 +109,7 @@ export default function MentorPage() {
         setError(
           err instanceof ApiError
             ? err.message
-            : "Gagal memuat data mentor. Silakan coba lagi."
+            : "Gagal memuat data mentor. Silakan coba lagi.",
         );
       } finally {
         setLoading(false);
@@ -161,10 +159,8 @@ export default function MentorPage() {
             <p className="text-[#A19DAB] text-sm">Memuat data mentor...</p>
           )}
 
-          {!loading && error && (
-            <p className="text-red-400 text-sm">{error}</p>
-          )}
-          
+          {!loading && error && <p className="text-red-400 text-sm">{error}</p>}
+
           {!loading && !error && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 md:gap-6 w-full">
               {mentors.map((mentor, index) => (
@@ -205,7 +201,9 @@ export default function MentorPage() {
 
                   {/* Role, cuma tampil kalau datanya ada */}
                   {mentor.role && (
-                    <p className="text-[#A19DAB] text-xs -mt-2">{mentor.role}</p>
+                    <p className="text-[#A19DAB] text-xs -mt-2">
+                      {mentor.role}
+                    </p>
                   )}
 
                   {/* Sosial media */}

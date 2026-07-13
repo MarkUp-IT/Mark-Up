@@ -2,9 +2,48 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import Link from "next/link";
+import { Eye, EyeOff } from "lucide-react";
 import Toast from "@/component/Toast";
 import { api, ApiError, setTokens } from "@/lib/api";
+
+// Paksa background input autofill browser tetap gelap -- browser (Chrome dkk)
+// otomatis kasih background terang ke field yang di-autofill/diinget, dan itu
+// nggak bisa dioverride cuma pakai bg-[] class biasa. Ini yang bikin label
+// "nabrak" sama teks kemarin: warna background field berubah jadi terang tanpa
+// sepengetahuan kita, sementara warna masking label tetap gelap.
+const autofillFix = `
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0px 1000px #2B2B2B inset;
+    -webkit-text-fill-color: #ffffff;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+  .auth-illustration { display: none; }
+  @media (min-width: 1024px) {
+    .auth-illustration { display: block; }
+  }
+`;
+
+function Field({ label, type = "text", value, onChange, rightIcon }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[13px] text-[#B19EEF] font-medium">{label}</label>
+      <div className="relative">
+        <input
+          type={type}
+          value={value}
+          onChange={onChange}
+          className={`w-full h-[48px] bg-[#2B2B2B] rounded-[12px] px-4 ${
+            rightIcon ? "pr-12" : ""
+          } text-[14px] text-white outline-none focus:ring-2 focus:ring-[#B19EEF]/50 transition-shadow`}
+        />
+        {rightIcon}
+      </div>
+    </div>
+  );
+}
 
 export default function Login() {
   const router = useRouter();
@@ -39,7 +78,7 @@ export default function Login() {
       const data = await api.post(
         "/api/accounts/login/",
         { email, password },
-        { auth: false }
+        { auth: false },
       );
 
       setTokens({ access: data.access, refresh: data.refresh });
@@ -47,7 +86,7 @@ export default function Login() {
       showToast(
         "success",
         "Login berhasil",
-        "Anda akan diarahkan ke dashboard user."
+        "Kamu akan diarahkan ke dashboard.",
       );
 
       window.setTimeout(() => {
@@ -67,78 +106,60 @@ export default function Login() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative overflow-x-hidden">
-      {/* Background Glow */}
+    <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative">
+      <style>{autofillFix}</style>
+
+      <div className="absolute inset-x-0 top-0 h-[400px] overflow-hidden pointer-events-none z-0">
+        <div
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%]"
+          style={{
+            background:
+              "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
+            filter: "blur(40px)",
+          }}
+        />
+      </div>
+
+      {/* Form + gambar dikelompokkan jadi satu klaster di tengah dengan gap
+          wajar -- BUKAN split 50/50 (itu yang bikin gambar keliatan
+          terdampar jauh di kanan kemarin). */}
       <div
-        className="fixed top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%] pointer-events-none z-0"
-        style={{
-          background:
-            "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
-          filter: "blur(40px)",
-        }}
-      />
-
-      <button
-        onClick={() => router.push("/")}
-        className="absolute top-6 left-6 z-20 flex items-center justify-center w-[40px] h-[40px] rounded-full bg-[#2B2B2B] hover:bg-[#3a3a3a] transition-colors"
+        className="relative z-10 w-full min-h-screen flex items-center justify-center px-6 py-16"
+        style={{ gap: "60px", flexWrap: "wrap" }}
       >
-        <ArrowLeft className="w-5 h-5 text-white" />
-      </button>
+        <form
+          onSubmit={handleSubmit}
+          style={{ width: "100%", maxWidth: "380px", flexShrink: 0 }}
+          className="flex flex-col gap-4"
+        >
+          <div className="flex flex-col gap-1.5">
+            <img
+              src="/images/logo-markup.svg"
+              alt="Mark-Up"
+              className="w-[150px]"
+            />
+            <p className="font-bold text-[#B19EEF] text-[28px] font-poppins mt-2">
+              Login
+            </p>
+            <p className="text-[13px] text-[#9CA3AF]">
+              Selamat datang di platform MARK-UP
+            </p>
+          </div>
 
-      <div className="w-full min-h-screen flex flex-row ">
-        <div className="w-1/2 flex justify-center items-center">
-          <form
-            onSubmit={handleSubmit}
-            className="flex flex-col gap-[18px] mt-5 mb-5"
-          >
-            <div className="flex flex-col gap-[2px]">
-              <img src="/images/logo-markup.svg" className="w-[200px]" />
-              <p className="font-bold text-[#B19EEF] text-[60px] font-poppins">
-                Login
-              </p>
-              <p className="text-[18px] font-regular w-[450px]">
-                Selamat datang di platform MARK-UP
-              </p>
-            </div>
+          {formError && <p className="text-red-400 text-[13px]">{formError}</p>}
 
-            {formError && (
-              <p className="text-red-400 text-[13px] -mb-2">{formError}</p>
-            )}
+          <Field
+            label="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
 
-            {/* Email */}
-            <div className="relative">
-              {email !== "" && (
-                <label className="absolute -top-3 left-5 text-[12px] text-[#B19EEF] bg-transparent px-2 z-10">
-                  Email
-                </label>
-              )}
-              <input
-                type="text"
-                id="email"
-                name="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-[452px] h-[50px] bg-[#2B2B2B] rounded-[16px] pl-10 text-[14px] font-poppins focus:outline-none"
-              />
-            </div>
-
-            {/* Password */}
-            <div className="relative">
-              {password !== "" && (
-                <label className="absolute -top-3 left-5 text-[12px] text-[#B19EEF] bg-transparent px-2 z-10">
-                  Password
-                </label>
-              )}
-              <input
-                type={showPassword ? "text" : "password"}
-                id="password"
-                name="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-[452px] h-[50px] bg-[#2B2B2B] rounded-[16px] pl-10 pr-12 text-[14px] font-poppins focus:outline-none"
-              />
+          <Field
+            label="Password"
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            rightIcon={
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
@@ -151,35 +172,40 @@ export default function Login() {
                   <Eye className="w-[18px] h-[18px]" />
                 )}
               </button>
-            </div>
+            }
+          />
 
-            <div className="flex flex-row gap-3 items-center"></div>
+          <Link
+            href="/forgot-password"
+            className="text-[#08C7E1] text-[13px] hover:underline -mt-1 w-fit"
+          >
+            Lupa password?
+          </Link>
 
-            <div>
-              <button
-                type="submit"
-                disabled={!isValid || isSubmitting}
-                className="bg-[#B19EEF] flex items-center justify-center w-[452px] h-[52px] rounded-[14px] text-[#000000] font-bold disabled:bg-[#635983] disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? "Memproses..." : "Masuk"}
-              </button>
-            </div>
+          <button
+            type="submit"
+            disabled={!isValid || isSubmitting}
+            className="bg-[#B19EEF] flex items-center justify-center w-full h-[48px] rounded-[12px] text-black font-bold text-[14px] disabled:bg-[#635983] disabled:cursor-not-allowed transition-colors mt-1"
+          >
+            {isSubmitting ? "Memproses..." : "Masuk"}
+          </button>
 
-            <p className="text-[13px] text-center -mt-1">
-              Belum Memiliki Akun?{" "}
-              <span
-                onClick={() => router.push("/register")}
-                className="text-[#08C7E1] cursor-pointer hover:underline"
-              >
-                Daftarkan Akun
-              </span>
-            </p>
-          </form>
-        </div>
-        <div className="w-1/2 flex justify-center items-center">
+          <p className="text-[13px] text-center text-[#9CA3AF]">
+            Belum memiliki akun?{" "}
+            <Link href="/register" className="text-[#08C7E1] hover:underline">
+              Daftarkan Akun
+            </Link>
+          </p>
+        </form>
+
+        <div
+          className="auth-illustration"
+          style={{ width: "380px", height: "460px", flexShrink: 0 }}
+        >
           <img
             src="/images/placeholder_auth.png"
-            className=" w-[635px] h-[661px]"
+            alt=""
+            style={{ width: "100%", height: "100%", objectFit: "contain" }}
           />
         </div>
       </div>

@@ -1,11 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import Navbar from "@/component/navbar";
+import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { SearchX } from "lucide-react";
+
+// biaya disimpan sebagai ANGKA (feeMin wajib, feeMax opsional) -- matching
+// competitions.registration_fee + registration_fee_max yang baru. feeMax
+// null/sama dengan feeMin -> tampil sebagai biaya tunggal, bukan rentang.
+const formatRupiahShort = (value) =>
+  "Rp" + new Intl.NumberFormat("id-ID").format(value);
+
+const formatFee = (feeMin, feeMax) => {
+  if (!feeMax || feeMax === feeMin) return formatRupiahShort(feeMin);
+  return `${formatRupiahShort(feeMin)} - ${formatRupiahShort(feeMax)}`;
+};
 
 const lombaData = [
   {
@@ -15,7 +26,8 @@ const lombaData = [
     organizer: "Kopma UMY",
     date: "14/06/2026",
     deadline: "31/03/2026",
-    fee: "Rp20.000 - Rp25.000",
+    feeMin: 20000,
+    feeMax: 25000,
     prize: "Jutaan Rupiah",
     level: "Nasional",
     target: "Siswa SMA/SMK/MA",
@@ -29,7 +41,8 @@ const lombaData = [
     organizer: "As-Syifa Boarding School Wanareja",
     date: "16-17 April 2026",
     deadline: "02/04/2026",
-    fee: "Rp250.000",
+    feeMin: 250000,
+    feeMax: null,
     prize: "Rp1.500.000 + Piala",
     level: "Nasional",
     target: "Siswa SMA/SMK/MA",
@@ -43,7 +56,8 @@ const lombaData = [
     organizer: "DreamCareer",
     date: "15-17 Maret 2026",
     deadline: "17/03/2026",
-    fee: "Rp50.000 - Rp75.000",
+    feeMin: 50000,
+    feeMax: 75000,
     prize: "Jutaan Rupiah + Fast-track Magang",
     level: "Nasional",
     target: "Mahasiswa D3/D4/S1",
@@ -116,16 +130,22 @@ export default function InfoLombaPage() {
       };
 
   return (
-    <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative overflow-x-hidden">
-      {/* Background Glow */}
-      <div
-        className="fixed top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%] pointer-events-none z-0"
-        style={{
-          background:
-            "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
-          filter: "blur(40px)",
-        }}
-      />
+    <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col">
+      {/* Background Glow -- overflow-hidden di-scope ke wrapper kecil ini
+          doang (bukan di root). Naruh overflow-x-hidden di root itu jebakan
+          CSS: overflow-x selain "visible" bikin overflow-y otomatis "auto",
+          yang diam-diam ngerubah div ini jadi scroll container sendiri, dan
+          bisa ganggu scroll/sticky behavior halaman. */}
+      <div className="absolute inset-x-0 top-0 h-[400px] overflow-hidden pointer-events-none z-0">
+        <div
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%]"
+          style={{
+            background:
+              "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
+            filter: "blur(40px)",
+          }}
+        />
+      </div>
 
       <Navbar />
 
@@ -242,7 +262,7 @@ export default function InfoLombaPage() {
 
                   {/* Info Content */}
                   <div className="p-6 flex flex-col gap-3">
-                    <h3 className="font-poppins font-bold text-xl text-white">
+                    <h3 className="font-poppins font-bold text-xl text-white line-clamp-2 min-h-[56px]">
                       {lomba.title}
                     </h3>
 
@@ -290,7 +310,7 @@ export default function InfoLombaPage() {
                           Biaya Pendaftaran
                         </p>
                         <p className="text-white font-bold text-sm">
-                          {lomba.fee}
+                          {formatFee(lomba.feeMin, lomba.feeMax)}
                         </p>
                       </div>
                       <div className="flex flex-col text-right">
@@ -378,7 +398,7 @@ export default function InfoLombaPage() {
                   />
                   <InfoBox
                     title="Biaya"
-                    value={selectedLomba.fee}
+                    value={formatFee(selectedLomba.feeMin, selectedLomba.feeMax)}
                     icon={<WalletIcon />}
                   />
                   <InfoBox

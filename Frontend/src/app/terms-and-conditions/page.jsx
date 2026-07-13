@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { Headphones, Mail } from "lucide-react";
-import Navbar from "@/component/navbar";
+import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 
 const sections = [
