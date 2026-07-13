@@ -13,18 +13,22 @@ const FILTERS = ["all", "bootcamp", "mentoring"];
 
 // Card yang dipakai bareng Bootcamp & Mentoring -- satu sumber kebenaran
 // buat ukuran & style, sama persis kayak yang dipakai di my-products user.
-function ClassCard({ id, title, description, imageClass, badge, badgeColor }) {
+function ClassCard({ id, title, description, imageClass, badge, isCompleted }) {
   return (
     <Link
       href={`/mentor/active-classes/${id}`}
-      className={`flex flex-col h-full rounded-[12px] overflow-hidden cursor-pointer group shadow-lg hover:shadow-[${badgeColor}]/10 transition-all border border-[#2D2342] hover:border-[#4C1D95] ${focusRing}`}
+      className={`flex flex-col h-full rounded-[12px] overflow-hidden cursor-pointer group shadow-lg transition-all border ${focusRing} ${
+        isCompleted
+          ? "border-[#2D2342] opacity-70 hover:opacity-100"
+          : "border-[#2D2342] hover:border-[#4C1D95]"
+      }`}
     >
       <div
         className={`h-[140px] shrink-0 bg-gradient-to-br ${imageClass} relative`}
       >
         <div className="absolute top-3 right-3 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
           <p className="text-[11px] font-bold text-white tracking-wider">
-            {badge}
+            {isCompleted ? "SELESAI" : badge}
           </p>
         </div>
       </div>
@@ -42,7 +46,7 @@ function ClassCard({ id, title, description, imageClass, badge, badgeColor }) {
 
 export default function MentorDashboard() {
   const [activeFilter, setActiveFilter] = useState("all");
-  const shouldReduceMotion = useReducedMotion();
+  const shouldReduceMotion = useReducedMotion() ?? false;
 
   const sectionReveal = {
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
@@ -69,7 +73,7 @@ export default function MentorDashboard() {
       description:
         "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor.",
       imageClass: "from-[#4C1D95] to-[#0D9488]",
-      currentSession: 5,
+      completedSessions: 5,
       totalSessions: 8,
     },
     {
@@ -78,7 +82,7 @@ export default function MentorDashboard() {
       description:
         "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor.",
       imageClass: "from-[#4C1D95] to-[#0D9488]",
-      currentSession: 2,
+      completedSessions: 6,
       totalSessions: 6,
     },
   ];
@@ -92,7 +96,7 @@ export default function MentorDashboard() {
       title: "1-on-1 Career Mentoring — Sarah Jenkins",
       description: "Reviewing resume and preparing for technical interviews.",
       imageClass: "from-[#4C1D95] to-[#CA8A04]",
-      currentSession: 1,
+      completedSessions: 0,
       totalSessions: 1,
     },
     {
@@ -101,13 +105,30 @@ export default function MentorDashboard() {
       description:
         "Student wants to discuss advanced validation strategies and startup pitching.",
       imageClass: "from-[#4C1D95] to-[#CA8A04]",
-      currentSession: 2,
+      completedSessions: 2,
       totalSessions: 3,
     },
   ];
 
   const showBootcamp = activeFilter === "all" || activeFilter === "bootcamp";
   const showMentoring = activeFilter === "all" || activeFilter === "mentoring";
+
+  const activeBootcampCount = bootcampClasses.filter(
+    (i) => i.completedSessions < i.totalSessions,
+  ).length;
+  const activeMentoringCount = mentoringClasses.filter(
+    (i) => i.completedSessions < i.totalSessions,
+  ).length;
+
+  // Aktif duluan, yang udah Selesai digeser ke bawah -- tetap satu list yang
+  // sama, biar gampang ditemuin lagi kalau mentor mau cek riwayat/rekaman.
+  const sortByActiveFirst = (a, b) => {
+    const aDone = a.completedSessions >= a.totalSessions;
+    const bDone = b.completedSessions >= b.totalSessions;
+    return aDone === bDone ? 0 : aDone ? 1 : -1;
+  };
+  const sortedBootcamp = [...bootcampClasses].sort(sortByActiveFirst);
+  const sortedMentoring = [...mentoringClasses].sort(sortByActiveFirst);
 
   return (
     <DashboardLayout title="Active Classes">
@@ -146,7 +167,7 @@ export default function MentorDashboard() {
         <div className="grid grid-cols-2 gap-4 shrink-0">
           <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-4 sm:px-6 py-5 flex flex-col items-center justify-center min-w-[95px] sm:min-w-[120px]">
             <p className="text-[#148F89] font-bold text-[30px] sm:text-[34px] leading-none">
-              {bootcampClasses.length}
+              {activeBootcampCount}
             </p>
             <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center whitespace-nowrap">
               Bootcamp Aktif
@@ -154,7 +175,7 @@ export default function MentorDashboard() {
           </div>
           <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-4 sm:px-6 py-5 flex flex-col items-center justify-center min-w-[95px] sm:min-w-[120px]">
             <p className="text-[#148F89] font-bold text-[30px] sm:text-[34px] leading-none">
-              {mentoringClasses.length}
+              {activeMentoringCount}
             </p>
             <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center whitespace-nowrap">
               Mentoring Aktif
@@ -175,22 +196,26 @@ export default function MentorDashboard() {
             <EmptyState message="Belum ada kelas bootcamp yang ditugaskan ke kamu." />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {bootcampClasses.map((item, index) => (
-                <motion.div
-                  key={item.id}
-                  {...cardReveal(index)}
-                  className="h-full"
-                >
-                  <ClassCard
-                    id={item.id}
-                    title={item.title}
-                    description={item.description}
-                    imageClass={item.imageClass}
-                    badge={`SESSION ${item.currentSession}/${item.totalSessions}`}
-                    badgeColor="#148F89"
-                  />
-                </motion.div>
-              ))}
+              {sortedBootcamp.map((item, index) => {
+                const isCompleted =
+                  item.completedSessions >= item.totalSessions;
+                return (
+                  <motion.div
+                    key={item.id}
+                    {...cardReveal(index)}
+                    className="h-full"
+                  >
+                    <ClassCard
+                      id={item.id}
+                      title={item.title}
+                      description={item.description}
+                      imageClass={item.imageClass}
+                      isCompleted={isCompleted}
+                      badge={`SESSION ${Math.min(item.completedSessions + 1, item.totalSessions)}/${item.totalSessions}`}
+                    />
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </motion.div>
@@ -208,22 +233,26 @@ export default function MentorDashboard() {
             <EmptyState message="Belum ada jadwal mentoring privat yang masuk." />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {mentoringClasses.map((item, index) => (
-                <motion.div
-                  key={item.id}
-                  {...cardReveal(index)}
-                  className="h-full"
-                >
-                  <ClassCard
-                    id={item.id}
-                    title={item.title}
-                    description={item.description}
-                    imageClass={item.imageClass}
-                    badge={`SESI ${item.currentSession}/${item.totalSessions}`}
-                    badgeColor="#D1D83E"
-                  />
-                </motion.div>
-              ))}
+              {sortedMentoring.map((item, index) => {
+                const isCompleted =
+                  item.completedSessions >= item.totalSessions;
+                return (
+                  <motion.div
+                    key={item.id}
+                    {...cardReveal(index)}
+                    className="h-full"
+                  >
+                    <ClassCard
+                      id={item.id}
+                      title={item.title}
+                      description={item.description}
+                      imageClass={item.imageClass}
+                      isCompleted={isCompleted}
+                      badge={`SESI ${Math.min(item.completedSessions + 1, item.totalSessions)}/${item.totalSessions}`}
+                    />
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </motion.div>

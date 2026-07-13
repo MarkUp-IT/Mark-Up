@@ -51,6 +51,7 @@ const PRODUCT = {
   title: "Bundling PowerPack (Newbie Friendly)",
   price: 300000,
   image: "/images/bund.png",
+  sessionCount: 3, // matching product_mentoring.session_count
 };
 
 // --- MOCK DATA (nanti ganti query mentor_profiles + mentor_expertises,
@@ -90,7 +91,10 @@ const MENTORS = [
     expertise: ["Business Plan Competition", "Career Mentoring"],
     experience: [
       { title: "Design Lead, Traveloka", period: "2021 — Sekarang" },
-      { title: "Business Consultant, PT Konsultan Maju", period: "2018 — 2021" },
+      {
+        title: "Business Consultant, PT Konsultan Maju",
+        period: "2018 — 2021",
+      },
     ],
     slots: [
       { id: "S4", date: "Sel, 15 Jul", time: "09:00" },
@@ -108,7 +112,10 @@ const MENTORS = [
     linkedin: "https://linkedin.com/in/alyahamidah",
     expertise: ["Business Case Competition"],
     experience: [
-      { title: "Business Consultant, PT Konsultan Maju Bersama", period: "2023 — Sekarang" },
+      {
+        title: "Business Consultant, PT Konsultan Maju Bersama",
+        period: "2023 — Sekarang",
+      },
     ],
     slots: [
       { id: "S6", date: "Kam, 17 Jul", time: "13:00" },
@@ -125,7 +132,9 @@ const MENTORS = [
     bio: "Mantan juara debat nasional, sekarang aktif melatih tim debat dan public speaking untuk kompetisi.",
     linkedin: "https://linkedin.com/in/adenalaksita",
     expertise: ["Career Mentoring"],
-    experience: [{ title: "Debate Coach, Freelance", period: "2020 — Sekarang" }],
+    experience: [
+      { title: "Debate Coach, Freelance", period: "2020 — Sekarang" },
+    ],
     slots: [{ id: "S8", date: "Sab, 19 Jul", time: "10:00" }],
   },
   {
@@ -138,7 +147,9 @@ const MENTORS = [
     bio: "Founder startup dengan pengalaman menyusun business plan yang berhasil meraih pendanaan.",
     linkedin: "https://linkedin.com/in/fahriramadhan",
     expertise: ["Business Plan Competition"],
-    experience: [{ title: "Co-Founder, RintisTech", period: "2021 — Sekarang" }],
+    experience: [
+      { title: "Co-Founder, RintisTech", period: "2021 — Sekarang" },
+    ],
     slots: [
       { id: "S9", date: "Min, 20 Jul", time: "15:00" },
       { id: "S10", date: "Sen, 21 Jul", time: "11:00" },
@@ -154,7 +165,9 @@ const MENTORS = [
     bio: "Berpengalaman di rekrutmen dan pengembangan karier, sering jadi mentor persiapan interview kerja.",
     linkedin: "https://linkedin.com/in/nadiaputri",
     expertise: ["Career Mentoring"],
-    experience: [{ title: "HR Business Partner, Bank Mandiri", period: "2020 — Sekarang" }],
+    experience: [
+      { title: "HR Business Partner, Bank Mandiri", period: "2020 — Sekarang" },
+    ],
     slots: [{ id: "S11", date: "Sel, 22 Jul", time: "16:00" }],
   },
   {
@@ -167,7 +180,12 @@ const MENTORS = [
     bio: "Konsultan manajemen di firma consulting Big 4, spesialis case study dan problem solving framework.",
     linkedin: "https://linkedin.com/in/rezafirmansyah",
     expertise: ["Business Case Competition"],
-    experience: [{ title: "Associate Consultant, Deloitte Indonesia", period: "2022 — Sekarang" }],
+    experience: [
+      {
+        title: "Associate Consultant, Deloitte Indonesia",
+        period: "2022 — Sekarang",
+      },
+    ],
     slots: [{ id: "S12", date: "Rab, 23 Jul", time: "18:00" }],
   },
   {
@@ -180,7 +198,9 @@ const MENTORS = [
     bio: "Analis VC yang sering menilai business plan startup, paham banget apa yang bikin proposal menang.",
     linkedin: "https://linkedin.com/in/clarissawijaya",
     expertise: ["Business Plan Competition"],
-    experience: [{ title: "Investment Analyst, East Ventures", period: "2021 — Sekarang" }],
+    experience: [
+      { title: "Investment Analyst, East Ventures", period: "2021 — Sekarang" },
+    ],
     slots: [{ id: "S13", date: "Kam, 24 Jul", time: "10:00" }],
   },
   {
@@ -193,7 +213,9 @@ const MENTORS = [
     bio: "Career coach bersertifikat, udah bantu 100+ mahasiswa dapat pekerjaan pertama mereka.",
     linkedin: "https://linkedin.com/in/gilangramadhan",
     expertise: ["Career Mentoring"],
-    experience: [{ title: "Career Coach, Independen", period: "2019 — Sekarang" }],
+    experience: [
+      { title: "Career Coach, Independen", period: "2019 — Sekarang" },
+    ],
     slots: [{ id: "S14", date: "Jum, 25 Jul", time: "14:00" }],
   },
   {
@@ -206,7 +228,12 @@ const MENTORS = [
     bio: "Konsultan strategi bisnis, mentor tetap buat tim BCC juara di beberapa kompetisi nasional.",
     linkedin: "https://linkedin.com/in/intanpermatasari",
     expertise: ["Business Case Competition", "Business Plan Competition"],
-    experience: [{ title: "Strategy Consultant, McKinsey & Company", period: "2022 — Sekarang" }],
+    experience: [
+      {
+        title: "Strategy Consultant, McKinsey & Company",
+        period: "2022 — Sekarang",
+      },
+    ],
     slots: [{ id: "S15", date: "Sab, 26 Jul", time: "09:00" }],
   },
 ];
@@ -234,11 +261,19 @@ function MentorAvatar({ mentor, size = 48 }) {
 function StepPill({ current }) {
   return (
     <div className="flex items-center gap-2 text-[12px]">
-      <span className={current === 1 ? "text-white font-semibold" : "text-[#6B7280]"}>
+      <span
+        className={
+          current === 1 ? "text-white font-semibold" : "text-[#6B7280]"
+        }
+      >
         1. Detail
       </span>
       <span className="text-[#3A3545]">→</span>
-      <span className={current === 2 ? "text-white font-semibold" : "text-[#6B7280]"}>
+      <span
+        className={
+          current === 2 ? "text-white font-semibold" : "text-[#6B7280]"
+        }
+      >
         2. Bayar
       </span>
     </div>
@@ -271,7 +306,8 @@ export default function CheckoutDetailPage() {
   const [formError, setFormError] = useState("");
 
   const selectedMentor = MENTORS.find((m) => m.id === selectedMentorId) || null;
-  const selectedSlot = selectedMentor?.slots.find((s) => s.id === selectedSlotId) || null;
+  const selectedSlot =
+    selectedMentor?.slots.find((s) => s.id === selectedSlotId) || null;
 
   const filteredMentors = useMemo(() => {
     const query = mentorSearch.trim().toLowerCase();
@@ -307,12 +343,20 @@ export default function CheckoutDetailPage() {
   };
 
   const handleProceed = () => {
-    if (!buyerInfo.fullName.trim() || !buyerInfo.email.trim() || !buyerInfo.phone.trim()) {
-      setFormError("Lengkapi dulu Informasi Pembeli sebelum lanjut ke pembayaran.");
+    if (
+      !buyerInfo.fullName.trim() ||
+      !buyerInfo.email.trim() ||
+      !buyerInfo.phone.trim()
+    ) {
+      setFormError(
+        "Lengkapi dulu Informasi Pembeli sebelum lanjut ke pembayaran.",
+      );
       return;
     }
     if (isMentoring && (!selectedMentorId || !selectedSlotId)) {
-      setFormError("Pilih mentor dan jadwal sesi dulu sebelum lanjut ke pembayaran.");
+      setFormError(
+        "Pilih mentor dan jadwal sesi dulu sebelum lanjut ke pembayaran.",
+      );
       return;
     }
     setFormError("");
@@ -334,16 +378,7 @@ export default function CheckoutDetailPage() {
         .mentor-scroll::-webkit-scrollbar-thumb:hover { background: #3D3159; }
       `}</style>
 
-      <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative overflow-x-hidden">
-      <div
-        className="fixed top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%] pointer-events-none z-0"
-        style={{
-          background:
-            "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
-          filter: "blur(40px)",
-        }}
-      />
-       <Navbar />
+      <Navbar />
 
       <main
         style={{
@@ -391,11 +426,20 @@ export default function CheckoutDetailPage() {
                 className="w-full h-full object-cover"
               />
             </div>
-            <div className="px-5 py-4 flex items-center justify-between gap-3">
-              <span className="font-bold text-[15px] text-white">{product.title}</span>
-              <span className="text-[#148F89] font-bold text-[15px] whitespace-nowrap">
-                {formatIDR(product.price)}
-              </span>
+            <div className="px-5 py-4 flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-bold text-[15px] text-white">
+                  {product.title}
+                </span>
+                <span className="text-[#148F89] font-bold text-[15px] whitespace-nowrap">
+                  {formatIDR(product.price)}
+                </span>
+              </div>
+              {product.sessionCount > 1 && (
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-[#08C7E1]/10 text-[#08C7E1] border border-[#08C7E1]/20 w-fit">
+                  Paket {product.sessionCount} Sesi
+                </span>
+              )}
             </div>
           </motion.div>
 
@@ -406,7 +450,9 @@ export default function CheckoutDetailPage() {
                 {...fadeIn}
                 className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-3"
               >
-                <h2 className="font-bold text-[15px] text-white">Pilih Mentor</h2>
+                <h2 className="font-bold text-[15px] text-white">
+                  Pilih Mentor
+                </h2>
 
                 {/* Search */}
                 <div className="relative">
@@ -432,7 +478,9 @@ export default function CheckoutDetailPage() {
                       <span className="text-white text-[13px] font-semibold truncate block">
                         {selectedMentor.name}
                       </span>
-                      <span className="text-[#9CA3AF] text-[11px]">Mentor terpilih</span>
+                      <span className="text-[#9CA3AF] text-[11px]">
+                        Mentor terpilih
+                      </span>
                     </div>
                     <Check size={16} className="text-[#148F89] shrink-0" />
                   </div>
@@ -485,7 +533,9 @@ export default function CheckoutDetailPage() {
                               </button>
                               <button
                                 onClick={() =>
-                                  setExpandedMentorId(isExpanded ? null : mentor.id)
+                                  setExpandedMentorId(
+                                    isExpanded ? null : mentor.id,
+                                  )
                                 }
                                 className="flex items-center gap-0.5 text-[#9CA3AF] hover:text-white text-[9px] transition-colors"
                               >
@@ -516,7 +566,10 @@ export default function CheckoutDetailPage() {
                               </div>
                               <div className="flex flex-col gap-1">
                                 <div className="flex items-center gap-1.5 text-[#E2E8F0]">
-                                  <Briefcase size={11} className="text-[#148F89]" />
+                                  <Briefcase
+                                    size={11}
+                                    className="text-[#148F89]"
+                                  />
                                   <span className="text-[10px] font-semibold">
                                     Pengalaman
                                   </span>
@@ -559,7 +612,9 @@ export default function CheckoutDetailPage() {
                   <div className="flex items-center gap-2">
                     <CalendarClock size={16} className="text-[#148F89]" />
                     <h2 className="font-bold text-[15px] text-white">
-                      Jadwal Tersedia — {selectedMentor.name}
+                      {product.sessionCount > 1
+                        ? `Jadwal Sesi Pertama — ${selectedMentor.name}`
+                        : `Jadwal Tersedia — ${selectedMentor.name}`}
                     </h2>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -577,6 +632,26 @@ export default function CheckoutDetailPage() {
                       </button>
                     ))}
                   </div>
+
+                  {product.sessionCount > 1 && (
+                    <p className="flex items-start gap-2 text-[#9CA3AF] text-[11px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 leading-relaxed">
+                      <AlertCircle
+                        size={13}
+                        className="shrink-0 mt-0.5 text-[#08C7E1]"
+                      />
+                      Paket ini {product.sessionCount} sesi. Jadwal di atas cuma
+                      buat{" "}
+                      <span className="text-white font-medium">
+                        sesi pertama
+                      </span>{" "}
+                      — sisanya ({product.sessionCount - 1} sesi lagi) bisa kamu
+                      pilih sendiri nanti di halaman{" "}
+                      <span className="text-white font-medium">
+                        Produk Saya
+                      </span>
+                      , begitu pembayaran ini udah dikonfirmasi.
+                    </p>
+                  )}
                 </motion.div>
               )}
             </>
@@ -587,7 +662,9 @@ export default function CheckoutDetailPage() {
             {...fadeIn}
             className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-4"
           >
-            <h2 className="font-bold text-[15px] text-white">Informasi Pembeli</h2>
+            <h2 className="font-bold text-[15px] text-white">
+              Informasi Pembeli
+            </h2>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-[#E2E8F0] text-[12px] font-semibold">
@@ -596,7 +673,9 @@ export default function CheckoutDetailPage() {
               <input
                 type="email"
                 value={buyerInfo.email}
-                onChange={(e) => setBuyerInfo({ ...buyerInfo, email: e.target.value })}
+                onChange={(e) =>
+                  setBuyerInfo({ ...buyerInfo, email: e.target.value })
+                }
                 className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
               />
             </div>
@@ -608,7 +687,9 @@ export default function CheckoutDetailPage() {
               <input
                 type="text"
                 value={buyerInfo.fullName}
-                onChange={(e) => setBuyerInfo({ ...buyerInfo, fullName: e.target.value })}
+                onChange={(e) =>
+                  setBuyerInfo({ ...buyerInfo, fullName: e.target.value })
+                }
                 className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
               />
               <p className="text-[#6B7280] text-[10px]">
@@ -623,7 +704,9 @@ export default function CheckoutDetailPage() {
               <input
                 type="tel"
                 value={buyerInfo.phone}
-                onChange={(e) => setBuyerInfo({ ...buyerInfo, phone: e.target.value })}
+                onChange={(e) =>
+                  setBuyerInfo({ ...buyerInfo, phone: e.target.value })
+                }
                 placeholder="+62"
                 className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white placeholder:text-[#64748B] outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
               />
@@ -635,17 +718,23 @@ export default function CheckoutDetailPage() {
             {...fadeIn}
             className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-4"
           >
-            <h2 className="font-bold text-[15px] text-white">Ringkasan Pesanan</h2>
+            <h2 className="font-bold text-[15px] text-white">
+              Ringkasan Pesanan
+            </h2>
 
             <div className="flex flex-col gap-2 text-[13px]">
               <div className="flex justify-between text-[#E2E8F0]">
                 <span>Harga Produk</span>
-                <span className="font-semibold">{formatIDR(product.price)}</span>
+                <span className="font-semibold">
+                  {formatIDR(product.price)}
+                </span>
               </div>
               {appliedVoucher && (
                 <div className="flex justify-between text-[#9CA3AF]">
                   <span>Diskon ({appliedVoucher})</span>
-                  <span className="font-semibold text-red-400">-{formatIDR(discount)}</span>
+                  <span className="font-semibold text-red-400">
+                    -{formatIDR(discount)}
+                  </span>
                 </div>
               )}
             </div>
@@ -672,7 +761,9 @@ export default function CheckoutDetailPage() {
                 className={`flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[12px] font-medium transition-colors w-fit ${focusRing}`}
               >
                 <Ticket size={14} />
-                {appliedVoucher ? `Voucher: ${appliedVoucher}` : "Punya kode voucher?"}
+                {appliedVoucher
+                  ? `Voucher: ${appliedVoucher}`
+                  : "Punya kode voucher?"}
               </button>
             )}
 
@@ -704,8 +795,6 @@ export default function CheckoutDetailPage() {
           </motion.div>
         </div>
       </main>
-      </div>
-
     </div>
   );
 }
