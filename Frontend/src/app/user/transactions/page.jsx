@@ -2,37 +2,37 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Search, X } from "lucide-react";
 import DashboardLayout from "@/component/user/DashboardLayout";
 import EmptyState from "@/component/user/EmptyState";
 
-const FILTERS = ["Semua", "Berhasil", "Menunggu", "Gagal"];
+const FILTERS = ["Semua", "Lunas", "Diproses", "Ditolak"];
 
 const statusMeta = {
   paid: {
-    label: "Berhasil",
-    bucket: "Berhasil",
+    label: "Lunas",
+    bucket: "Lunas",
     className: "bg-[#148F89]/10 text-[#148F89] border border-[#148F89]/30",
   },
   pending: {
-    label: "Menunggu Pembayaran",
-    bucket: "Menunggu",
+    label: "Belum Bayar",
+    bucket: "Diproses",
     className: "bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/30",
   },
-  failed: {
-    label: "Gagal",
-    bucket: "Gagal",
+  waiting_verification: {
+    label: "Menunggu Verifikasi",
+    bucket: "Diproses",
+    className: "bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/30",
+  },
+  rejected: {
+    label: "Ditolak",
+    bucket: "Ditolak",
     className: "bg-[#EF4444]/10 text-[#EF4444] border border-[#EF4444]/30",
   },
   expired: {
     label: "Kedaluwarsa",
-    bucket: "Gagal",
-    className: "bg-[#EF4444]/10 text-[#EF4444] border border-[#EF4444]/30",
-  },
-  cancelled: {
-    label: "Dibatalkan",
-    bucket: "Gagal",
+    bucket: "Ditolak",
     className: "bg-[#EF4444]/10 text-[#EF4444] border border-[#EF4444]/30",
   },
 };
@@ -54,7 +54,7 @@ export default function Transactions() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("Semua");
   const [selectedTx, setSelectedTx] = useState(null);
-  const shouldReduceMotion = useReducedMotion();
+  const shouldReduceMotion = useReducedMotion() ?? false;
 
   useEffect(() => {
     document.body.style.overflow = selectedTx ? "hidden" : "auto";
@@ -81,13 +81,13 @@ export default function Transactions() {
   });
 
   const modalMotion = shouldReduceMotion
-    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
     : {
         initial: { opacity: 0, scale: 0.96, y: 12 },
         animate: { opacity: 1, scale: 1, y: 0 },
-        exit: { opacity: 0, scale: 0.96, y: 12 },
       };
 
+  // --- MOCK DATA (nanti ganti dengan query ke tabel transactions milik user login) ---
   const transactions = [
     {
       id: "TRX-20260701-001",
@@ -95,12 +95,7 @@ export default function Transactions() {
       productType: "bootcamp",
       createdAt: "1 Juli 2026, 14:32 WIB",
       status: "paid",
-      paymentMethod: "QRIS",
-      subtotal: 110000,
-      discount: 0,
-      discountCode: null,
-      tax: 0,
-      total: 110000,
+      paymentMethod: "Transfer Bank Manual",
     },
     {
       id: "TRX-20260705-002",
@@ -108,7 +103,7 @@ export default function Transactions() {
       productType: "modul",
       createdAt: "5 Juli 2026, 09:10 WIB",
       status: "paid",
-      paymentMethod: "QRIS",
+      paymentMethod: "Transfer Bank Manual",
       subtotal: 125000,
       discount: 80000,
       discountCode: "LAUNCH",
@@ -121,18 +116,14 @@ export default function Transactions() {
       productTitle: "1-on-1 Career Mentoring",
       productType: "mentoring",
       createdAt: "9 Juli 2026, 20:45 WIB",
-      status: "pending",
-      paymentMethod: "QRIS",
+      status: "waiting_verification",
+      paymentMethod: "Transfer Bank Manual",
       subtotal: 110000,
       discount: 0,
       discountCode: null,
       tax: 0,
       total: 110000,
-      paymentUrl: "https://example.com/pay/TRX-20260709-003",
-      // QRIS dari iPaymu cuma valid sebentar (~30-60 menit), beda jauh dari
-      // VA bank yang bisa dikasih waktu berjam-jam -- makanya expiresAt di
-      // sini deket banget sama createdAt, bukan 24 jam kemudian kayak sebelumnya
-      expiresAt: "9 Juli 2026, 21:15 WIB",
+      proofUrl: "https://example.com/bukti/TRX-20260709-003.jpg",
     },
     {
       id: "TRX-20260628-004",
@@ -140,12 +131,30 @@ export default function Transactions() {
       productType: "mentoring",
       createdAt: "28 Juni 2026, 11:15 WIB",
       status: "expired",
-      paymentMethod: "QRIS",
+      paymentMethod: "Transfer Bank Manual",
       subtotal: 300000,
       discount: 0,
       discountCode: null,
       tax: 0,
       total: 300000,
+    },
+    {
+      id: "TRX-20260710-005",
+      productId: "MT-005",
+      productTitle: "101 Career Mentoring",
+      productType: "mentoring",
+      createdAt: "10 Juli 2026, 08:20 WIB",
+      status: "pending",
+      paymentMethod: "Transfer Bank Manual",
+      subtotal: 110000,
+      discount: 0,
+      discountCode: null,
+      tax: 0,
+      total: 110000,
+      // Bukan batasan dari bank/payment gateway -- ini kebijakan reservasi
+      // slot mentor kita sendiri (5 menit sejak checkout). Lewat dari ini,
+      // slot yang tadi di-hold otomatis dilepas lagi ke mentor.
+      expiresAt: "10 Juli 2026, 08:25 WIB",
     },
   ];
 
@@ -302,157 +311,158 @@ export default function Transactions() {
       )}
 
       {/* --- MODAL DETAIL --- */}
-      <AnimatePresence>
-        {selectedTx && (
+      {selectedTx && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={() => setSelectedTx(null)}
+        >
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-            onClick={() => setSelectedTx(null)}
+            {...modalMotion}
+            transition={{ duration: 0.18 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#170F26] w-full max-w-[460px] max-h-[85vh] overflow-y-auto rounded-[16px] border border-[#2D2342] shadow-2xl"
           >
-            <motion.div
-              {...modalMotion}
-              transition={{ duration: 0.18 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-[#170F26] w-full max-w-[460px] max-h-[85vh] overflow-y-auto rounded-[16px] border border-[#2D2342] shadow-2xl"
-            >
-              <div className="sticky top-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
-                <h3 className="text-white font-bold text-[17px]">
-                  Detail Transaksi
-                </h3>
-                <button
-                  onClick={() => setSelectedTx(null)}
-                  aria-label="Tutup"
-                  className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:text-white hover:bg-white/5 transition-colors"
+            <div className="sticky top-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
+              <h3 className="text-white font-bold text-[17px]">
+                Detail Transaksi
+              </h3>
+              <button
+                onClick={() => setSelectedTx(null)}
+                aria-label="Tutup"
+                className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:text-white hover:bg-white/5 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 flex flex-col gap-5">
+              {/* Produk + status */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <span
+                    className={`self-start px-2.5 py-1 rounded-md text-[10px] font-bold w-fit ${typeMeta[selectedTx.productType].className}`}
+                  >
+                    {typeMeta[selectedTx.productType].label}
+                  </span>
+                  <h4 className="font-bold text-[17px] text-white leading-snug">
+                    {selectedTx.productTitle}
+                  </h4>
+                </div>
+                <span
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0 ${statusMeta[selectedTx.status].className}`}
                 >
-                  <X size={18} />
-                </button>
+                  {statusMeta[selectedTx.status].label}
+                </span>
               </div>
 
-              <div className="p-6 flex flex-col gap-5">
-                {/* Produk + status */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <span
-                      className={`self-start px-2.5 py-1 rounded-md text-[10px] font-bold w-fit ${typeMeta[selectedTx.productType].className}`}
-                    >
-                      {typeMeta[selectedTx.productType].label}
-                    </span>
-                    <h4 className="font-bold text-[17px] text-white leading-snug">
-                      {selectedTx.productTitle}
-                    </h4>
-                  </div>
-                  <span
-                    className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0 ${statusMeta[selectedTx.status].className}`}
-                  >
-                    {statusMeta[selectedTx.status].label}
+              {/* Info umum */}
+              <div className="flex flex-col gap-2 text-[13px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#9CA3AF]">No. Transaksi</span>
+                  <span className="text-white font-medium">
+                    {selectedTx.id}
                   </span>
                 </div>
-
-                {/* Info umum */}
-                <div className="flex flex-col gap-2 text-[13px]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#9CA3AF]">No. Transaksi</span>
-                    <span className="text-white font-medium">
-                      {selectedTx.id}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#9CA3AF]">Tanggal</span>
-                    <span className="text-white font-medium">
-                      {selectedTx.createdAt}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#9CA3AF]">Metode Pembayaran</span>
-                    <span className="text-white font-medium">
-                      {selectedTx.paymentMethod}
-                    </span>
-                  </div>
-                  {selectedTx.status === "pending" && selectedTx.expiresAt && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-[#9CA3AF]">Batas Waktu Bayar</span>
-                      <span className="text-[#F59E0B] font-medium">
-                        {selectedTx.expiresAt}
-                      </span>
-                    </div>
-                  )}
+                <div className="flex items-center justify-between">
+                  <span className="text-[#9CA3AF]">Tanggal</span>
+                  <span className="text-white font-medium">
+                    {selectedTx.createdAt}
+                  </span>
                 </div>
-
-                {/* Rincian Harga */}
-                <div className="flex flex-col gap-2 pt-4 border-t border-[#2D2342] text-[13px]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#9CA3AF]">Subtotal</span>
-                    <span className="text-white">
-                      {formatCurrency(selectedTx.subtotal)}
-                    </span>
-                  </div>
-                  {selectedTx.discount > 0 && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-[#9CA3AF]">
-                        Diskon
-                        {selectedTx.discountCode
-                          ? ` (${selectedTx.discountCode})`
-                          : ""}
-                      </span>
-                      <span className="text-[#148F89]">
-                        -{formatCurrency(selectedTx.discount)}
-                      </span>
-                    </div>
-                  )}
-                  {selectedTx.tax > 0 && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-[#9CA3AF]">Pajak</span>
-                      <span className="text-white">
-                        {formatCurrency(selectedTx.tax)}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between pt-2 border-t border-[#2D2342]">
-                    <span className="text-white font-semibold">Total</span>
-                    <span className="text-[#148F89] font-bold text-[18px]">
-                      {formatCurrency(selectedTx.total)}
-                    </span>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[#9CA3AF]">Metode Pembayaran</span>
+                  <span className="text-white font-medium">
+                    {selectedTx.paymentMethod}
+                  </span>
                 </div>
-
-                {/* Aksi sesuai status */}
-                {selectedTx.status === "pending" && selectedTx.paymentUrl && (
-                  <a
-                    href={selectedTx.paymentUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full text-center py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors"
-                  >
-                    Bayar Sekarang
-                  </a>
-                )}
-                {selectedTx.status === "paid" && selectedTx.invoiceUrl && (
-                  <a
-                    href={selectedTx.invoiceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full text-center py-3 rounded-[8px] border border-[#2D2342] text-[#E2E8F0] font-semibold text-[13px] hover:border-[#148F89]/50 hover:text-white transition-colors"
-                  >
-                    Unduh Invoice
-                  </a>
-                )}
-                {(selectedTx.status === "failed" ||
-                  selectedTx.status === "expired" ||
-                  selectedTx.status === "cancelled") && (
-                  <Link
-                    href="/produk"
-                    className="w-full text-center py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors"
-                  >
-                    Beli Lagi
-                  </Link>
+                {selectedTx.status === "pending" && selectedTx.expiresAt && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#9CA3AF]">Batas Waktu Bayar</span>
+                    <span className="text-[#F59E0B] font-medium">
+                      {selectedTx.expiresAt}
+                    </span>
+                  </div>
                 )}
               </div>
-            </motion.div>
+
+              {/* Rincian Harga */}
+              <div className="flex flex-col gap-2 pt-4 border-t border-[#2D2342] text-[13px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#9CA3AF]">Subtotal</span>
+                  <span className="text-white">
+                    {formatCurrency(selectedTx.subtotal)}
+                  </span>
+                </div>
+                {selectedTx.discount > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#9CA3AF]">
+                      Diskon
+                      {selectedTx.discountCode
+                        ? ` (${selectedTx.discountCode})`
+                        : ""}
+                    </span>
+                    <span className="text-[#148F89]">
+                      -{formatCurrency(selectedTx.discount)}
+                    </span>
+                  </div>
+                )}
+                {selectedTx.tax > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#9CA3AF]">Pajak</span>
+                    <span className="text-white">
+                      {formatCurrency(selectedTx.tax)}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between pt-2 border-t border-[#2D2342]">
+                  <span className="text-white font-semibold">Total</span>
+                  <span className="text-[#148F89] font-bold text-[18px]">
+                    {formatCurrency(selectedTx.total)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Aksi sesuai status */}
+              {selectedTx.status === "pending" && selectedTx.productId && (
+                <Link
+                  href={`/checkout/${selectedTx.productId}/payment`}
+                  className="w-full text-center py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors block"
+                >
+                  Bayar Sekarang
+                </Link>
+              )}
+              {selectedTx.status === "waiting_verification" && (
+                <p className="text-center text-[#F59E0B] text-[12px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3">
+                  Bukti transfer udah kami terima, sedang diverifikasi tim kami
+                  (maksimal 1x24 jam).
+                </p>
+              )}
+              {selectedTx.status === "paid" && selectedTx.invoiceUrl && (
+                <a
+                  href={selectedTx.invoiceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full text-center py-3 rounded-[8px] border border-[#2D2342] text-[#E2E8F0] font-semibold text-[13px] hover:border-[#148F89]/50 hover:text-white transition-colors"
+                >
+                  Unduh Invoice
+                </a>
+              )}
+              {(selectedTx.status === "failed" ||
+                selectedTx.status === "expired" ||
+                selectedTx.status === "cancelled") && (
+                <Link
+                  href="/produk"
+                  className="w-full text-center py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors"
+                >
+                  Beli Lagi
+                </Link>
+              )}
+            </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </motion.div>
+      )}
     </DashboardLayout>
   );
 }

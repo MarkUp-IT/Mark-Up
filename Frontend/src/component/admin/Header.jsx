@@ -1,45 +1,56 @@
-import React from "react";
-import { Bell, Settings } from "lucide-react";
+"use client";
 
-const Header = ({
-  judulHalaman,
-  namaProfil = "Affan Fathir D.",
-  role = "Associate IT",
-}) => {
+import { Bell } from "lucide-react";
+
+export default function Header({ judulHalaman = "Dashboard" }) {
   return (
-    <div className="sticky top-0 z-30 w-full h-[72px] bg-[#E2E8F0] flex flex-row items-center justify-between px-8 shadow-sm">
-      <div className="flex items-center">
-        <p className="text-black font-bold text-[20.25px]">{judulHalaman}</p>
+    <header
+      style={{ height: "88px" }}
+      className="sticky top-0 z-30 w-full bg-white border-b border-[#E2E8F0] flex items-center justify-between px-8"
+    >
+      <div>
+        <p className="text-[#1E293B] font-bold text-[18px]">{judulHalaman}</p>
       </div>
 
-      <div className="flex items-center gap-8">
-        <div className="flex flex-row gap-4 items-center">
-          <Bell
-            color="#64748B"
-            className="cursor-pointer hover:text-black transition-colors"
+      <div className="flex items-center gap-5">
+        <button
+          aria-label="Notifikasi"
+          style={{ width: "36px", height: "36px" }}
+          className="relative rounded-full flex items-center justify-center text-[#64748B] hover:bg-[#F1F5F9] transition-colors"
+        >
+          <Bell size={18} />
+          <span
+            style={{ width: "6px", height: "6px" }}
+            className="absolute top-1.5 right-2 rounded-full bg-[#DC2626]"
           />
-          <Settings
-            color="#64748B"
-            className="cursor-pointer hover:text-black transition-colors"
-          />
-        </div>
+        </button>
 
-        <div className="flex flex-row gap-4 items-center border-l border-[#CBD5E1] pl-8">
-          <div className="flex flex-col text-right">
-            <p className="font-semibold text-[14.62px]">{namaProfil}</p>
-            <p className="text-[12.37px] text-[#64748B]">{role}</p>
+        <div className="flex items-center gap-3 pl-4 border-l border-[#E2E8F0]">
+          {/* Sebelumnya "hidden sm:block" -- itu prefix responsive Tailwind
+              yang KETERBUKTI nggak ke-compile di project ini (kasus sama
+              persis yang bikin gambar halaman login ilang total kemarin).
+              Sekarang ditampilin terus, nggak digantung ke breakpoint. */}
+          <div className="text-right">
+            {/* TODO: ganti dengan data admin dari session/auth context */}
+            <p className="text-[13px] font-semibold text-[#1E293B] leading-tight whitespace-nowrap">
+              Affan Fathir D.
+            </p>
+            <p className="text-[11px] text-[#94A3B8] whitespace-nowrap">
+              Associate IT
+            </p>
           </div>
-          <div className="bg-[#2B3034] w-[36px] h-[36px] rounded-[13.5px] flex items-center justify-center overflow-hidden">
+          <div
+            style={{ width: "36px", height: "36px" }}
+            className="rounded-full overflow-hidden border border-[#E2E8F0] shrink-0"
+          >
             <img
-              src={`https://api.dicebear.com/7.x/notionists/svg?seed=${namaProfil}&backgroundColor=2B3034`}
-              alt="avatar"
-              className="w-full h-full object-cover"
+              src="/images/pp.png"
+              alt="Avatar admin"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           </div>
         </div>
       </div>
-    </div>
+    </header>
   );
-};
-
-export default Header;
+}

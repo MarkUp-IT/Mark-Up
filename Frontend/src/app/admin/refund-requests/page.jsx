@@ -2,14 +2,12 @@
 
 import {
   Search,
-  Calendar,
   ChevronDown,
-  ListFilter,
   Eye,
   X,
-  Landmark,
   Check,
   Ban,
+  AlertCircle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
@@ -17,51 +15,58 @@ import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 
 const STATUS_META = {
-  paid: { label: "LUNAS", className: "bg-[#DCFCE7] text-[#166534]" },
-  waiting_verification: {
-    label: "MENUNGGU VERIFIKASI",
+  pending: {
+    label: "MENUNGGU REVIEW",
     className: "bg-[#FEF3C7] text-[#92400E]",
   },
-  pending: { label: "BELUM BAYAR", className: "bg-[#F1F5F9] text-[#475569]" },
+  approved: { label: "DISETUJUI", className: "bg-[#DCFCE7] text-[#166534]" },
   rejected: { label: "DITOLAK", className: "bg-[#FEE2E2] text-[#991B1B]" },
 };
 
-export default function Transactions() {
-  const heightFix = `.adm-h-38 { height: 38px; } .adm-w-38 { width: 38px; }`;
+export default function RefundRequests() {
+  const heightFix = `.adm-h-42 { height: 42px; }`;
 
-  const transactions = [
+  // --- MOCK DATA (nanti ganti query refund_requests JOIN transactions +
+  // users + products) ---
+  const [requests, setRequests] = useState([
     {
-      id: "TRX-20260701-001",
-      userName: "Prabroro Subriantoro",
-      productTitle: "Bundling PowerPack (Newbie Friendly)",
-      date: "1 Jul 2026 · 14:22",
-      amount: "Rp300.000",
-      status: "waiting_verification",
-      proofUrl: "/images/pp.png",
-    },
-    {
-      id: "TRX-20260630-002",
-      userName: "Affan Fathir D.",
-      productTitle: "Winner Class Dan Module (Debate)",
-      date: "30 Jun 2026 · 14:14",
-      amount: "Rp299.000",
-      status: "paid",
-      proofUrl: "/images/pp.png",
-    },
-    {
-      id: "TRX-20260630-003",
+      id: "RF-0012",
       userName: "Fathir Ramadhan",
-      productTitle: "101 Career Mentoring",
-      date: "30 Jun 2026 · 14:02",
-      amount: "Rp110.000",
+      productTitle: "1-on-1 Career Mentoring",
+      transactionId: "TRX-20260628-004",
+      amount: 110000,
+      reason:
+        "Jadwal yang tersedia dari mentor nggak ada yang cocok sama waktu luang saya, jadi mending di-refund aja dulu.",
       status: "pending",
-      proofUrl: null,
+      createdAt: "5 Jul 2026, 09:12",
     },
-  ];
+    {
+      id: "RF-0011",
+      userName: "Sarah Jenkins",
+      productTitle: "Winner Class Dan Module (Debate)",
+      transactionId: "TRX-20260625-002",
+      amount: 299000,
+      reason:
+        "Ternyata jadwal lombanya keburu, udah nggak butuh materinya lagi.",
+      status: "approved",
+      createdAt: "1 Jul 2026, 14:40",
+    },
+    {
+      id: "RF-0010",
+      userName: "Affan Fathir D.",
+      productTitle: "Bundling PowerPack (Newbie Friendly)",
+      transactionId: "TRX-MT-002",
+      amount: 300000,
+      reason: "Coba-coba ajuin doang, ternyata masih mau lanjut ikutnya.",
+      status: "rejected",
+      createdAt: "28 Jun 2026, 11:05",
+    },
+  ]);
 
+  const [statusFilter, setStatusFilter] = useState("pending");
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [adminNotes, setAdminNotes] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedTx, setSelectedTx] = useState(null);
-  const [statusFilter, setStatusFilter] = useState("Semua");
 
   useEffect(() => {
     document.body.style.overflow = isModalOpen ? "hidden" : "auto";
@@ -70,109 +75,100 @@ export default function Transactions() {
     };
   }, [isModalOpen]);
 
-  const openDetail = (tx) => {
-    setSelectedTx(tx);
+  const formatIDR = (val) =>
+    new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0,
+    }).format(val);
+
+  const openDetail = (req) => {
+    setSelectedRequest(req);
+    setAdminNotes(req.adminNotes || "");
     setIsModalOpen(true);
+  };
+
+  const handleDecision = (decision) => {
+    setRequests((prev) =>
+      prev.map((r) =>
+        r.id === selectedRequest.id
+          ? { ...r, status: decision, adminNotes }
+          : r,
+      ),
+    );
+    setIsModalOpen(false);
   };
 
   const filtered =
     statusFilter === "Semua"
-      ? transactions
-      : transactions.filter((t) => t.status === statusFilter);
-  const waitingCount = transactions.filter(
-    (t) => t.status === "waiting_verification",
+      ? requests
+      : requests.filter((r) => r.status === statusFilter);
+  const pendingCount = requests.filter((r) => r.status === "pending").length;
+  const approvedThisMonth = requests.filter(
+    (r) => r.status === "approved",
   ).length;
 
   return (
-    <DashboardLayout title="Transaksi">
+    <DashboardLayout title="Pengajuan Refund">
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-bold text-[22px] text-[#0F172A]">
-            Log Transaksi & Pembayaran
+            Pengajuan Refund
           </h1>
           <p className="text-[#64748B] text-[14px] mt-1">
-            Verifikasi bukti transfer dan pantau seluruh transaksi keuangan
-            sistem.
+            Review dan proses permintaan refund dari user, sesuai Refund Policy
+            MARK-UP.
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total Transaksi" value="248" unit="transaksi" />
         <StatCard
-          label="Menunggu Verifikasi"
-          value={waitingCount}
-          unit="transaksi"
+          label="Menunggu Review"
+          value={pendingCount}
+          unit="pengajuan"
           variant="warning"
         />
-        <StatCard label="Pendapatan Bulan Ini" value="Rp42,1jt" />
+        <StatCard
+          label="Disetujui Bulan Ini"
+          value={approvedThisMonth}
+          unit="pengajuan"
+          variant="success"
+        />
+        <StatCard
+          label="Total Diajukan"
+          value={requests.length}
+          unit="pengajuan"
+        />
       </div>
 
       <div className="flex flex-col gap-4">
-        <div className="flex items-end justify-between gap-4 flex-wrap">
-          <div>
-            <h2 className="text-[16px] font-semibold text-[#0F172A]">
-              Daftar Transaksi
-            </h2>
-            <p className="text-[#64748B] text-[13px] mt-0.5">
-              Seluruh transaksi keuangan sepanjang waktu.
-            </p>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <h2 className="text-[16px] font-semibold text-[#0F172A]">
+            Daftar Pengajuan
+          </h2>
+          <div className="adm-h-42 bg-[#F1F5F9] px-1.5 rounded-[8px] flex items-center gap-1">
+            {[
+              { key: "pending", label: "Menunggu" },
+              { key: "approved", label: "Disetujui" },
+              { key: "rejected", label: "Ditolak" },
+              { key: "Semua", label: "Semua" },
+            ].map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setStatusFilter(f.key)}
+                className={`px-3.5 py-2 rounded-[6px] font-medium text-[12.5px] transition-colors ${statusFilter === f.key ? "bg-white text-[#0F172A] shadow-sm" : "text-[#64748B] hover:bg-white/60"}`}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-[12px] flex flex-wrap gap-4 border border-[#E2E8F0] shadow-sm">
-          <div className="flex-1 relative" style={{ minWidth: "220px" }}>
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
-            />
-            <input
-              type="text"
-              placeholder="Cari ID, nama, atau produk..."
-              className="w-full adm-h-38 pl-9 pr-3 border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#334155] outline-none focus:border-[#148F89] transition-colors"
-            />
-          </div>
-          <div className="relative" style={{ width: "220px" }}>
-            <Calendar
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B]"
-            />
-            <select className="w-full adm-h-38 pl-9 pr-8 border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#334155] appearance-none outline-none focus:border-[#148F89] bg-white cursor-pointer">
-              <option>7 Hari Terakhir</option>
-              <option>30 Hari Terakhir</option>
-              <option>Bulan Ini</option>
-            </select>
-            <ChevronDown
-              size={14}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
-            />
-          </div>
-          <div className="relative" style={{ width: "200px" }}>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full adm-h-38 pl-3 pr-8 border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#334155] appearance-none outline-none focus:border-[#148F89] bg-white cursor-pointer"
-            >
-              <option value="Semua">Status: Semua</option>
-              <option value="waiting_verification">Menunggu Verifikasi</option>
-              <option value="paid">Lunas</option>
-              <option value="pending">Belum Bayar</option>
-              <option value="rejected">Ditolak</option>
-            </select>
-            <ChevronDown
-              size={14}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
-            />
-          </div>
-          <button className="adm-w-38 adm-h-38 flex items-center justify-center border border-[#E2E8F0] rounded-[8px] bg-white text-[#64748B] hover:bg-[#F1F5F9] transition-colors">
-            <ListFilter size={16} />
-          </button>
         </div>
 
         {filtered.length === 0 ? (
-          <EmptyState message="Nggak ada transaksi yang cocok sama filter ini." />
+          <EmptyState message="Nggak ada pengajuan refund di kategori ini." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
             <div className="overflow-x-auto">
@@ -180,16 +176,16 @@ export default function Transactions() {
                 <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                   <tr>
                     <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">
-                      ID TRANSAKSI
+                      ID
                     </th>
                     <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">
                       USER & PRODUK
                     </th>
                     <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
-                      WAKTU
+                      NOMINAL
                     </th>
                     <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
-                      NOMINAL
+                      DIAJUKAN
                     </th>
                     <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
                       STATUS
@@ -216,11 +212,11 @@ export default function Transactions() {
                           {item.productTitle}
                         </p>
                       </td>
-                      <td className="px-6 py-4 text-center text-[#64748B] font-medium whitespace-nowrap">
-                        {item.date}
-                      </td>
                       <td className="px-6 py-4 text-center text-[#1E293B] font-bold">
-                        {item.amount}
+                        {formatIDR(item.amount)}
+                      </td>
+                      <td className="px-6 py-4 text-center text-[#64748B] font-medium whitespace-nowrap">
+                        {item.createdAt}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span
@@ -259,10 +255,10 @@ export default function Transactions() {
             <div className="sticky top-0 bg-white px-6 py-5 border-b border-[#E2E8F0] flex justify-between items-center">
               <div>
                 <p className="text-[#1E293B] font-bold text-[17px]">
-                  Detail Transaksi
+                  Detail Pengajuan
                 </p>
                 <p className="text-[#64748B] text-[12px] mt-0.5">
-                  {selectedTx?.id}
+                  {selectedRequest?.id}
                 </p>
               </div>
               <button
@@ -275,9 +271,9 @@ export default function Transactions() {
 
             <div className="px-6 py-6 flex flex-col gap-5">
               <span
-                className={`w-full py-2.5 rounded-[8px] flex justify-center items-center font-bold text-[12px] tracking-wider ${STATUS_META[selectedTx?.status]?.className}`}
+                className={`w-full py-2.5 rounded-[8px] flex justify-center items-center font-bold text-[12px] tracking-wider ${STATUS_META[selectedRequest?.status]?.className}`}
               >
-                {STATUS_META[selectedTx?.status]?.label}
+                {STATUS_META[selectedRequest?.status]?.label}
               </span>
 
               <div className="grid grid-cols-2 gap-y-4 gap-x-4 text-[13px]">
@@ -286,15 +282,15 @@ export default function Transactions() {
                     User
                   </span>
                   <span className="text-[#1E293B] font-medium">
-                    {selectedTx?.userName}
+                    {selectedRequest?.userName}
                   </span>
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
-                    Waktu
+                    ID Transaksi
                   </span>
                   <span className="text-[#1E293B] font-medium">
-                    {selectedTx?.date}
+                    {selectedRequest?.transactionId}
                   </span>
                 </div>
                 <div className="flex flex-col gap-1 col-span-2">
@@ -302,57 +298,67 @@ export default function Transactions() {
                     Produk
                   </span>
                   <span className="text-[#1E293B] font-medium">
-                    {selectedTx?.productTitle}
+                    {selectedRequest?.productTitle}
                   </span>
                 </div>
               </div>
 
               <div className="bg-[#F8FAFC] border border-[#E2E8F0] p-4 rounded-[8px] flex justify-between items-center">
                 <span className="text-[#475569] font-bold text-[13px]">
-                  Total Dibayar
+                  Nominal Diajukan
                 </span>
                 <span className="text-[#0F172A] font-bold text-[19px]">
-                  {selectedTx?.amount}
+                  {selectedRequest && formatIDR(selectedRequest.amount)}
                 </span>
               </div>
 
               <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <Landmark size={15} className="text-[#148F89]" />
-                  <span className="text-[#1E293B] font-bold text-[13px]">
-                    Bukti Transfer
-                  </span>
-                </div>
-                {selectedTx?.proofUrl ? (
-                  <img
-                    src={selectedTx.proofUrl}
-                    alt="Bukti transfer"
-                    style={{ maxHeight: "240px" }}
-                    className="w-full rounded-[8px] border border-[#E2E8F0] object-cover"
-                  />
-                ) : (
-                  <p className="text-[#94A3B8] text-[12px] bg-[#F8FAFC] border border-dashed border-[#E2E8F0] rounded-[8px] px-4 py-6 text-center">
-                    User belum mengunggah bukti transfer.
-                  </p>
-                )}
+                <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                  Alasan dari User
+                </span>
+                <p className="text-[#334155] text-[13px] leading-relaxed bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3">
+                  {selectedRequest?.reason}
+                </p>
               </div>
+
+              {selectedRequest?.status === "pending" && (
+                <>
+                  <p className="flex items-start gap-2 text-[#92400E] text-[11px] bg-[#FEF3C7] border border-[#FDE68A] rounded-[8px] px-3.5 py-2.5 leading-relaxed">
+                    <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                    Dana yang disetujui otomatis dipotong biaya administrasi 10%
+                    sesuai Refund Policy.
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[#334155] text-[13px] font-medium">
+                      Catatan Admin (opsional)
+                    </label>
+                    <textarea
+                      value={adminNotes}
+                      onChange={(e) => setAdminNotes(e.target.value)}
+                      rows={3}
+                      placeholder="Catatan internal soal keputusan ini..."
+                      className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3 text-[13px] text-[#1E293B] placeholder:text-[#94A3B8] outline-none focus:border-[#148F89] transition-colors resize-none"
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
-            {selectedTx?.status === "waiting_verification" ? (
+            {selectedRequest?.status === "pending" ? (
               <div className="px-6 py-5 bg-[#F8FAFC] border-t border-[#E2E8F0] flex gap-3">
                 <button
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => handleDecision("rejected")}
                   className="flex-1 py-2.5 bg-white border border-[#FCA5A5] text-[#DC2626] font-bold text-[13px] rounded-[8px] hover:bg-[#FEE2E2] transition-colors flex items-center justify-center gap-1.5"
                 >
                   <Ban size={14} />
                   Tolak
                 </button>
                 <button
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => handleDecision("approved")}
                   className="flex-1 py-2.5 bg-[#148F89] text-white font-bold text-[13px] rounded-[8px] hover:bg-[#117A75] transition-colors flex items-center justify-center gap-1.5"
                 >
                   <Check size={14} />
-                  Konfirmasi Lunas
+                  Setujui Refund
                 </button>
               </div>
             ) : (

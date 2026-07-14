@@ -90,15 +90,15 @@ const faqData = {
   Pembayaran: [
     {
       q: "Metode pembayaran apa saja yang didukung Mark-Up?",
-      a: "Saat ini Mark-Up cuma menerima pembayaran lewat QRIS, diproses via payment gateway iPaymu. Tinggal scan kode QR pakai aplikasi e-wallet atau mobile banking apa pun yang kamu punya (GoPay, OVO, DANA, ShopeePay, ataupun m-banking).",
+      a: "Saat ini Mark-Up menerima pembayaran lewat transfer bank manual. Setelah checkout, kamu akan diarahkan ke halaman pembayaran berisi detail rekening tujuan -- transfer sesuai nominal, lalu unggah bukti transfernya langsung di halaman itu.",
     },
     {
       q: "Apakah transaksi di Mark-Up aman?",
-      a: "Aman. Seluruh proses pembayaran ditangani oleh iPaymu, penyedia payment gateway berizin yang diawasi oleh Bank Indonesia. Mark-Up tidak pernah menyimpan data kartu atau rekeningmu secara langsung.",
+      a: "Aman. Setiap transfer diverifikasi manual oleh tim kami berdasarkan bukti yang kamu unggah, dan status pembayaranmu bisa dipantau langsung dari halaman Transaksi.",
     },
     {
       q: "Bagaimana jika pembayaran saya gagal atau belum terverifikasi?",
-      a: 'Cek dulu status transaksi di halaman Transaksi -- kalau masih berstatus "Menunggu Pembayaran" padahal kamu sudah membayar, hubungi tim support kami dengan menyertakan bukti pembayaran agar bisa segera kami tindak lanjuti.',
+      a: 'Cek dulu status transaksi di halaman Transaksi -- kalau masih berstatus "Menunggu Verifikasi" padahal kamu sudah mengunggah bukti transfer, tunggu proses verifikasi tim kami (maksimal 1x24 jam) atau hubungi tim support kami dengan menyertakan bukti pembayaran agar bisa segera kami tindak lanjuti.',
     },
   ],
   Akun: [

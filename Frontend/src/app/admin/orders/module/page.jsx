@@ -1,143 +1,115 @@
 "use client";
 
-import { Eye, Pencil, ExternalLink, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Pencil, ExternalLink } from "lucide-react";
 import Link from "next/link";
-import Sidebar from "@/component/admin/Sidebar";
-import Header from "@/component/admin/Header";
+import DashboardLayout from "@/component/admin/DashboardLayout";
+import StatCard from "@/component/admin/StatCard";
+import EmptyState from "@/component/admin/EmptyState";
 
-export default function ModuleManagement() {
+export default function ModuleOrders() {
+  // --- MOCK DATA (nanti ganti query product_modul JOIN modul_resources
+  // buat hitung kelengkapan konten) ---
   const modules = [
     {
       id: "#ME003",
       title: "101 Career Mentoring",
       price: "Rp110.000",
-      status: "ACTIVE",
-      date: "22/05/2024 at 14:54",
+      status: "Aktif",
+      date: "22 Mei 2026, 14:54",
       sold: 12,
-      actionStatus: "viewed",
+      isHidden: false,
     },
     {
       id: "#BO003",
       title: "Bundling PowerPack (Newbie Friendly)",
       price: "Rp110.000",
-      status: "ACTIVE",
-      date: "22/05/2024 at 14:54",
+      status: "Aktif",
+      date: "22 Mei 2026, 14:54",
       sold: 10,
-      actionStatus: "viewed",
+      isHidden: false,
     },
     {
       id: "#BO001",
       title: "Essential Sprint Registration",
       price: "Rp110.000",
-      status: "DEACTIVE",
-      date: "22/05/2024 at 14:54",
+      status: "Nonaktif",
+      date: "22 Mei 2026, 14:54",
       sold: 5,
-      actionStatus: "hidden",
+      isHidden: true,
     },
     {
       id: "#MO001",
       title: "Full-Throttle Coaching",
       price: "Rp110.000",
-      status: "DEACTIVE",
-      date: "22/05/2024 at 14:54",
+      status: "Nonaktif",
+      date: "22 Mei 2026, 14:54",
       sold: 8,
-      actionStatus: "hidden",
+      isHidden: true,
     },
     {
-      id: "#MO001",
-      title: "Full-Throttle Coaching",
+      id: "#MO002",
+      title: "Full-Throttle Coaching (Draft)",
       price: "Rp110.000",
-      status: "DEACTIVE",
-      date: "22/05/2024 at 14:54",
+      status: "Nonaktif",
+      date: "22 Mei 2026, 14:54",
       sold: 0,
-      actionStatus: "hidden",
+      isHidden: true,
       isNew: true,
     },
   ];
 
   return (
-    <div className="w-full font-inter text-black bg-[#F8FAFC] min-h-screen relative flex flex-row overflow-x-hidden">
-      <Sidebar />
-      <div className="ml-[288px]">
-        <Header judulHalaman="Order Management > Module" />
-        <div className="flex-1 flex items-center py-5 flex-col gap-5 px-10 bg-white">
-          {/* Title Area */}
-          <div className="flex flex-col w-[1158px] mt-2 gap-1">
-            <p className="font-bold text-[25px]">Manajemen Konten Modul</p>
-            <p className="text-[#64748B] text-[15px]">
-              Kelola modul, bab, dan materi bacaan
-            </p>
-          </div>
+    <DashboardLayout title="Kelola Pesanan · Modul">
+      <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-bold text-[22px] text-[#0F172A]">
+            Manajemen Konten Modul
+          </h1>
+          <p className="text-[#64748B] text-[14px] mt-1">
+            Kelola modul, bab, dan materi bacaan MARK-UP.
+          </p>
+        </div>
+      </div>
 
-          {/* Stats Cards */}
-          <div className="w-[1158px] flex justify-between gap-5 mt-2">
-            <div className="bg-[#F8FAFC] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm border border-[#E2E8F0]">
-              <p className="text-[#43474D] font-bold text-[14px] tracking-wide">
-                ALL
-              </p>
-              <div className="flex flex-row items-baseline gap-2 mt-2">
-                <p className="font-bold text-[48px] text-[#0F172A] leading-none">
-                  151
-                </p>
-                <span className="text-[#64748B] text-[16px] font-medium">
-                  modul
-                </span>
-              </div>
-            </div>
-            <div className="bg-[#2563EB] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
-              <p className="text-white font-bold text-[14px] tracking-wide">
-                ACTIVE
-              </p>
-              <div className="flex flex-row items-baseline gap-2 mt-2">
-                <p className="font-bold text-[48px] text-white leading-none">
-                  8
-                </p>
-                <span className="text-white text-[16px] font-medium">
-                  modul
-                </span>
-              </div>
-            </div>
-            <div className="bg-[#F0564A] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
-              <p className="text-white font-bold text-[14px] tracking-wide">
-                DEACTIVE
-              </p>
-              <div className="flex flex-row items-baseline gap-2 mt-2">
-                <p className="font-bold text-[48px] text-white leading-none">
-                  3
-                </p>
-                <span className="text-white text-[16px] font-medium">
-                  modul
-                </span>
-              </div>
-            </div>
-          </div>
+      <div className="grid grid-cols-3 gap-5">
+        <StatCard label="Total Modul" value="151" unit="modul" />
+        <StatCard label="Aktif" value="8" unit="modul" variant="success" />
+        <StatCard label="Nonaktif" value="3" unit="modul" variant="warning" />
+      </div>
 
-          {/* Table Area */}
-          <div className="w-[1158px] rounded-[8px] overflow-hidden mt-4 border border-[#E2E8F0] shadow-sm">
+      <div className="flex flex-col gap-4">
+        <h2 className="text-[16px] font-semibold text-[#0F172A]">
+          Daftar Modul
+        </h2>
+
+        {modules.length === 0 ? (
+          <EmptyState message="Belum ada modul yang dibuat." />
+        ) : (
+          <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                   <tr>
-                    <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                      PRODUCT ID
+                    <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">
+                      ID
                     </th>
-                    <th className="px-6 py-4 text-left font-bold text-[#43474D] tracking-wider text-[12px]">
-                      MODUL TITLE
+                    <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">
+                      JUDUL MODUL
                     </th>
-                    <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                      PRICE
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
+                      HARGA
                     </th>
-                    <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
                       STATUS
                     </th>
-                    <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                      SOLD
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
+                      TERJUAL
                     </th>
-                    <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                      ACTIONS
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
+                      AKSI
                     </th>
-                    <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                      MANAGE CONTENT
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
+                      KELOLA KONTEN
                     </th>
                   </tr>
                 </thead>
@@ -145,62 +117,72 @@ export default function ModuleManagement() {
                   {modules.map((item, index) => (
                     <tr
                       key={index}
-                      className="hover:bg-[#F8FAFC] transition-colors h-[80px]"
+                      className="hover:bg-[#F8FAFC] transition-colors"
                     >
-                      <td className="px-6 text-center text-[#64748B] font-medium">
+                      <td className="px-6 py-4 text-[#64748B] font-medium">
                         {item.id}
                       </td>
-                      <td className="px-6 text-left text-[#1E293B] font-semibold max-w-[250px]">
+                      <td
+                        className="px-6 py-4 text-[#1E293B] font-semibold"
+                        style={{ maxWidth: "260px" }}
+                      >
                         {item.title}
                       </td>
-                      <td className="px-6 text-center text-[#475569] font-medium">
+                      <td className="px-6 py-4 text-center text-[#475569] font-medium">
                         {item.price}
                       </td>
-                      <td className="px-6 text-center">
-                        <div className="flex flex-col items-center justify-center">
-                          <span
-                            className={`px-3 py-1 rounded-[4px] font-bold text-[11px] ${
-                              item.status === "ACTIVE"
-                                ? "bg-[#DCFCE7] text-[#15803D]"
-                                : "bg-[#FEE2E2] text-[#B91C1C]"
-                            }`}
-                          >
-                            {item.status}
-                          </span>
-                          <span className="text-[#64748B] text-[10px] mt-1 italic">
-                            {item.date}
-                          </span>
-                        </div>
+                      <td className="px-6 py-4 text-center">
+                        <span
+                          className={`inline-flex px-3 py-1 rounded-[4px] font-bold text-[11px] ${item.status === "Aktif" ? "bg-[#DCFCE7] text-[#166534]" : "bg-[#FEE2E2] text-[#991B1B]"}`}
+                        >
+                          {item.status.toUpperCase()}
+                        </span>
+                        <p className="text-[#94A3B8] text-[10px] mt-1 italic">
+                          {item.date}
+                        </p>
                       </td>
-                      <td className="px-6 text-center text-[#475569] font-medium">
+                      <td className="px-6 py-4 text-center text-[#475569] font-medium">
                         {item.sold}
                       </td>
-                      <td className="px-6 text-center">
-                        <div className="flex flex-row items-center justify-center gap-3 text-[#94A3B8]">
-                          <button className="hover:text-[#2563EB] transition-colors">
-                            {item.actionStatus === "viewed" ? (
-                              <Eye size={16} />
-                            ) : (
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex items-center justify-center gap-3 text-[#94A3B8]">
+                          <button
+                            className="hover:text-[#148F89] transition-colors"
+                            title={
+                              item.isHidden
+                                ? "Modul disembunyikan"
+                                : "Modul tampil"
+                            }
+                          >
+                            {item.isHidden ? (
                               <EyeOff size={16} />
+                            ) : (
+                              <Eye size={16} />
                             )}
                           </button>
-                          <button className="hover:text-[#2563EB] transition-colors">
+                          <button className="hover:text-[#148F89] transition-colors">
                             <Pencil size={16} />
                           </button>
-                          <button className="hover:text-[#2563EB] transition-colors">
+                          <button className="hover:text-[#148F89] transition-colors">
                             <ExternalLink size={16} />
                           </button>
                         </div>
                       </td>
-                      <td className="px-6 text-center">
+                      <td className="px-6 py-4 text-center">
                         {item.isNew ? (
-                          <button className="px-6 py-2 rounded-[6px] font-bold text-[12px] bg-[#2563EB] text-white hover:bg-[#1D4ED8] transition-colors shadow-sm">
-                            UPLOAD MODUL
-                          </button>
+                          <Link
+                            href={`/admin/orders/module/${item.id.replace("#", "%23")}`}
+                            className="inline-block px-5 py-2 rounded-[6px] font-bold text-[11px] bg-[#148F89] text-white hover:bg-[#117A75] transition-colors whitespace-nowrap"
+                          >
+                            UNGGAH MODUL
+                          </Link>
                         ) : (
-                          <button className="px-6 py-2 rounded-[6px] font-bold text-[12px] bg-[#F1F5F9] text-[#1E293B] border border-[#E2E8F0] hover:bg-[#E2E8F0] transition-colors">
+                          <Link
+                            href={`/admin/orders/module/${item.id.replace("#", "%23")}`}
+                            className="inline-block px-5 py-2 rounded-[6px] font-bold text-[11px] bg-[#F1F5F9] text-[#1E293B] border border-[#E2E8F0] hover:bg-[#E2E8F0] transition-colors"
+                          >
                             EDIT
-                          </button>
+                          </Link>
                         )}
                       </td>
                     </tr>
@@ -209,25 +191,8 @@ export default function ModuleManagement() {
               </table>
             </div>
           </div>
-
-          {/* Pagination */}
-          <div className="flex justify-center items-center mt-6 mb-10 gap-2 text-[#64748B] text-[14px]">
-            <span className="w-8 h-8 flex items-center justify-center bg-white border border-[#2563EB] text-[#2563EB] font-bold rounded-[6px] cursor-pointer hover:bg-[#EFF6FF] shadow-sm">
-              1
-            </span>
-            <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-[6px] font-medium">
-              2
-            </span>
-            <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-[6px] font-medium">
-              3
-            </span>
-            <span className="font-medium tracking-widest">...</span>
-            <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-[6px] font-medium">
-              12
-            </span>
-          </div>
-        </div>
+        )}
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

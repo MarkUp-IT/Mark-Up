@@ -1,431 +1,320 @@
 "use client";
 
 import {
-  Bell,
-  Settings,
-  Search,
   Plus,
   Download,
-  PenLine,
-  SquareArrowOutUpRight,
+  ChevronDown,
   X,
   CloudUpload,
-  ChevronDown,
-  LayoutDashboard,
-  Package,
-  Trophy,
-  ReceiptText,
-  MessageSquare,
-  History,
-  Presentation,
-  Users,
-  FileText,
+  PenLine,
+  ExternalLink,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import Sidebar from "@/component/admin/Sidebar";
-import Header from "@/component/admin/Header";
+import DashboardLayout from "@/component/admin/DashboardLayout";
+import StatCard from "@/component/admin/StatCard";
+import EmptyState from "@/component/admin/EmptyState";
 
-export default function InfoLomba() {
+const CATEGORY_FILTERS = [
+  "Semua",
+  "Business Case",
+  "Business Plan",
+  "Debat",
+  "LKTI",
+  "UI/UX",
+  "Hackathon",
+];
+const STATUS_FILTERS = ["Semua", "Aktif", "Kedaluwarsa"];
+
+export default function Competitions() {
+  const heightFix = `.adm-h-42 { height: 42px; } .adm-h-48 { height: 48px; }`;
+
+  // status "Aktif"/"Kedaluwarsa" itu turunan dari deadline vs sekarang,
+  // bukan kolom tersimpan -- di sini dihitung manual buat mock data.
   const competitions = [
     {
-      competition_id: "#ME003",
+      id: "#ME003",
       title: "KOPMAVATION 1.0 Business Plan Competition",
       organizer: "Kopma UMY",
       category: "Business Plan",
-      status: "ACTIVE",
+      deadline: "20 Agu 2026",
+      status: "Aktif",
     },
     {
-      competition_id: "#BO001",
+      id: "#BO001",
       title: "LDBI ASFERA 2k26 (Lomba Debat Bahasa Indonesia)",
       organizer: "As-Syifa Boarding School Wanareja",
       category: "Debat",
-      status: "EXPIRED",
+      deadline: "5 Jun 2026",
+      status: "Kedaluwarsa",
     },
     {
-      competition_id: "#MO001",
+      id: "#MO001",
       title: "DreamCareer Mini Case Competition",
       organizer: "DreamCareer",
       category: "Business Case",
-      status: "ACTIVE",
+      deadline: "15 Sep 2026",
+      status: "Aktif",
     },
     {
-      competition_id: "#BO003",
+      id: "#BO003",
       title: "DWDG BINUS X PWC X UNIQLO X MAD FOR MAKEU",
       organizer: "Binus University",
       category: "Business Case",
-      status: "ACTIVE",
+      deadline: "1 Sep 2026",
+      status: "Aktif",
     },
   ];
 
-  const [isCategoryActive, setIsCategoryActive] = useState("semua");
-  const [isStatusActive, setIsStatusActive] = useState("semua");
+  const [categoryFilter, setCategoryFilter] = useState("Semua");
+  const [statusFilter, setStatusFilter] = useState("Semua");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedCompetition, setSelectedCompetition] = useState(null);
 
   useEffect(() => {
-    if (isAddOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "auto";
-    }
-
+    document.body.style.overflow = isAddOpen || isEditOpen ? "hidden" : "auto";
     return () => {
       document.body.style.overflow = "auto";
     };
-  }, [isAddOpen]);
+  }, [isAddOpen, isEditOpen]);
 
-  useEffect(() => {
-    if (isEditOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "auto";
-    }
-
-    return () => {
-      document.body.style.overflow = "auto";
-    };
-  }, [isEditOpen]);
+  const filtered = competitions.filter((c) => {
+    const matchCategory =
+      categoryFilter === "Semua" || c.category === categoryFilter;
+    const matchStatus = statusFilter === "Semua" || c.status === statusFilter;
+    return matchCategory && matchStatus;
+  });
 
   return (
-    <div className="w-full font-inter text-black bg-white min-h-screen relative flex flex-row overflow-x-hidden">
-      <Sidebar />
-      <div className="ml-[288px]">
-        <Header judulHalaman="Competition Info" />
-        <div className="flex-1 flex items-center py-5 flex-col gap-5 px-10">
-          <div className="flex flex-row items-center justify-between w-[1158px] mt-2">
-            <div>
-              <p className="font-bold text-[25px]">Competition Info</p>
-              <p className="text-[#43474D] text-[15px]">
-                Kelola informasi info lomba pada website MARK-UP
-              </p>
-            </div>
-            <div className="flex flex-row gap-4">
-              <div className="relative">
-                <Plus
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white pointer-events-none"
-                  size={18}
-                />
-                <button
-                  onClick={() => setIsAddOpen(true)}
-                  className="bg-[#2563EB] w-[190px] h-[43.5px] text-white font-semibold pl-6 rounded-[6.75px] hover:bg-[#2563EB]/80 transition-colors shadow-sm"
-                >
-                  New Competitions
-                </button>
-              </div>
-            </div>
-          </div>
+    <DashboardLayout title="Info Lomba">
+      <style>{heightFix}</style>
 
-          <div className="w-[1158px] flex justify-between gap-5 mt-2">
-            <div className="bg-[#EFE2C2] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
-              <p className="text-[#43474D] font-bold text-[14px] tracking-wide">
-                TOTAL COMPETITIONS
-              </p>
-              <div className="flex flex-row items-baseline gap-2 mt-2">
-                <p className="font-bold text-[48px] text-black leading-none">
-                  15
-                </p>
-                <span className="text-[#43474D] text-[16px] font-medium">
-                  competitions
-                </span>
-              </div>
-            </div>
-            <div className="bg-[#2563EB] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
-              <p className="text-white font-bold text-[14px] tracking-wide">
-                ACTIVE
-              </p>
-              <div className="flex flex-row items-baseline gap-2 mt-2">
-                <p className="font-bold text-[48px] text-white leading-none">
-                  12
-                </p>
-                <span className="text-white text-[16px] font-medium">
-                  competitions
-                </span>
-              </div>
-            </div>
-            <div className="bg-[#F0564A] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
-              <p className="text-white font-bold text-[14px] tracking-wide">
-                EXPIRED
-              </p>
-              <div className="flex flex-row items-baseline gap-2 mt-2">
-                <p className="font-bold text-[48px] text-white leading-none">
-                  3
-                </p>
-                <span className="text-white text-[16px] font-medium">
-                  competitions
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="w-[1158px] flex flex-col mt-5">
-            <div className="flex justify-between items-end">
-              <div className="flex flex-col gap-1">
-                <p className="text-[18px] font-semibold text-black">
-                  List Competitions
-                </p>
-                <p className="text-[#43474D] text-[14px]">
-                  List of MARK-UP competitions all time
-                </p>
-              </div>
-              <p className="text-[#2563EB] font-bold text-[14.62px] cursor-pointer hover:underline">
-                View All Products
-              </p>
-            </div>
-
-            <div className="flex flex-row justify-between mt-6">
-              <div className="flex flex-row gap-5">
-                <div className="h-[43.5px] bg-[#F0F4F8] px-2 rounded-[6px] flex justify-center items-center gap-1 shadow-sm">
-                  <button
-                    onClick={() => setIsCategoryActive("semua")}
-                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "semua" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                  >
-                    Semua
-                  </button>
-                  <button
-                    onClick={() => setIsCategoryActive("business-case")}
-                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "business-case" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                  >
-                    Business Case
-                  </button>
-                  <button
-                    onClick={() => setIsCategoryActive("business-plan")}
-                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "business-plan" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                  >
-                    Business Plan
-                  </button>
-                  <button
-                    onClick={() => setIsCategoryActive("debat")}
-                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "debat" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                  >
-                    Debat
-                  </button>
-                  <button
-                    onClick={() => setIsCategoryActive("lkti")}
-                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "lkti" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                  >
-                    LKTI
-                  </button>
-                  <button
-                    onClick={() => setIsCategoryActive("ui-ux")}
-                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "ui-ux" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                  >
-                    UI/UX
-                  </button>
-                  <button
-                    onClick={() => setIsCategoryActive("hackathon")}
-                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isCategoryActive === "hackathon" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                  >
-                    Hackathon
-                  </button>
-                </div>
-                <div className="h-[43.5px] bg-[#F0F4F8] px-2 rounded-[6px] flex justify-center items-center gap-1 shadow-sm">
-                  <button
-                    onClick={() => setIsStatusActive("semua")}
-                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isStatusActive === "semua" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                  >
-                    Semua
-                  </button>
-                  <button
-                    onClick={() => setIsStatusActive("active")}
-                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isStatusActive === "active" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                  >
-                    Active
-                  </button>
-                  <button
-                    onClick={() => setIsStatusActive("expired")}
-                    className={`px-3 py-1.5 rounded-[4px] font-medium text-[13px] ${isStatusActive === "expired" ? "bg-white text-black shadow-sm" : "text-[#43474D] hover:bg-[#E2E8F0]"}`}
-                  >
-                    Expired
-                  </button>
-                </div>
-              </div>
-              <div className="relative flex items-center">
-                <Download
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#43474D]"
-                  size={15}
-                />
-                <button className="w-[130px] h-[43.5px] bg-[#F0F4F8] text-[13px] pl-6 pr-2 font-medium rounded-[6px] hover:bg-[#E2E8F0] shadow-sm transition-colors text-[#43474D]">
-                  Export .CSV
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-[8px] overflow-hidden mt-6 border border-[#E2E8F0] shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-[13px]">
-                  <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
-                    <tr>
-                      <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                        COMPETITION ID
-                      </th>
-                      <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                        COMPETITION TITLE
-                      </th>
-                      <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                        ORGANIZER
-                      </th>
-                      <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                        CATEGORY
-                      </th>
-                      <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                        STATUS
-                      </th>
-                      <th className="px-6 py-4 text-center font-bold text-[#43474D] tracking-wider text-[12px]">
-                        ACTIONS
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E2E8F0] bg-white">
-                    {competitions.map((item, index) => (
-                      <tr
-                        key={index}
-                        className="hover:bg-[#F8FAFC] transition-colors"
-                      >
-                        <td className="px-6 py-5 text-center text-[#64748B] font-medium">
-                          {item.competition_id}
-                        </td>
-                        <td className="px-6 py-5 text-center text-[#1E293B] font-semibold max-w-[250px] break-words">
-                          {item.title}
-                        </td>
-                        <td className="px-6 py-5 text-center text-[#43474D] font-medium">
-                          {item.organizer}
-                        </td>
-                        <td className="px-6 py-5 text-center">
-                          <span className="inline-flex items-center justify-center px-3 py-1.5 text-[12px] rounded-[6px] font-semibold bg-[#F1F5F9] text-[#475569]">
-                            {item.category}
-                          </span>
-                        </td>
-                        <td className="px-6 py-5 text-center">
-                          <span
-                            className={`inline-flex items-center justify-center px-4 py-1.5 text-[12px] rounded-full font-bold ${
-                              item.status === "ACTIVE"
-                                ? "bg-[#DCFCE7] text-[#166534]"
-                                : "bg-[#FEE2E2] text-[#991B1B]"
-                            }`}
-                          >
-                            {item.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-5 text-center">
-                          <div className="flex flex-row items-center justify-center gap-4">
-                            <PenLine
-                              size={18}
-                              onClick={() => {
-                                setSelectedCompetition(item);
-                                setIsEditOpen(true);
-                              }}
-                              className="cursor-pointer text-[#64748B] hover:text-[#2563EB] transition-colors"
-                            />
-                            <SquareArrowOutUpRight
-                              className="cursor-pointer text-[#64748B] hover:text-[#2563EB] transition-colors"
-                              size={18}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="flex justify-center items-center mt-6 mb-10 gap-2 text-[#64748B] text-[14px]">
-              <span className="w-8 h-8 flex items-center justify-center bg-white border border-[#2563EB] text-[#2563EB] font-bold rounded-md cursor-pointer hover:bg-[#EFF6FF] shadow-sm">
-                1
-              </span>
-              <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-md font-medium">
-                2
-              </span>
-              <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-md font-medium">
-                3
-              </span>
-              <span className="font-medium tracking-widest">...</span>
-              <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-md font-medium">
-                12
-              </span>
-            </div>
-          </div>
+      <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-bold text-[22px] text-[#0F172A]">Info Lomba</h1>
+          <p className="text-[#64748B] text-[14px] mt-1">
+            Kelola informasi lomba yang tampil di halaman publik MARK-UP.
+          </p>
         </div>
+        <button
+          onClick={() => setIsAddOpen(true)}
+          className="adm-h-42 flex items-center gap-2 px-5 rounded-[8px] bg-[#148F89] text-white text-[13px] font-semibold hover:bg-[#117A75] transition-colors"
+        >
+          <Plus size={16} />
+          Lomba Baru
+        </button>
       </div>
 
+      <div className="grid grid-cols-3 gap-5">
+        <StatCard label="Total Lomba" value="15" unit="lomba" />
+        <StatCard label="Aktif" value="12" unit="lomba" variant="primary" />
+        <StatCard label="Kedaluwarsa" value="3" unit="lomba" />
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <div className="flex items-end justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-[16px] font-semibold text-[#0F172A]">
+              Daftar Lomba
+            </h2>
+            <p className="text-[#64748B] text-[13px] mt-0.5">
+              Seluruh lomba yang pernah dipublikasikan.
+            </p>
+          </div>
+          <button className="adm-h-42 flex items-center gap-2 px-4 bg-[#F1F5F9] text-[13px] font-medium rounded-[8px] hover:bg-[#E2E8F0] transition-colors text-[#475569]">
+            <Download size={15} />
+            Ekspor .CSV
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="adm-h-42 bg-[#F1F5F9] px-1.5 rounded-[8px] flex items-center gap-1 flex-wrap">
+            {CATEGORY_FILTERS.map((f) => (
+              <button
+                key={f}
+                onClick={() => setCategoryFilter(f)}
+                className={`px-3 py-2 rounded-[6px] font-medium text-[12.5px] transition-colors whitespace-nowrap ${categoryFilter === f ? "bg-white text-[#0F172A] shadow-sm" : "text-[#64748B] hover:bg-white/60"}`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+          <div className="adm-h-42 bg-[#F1F5F9] px-1.5 rounded-[8px] flex items-center gap-1">
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f}
+                onClick={() => setStatusFilter(f)}
+                className={`px-3 py-2 rounded-[6px] font-medium text-[12.5px] transition-colors ${statusFilter === f ? "bg-white text-[#0F172A] shadow-sm" : "text-[#64748B] hover:bg-white/60"}`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {filtered.length === 0 ? (
+          <EmptyState message="Nggak ada lomba yang cocok sama filter ini." />
+        ) : (
+          <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                  <tr>
+                    <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">
+                      ID
+                    </th>
+                    <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">
+                      JUDUL LOMBA
+                    </th>
+                    <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">
+                      PENYELENGGARA
+                    </th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
+                      KATEGORI
+                    </th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
+                      DEADLINE
+                    </th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
+                      STATUS
+                    </th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
+                      AKSI
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E2E8F0] bg-white">
+                  {filtered.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="hover:bg-[#F8FAFC] transition-colors"
+                    >
+                      <td className="px-6 py-4 text-[#64748B] font-medium">
+                        {item.id}
+                      </td>
+                      <td
+                        className="px-6 py-4 text-[#1E293B] font-semibold"
+                        style={{ maxWidth: "260px" }}
+                      >
+                        {item.title}
+                      </td>
+                      <td className="px-6 py-4 text-[#475569] font-medium">
+                        {item.organizer}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="inline-flex px-3 py-1.5 text-[11px] rounded-[6px] font-semibold bg-[#F1F5F9] text-[#475569]">
+                          {item.category}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center text-[#475569] font-medium whitespace-nowrap">
+                        {item.deadline}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span
+                          className={`inline-flex px-3 py-1.5 text-[11px] rounded-full font-bold ${item.status === "Aktif" ? "bg-[#DCFCE7] text-[#166534]" : "bg-[#FEE2E2] text-[#991B1B]"}`}
+                        >
+                          {item.status.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex items-center justify-center gap-3">
+                          <PenLine
+                            size={17}
+                            onClick={() => {
+                              setSelectedCompetition(item);
+                              setIsEditOpen(true);
+                            }}
+                            className="cursor-pointer text-[#94A3B8] hover:text-[#148F89] transition-colors"
+                          />
+                          <ExternalLink
+                            size={17}
+                            className="cursor-pointer text-[#94A3B8] hover:text-[#148F89] transition-colors"
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* --- MODAL TAMBAH --- */}
       {isAddOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm"
           onClick={() => setIsAddOpen(false)}
         />
       )}
-
       <div
-        className={`fixed top-0 right-0 h-screen w-[600px] bg-white shadow-2xl z-50 transition-transform duration-300 ease-in-out flex flex-col overflow-y-auto ${isAddOpen ? "translate-x-0" : "translate-x-full"}`}
+        style={{ width: "560px", maxWidth: "100%" }}
+        className={`fixed top-0 right-0 h-screen bg-white shadow-2xl z-50 transition-transform duration-300 ease-in-out flex flex-col overflow-y-auto ${isAddOpen ? "translate-x-0" : "translate-x-full"}`}
       >
-        <div className="w-full h-[120px] shrink-0 bg-[#F8FAFC] border-b border-[#E2E8F0] flex flex-col justify-center px-10 gap-1">
-          <div className="flex flex-row w-full justify-between items-center">
-            <p className="text-[#1E293B] text-[20px] font-bold">
-              New Competitions
-            </p>
+        <div className="w-full shrink-0 bg-[#F8FAFC] border-b border-[#E2E8F0] flex flex-col justify-center px-8 py-6 gap-1">
+          <div className="flex justify-between items-center">
+            <p className="text-[#1E293B] text-[19px] font-bold">Lomba Baru</p>
             <button
               onClick={() => setIsAddOpen(false)}
               className="p-2 hover:bg-[#E2E8F0] rounded-full transition-colors"
             >
-              <X className="cursor-pointer text-[#64748B]" size={20} />
+              <X className="text-[#64748B]" size={20} />
             </button>
           </div>
-          <p className="text-[#64748B] text-[14px]">
-            Fill in the details to post a new competition info.
+          <p className="text-[#64748B] text-[13px]">
+            Isi detail buat publikasikan lomba baru.
           </p>
         </div>
 
-        <div className="px-10 py-8 flex flex-col gap-6">
+        <div className="px-8 py-6 flex flex-col gap-5">
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              COMPETITION POSTER
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Poster Lomba
             </p>
-            <div className="bg-[#F8FAFC] w-full h-[180px] rounded-[8px] flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:bg-[#F1F5F9] hover:border-[#94A3B8] transition-all cursor-pointer">
-              <div className="bg-white rounded-[12px] w-[56px] h-[56px] flex justify-center items-center mb-3 shadow-sm border border-[#E2E8F0]">
-                <CloudUpload size={24} className="text-[#2563EB]" />
-              </div>
-              <p className="text-[#1E293B] font-semibold text-[15px] mb-1">
-                Click to upload or drag and drop
+            <div
+              style={{ height: "160px" }}
+              className="bg-[#F8FAFC] w-full rounded-[8px] flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:bg-[#F1F5F9] transition-all cursor-pointer"
+            >
+              <CloudUpload size={22} className="text-[#148F89] mb-2" />
+              <p className="text-[#1E293B] font-semibold text-[14px]">
+                Klik untuk unggah poster
               </p>
-              <p className="text-[#64748B] text-[13px]">(Max 5MB)</p>
+              <p className="text-[#94A3B8] text-[12px]">Maks. 5MB</p>
             </div>
           </div>
 
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              COMPETITION TITLE
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Judul Lomba
             </p>
             <input
               type="text"
-              placeholder="Enter competition title..."
-              className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B] placeholder:text-[#94A3B8]"
+              placeholder="Masukkan judul lomba..."
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
 
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              COMPETITION ORGANIZER
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Penyelenggara
             </p>
             <input
               type="text"
-              placeholder="Enter competition organizer..."
-              className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B] placeholder:text-[#94A3B8]"
+              placeholder="Masukkan penyelenggara..."
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
 
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              CATEGORY
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Kategori
             </p>
             <div className="relative w-full">
-              <select className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 pr-10 appearance-none outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]">
-                <option>Business Case</option>
-                <option>Business Plan</option>
-                <option>Debat</option>
-                <option>LKTI</option>
-                <option>UI/UX</option>
-                <option>Hackathon</option>
+              <select className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B]">
+                {CATEGORY_FILTERS.slice(1).map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
               </select>
               <ChevronDown
                 size={18}
@@ -435,183 +324,155 @@ export default function InfoLomba() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              COMPETITION LEVEL
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Tingkat Lomba
             </p>
             <input
               type="text"
               placeholder='"Surabaya", "Nasional", "Internasional"'
-              className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B] placeholder:text-[#94A3B8]"
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
 
           <div className="flex gap-4 w-full">
             <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-                EVENT DATE
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Tanggal Event
               </p>
               <input
                 type="date"
-                className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]"
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
               />
             </div>
-
             <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-                REGISTRATION DEADLINE
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Deadline Pendaftaran
               </p>
               <input
                 type="date"
-                className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]"
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
               />
             </div>
           </div>
 
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              TARGET PARTICIPANTS
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Target Peserta
             </p>
             <input
               type="text"
               placeholder='"Mahasiswa Aktif S1", "Siswa SMA"'
-              className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B] placeholder:text-[#94A3B8]"
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
 
           <div className="flex gap-4 w-full">
             <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-                PRIZEPOOL
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Biaya Pendaftaran (Rp)
               </p>
               <input
-                type="text"
-                placeholder="Rp 0"
-                className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B] placeholder:text-[#94A3B8]"
+                type="number"
+                placeholder="0"
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
               />
             </div>
-
             <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-                REGISTRATION FEE
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Biaya Maks (opsional)
               </p>
               <input
-                type="text"
-                placeholder="Rp 0"
-                className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B] placeholder:text-[#94A3B8]"
+                type="number"
+                placeholder="Kalau ada rentang harga"
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
               />
             </div>
           </div>
 
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              REGISTRATION LINK (URL)
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Link Pendaftaran
             </p>
             <input
               type="url"
               placeholder="https://..."
-              className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B] placeholder:text-[#94A3B8]"
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
         </div>
 
-        <div className="mt-auto p-6 bg-white border-t border-[#E2E8F0] flex gap-4">
+        <div className="mt-auto p-6 bg-white border-t border-[#E2E8F0] flex gap-3">
           <button
             onClick={() => setIsAddOpen(false)}
-            className="flex-1 py-3 bg-white border border-[#CBD5E1] text-[#475569] font-bold rounded-[8px] hover:bg-[#F8FAFC] transition-colors"
+            className="flex-1 py-3 bg-white border border-[#E2E8F0] text-[#475569] font-bold rounded-[8px] hover:bg-[#F8FAFC] transition-colors"
           >
-            Discard Draft
+            Batalkan
           </button>
-          <button className="flex-1 py-3 bg-[#2563EB] text-white font-bold rounded-[8px] hover:bg-[#1D4ED8] transition-colors shadow-sm">
-            Publish Competition
+          <button className="flex-1 py-3 bg-[#148F89] text-white font-bold rounded-[8px] hover:bg-[#117A75] transition-colors">
+            Publikasikan
           </button>
         </div>
       </div>
 
+      {/* --- MODAL EDIT --- */}
       {isEditOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm"
           onClick={() => setIsEditOpen(false)}
         />
       )}
-
       <div
-        className={`fixed top-0 right-0 h-screen w-[600px] bg-white shadow-2xl z-50 transition-transform duration-300 ease-in-out flex flex-col overflow-y-auto ${isEditOpen ? "translate-x-0" : "translate-x-full"}`}
+        style={{ width: "560px", maxWidth: "100%" }}
+        className={`fixed top-0 right-0 h-screen bg-white shadow-2xl z-50 transition-transform duration-300 ease-in-out flex flex-col overflow-y-auto ${isEditOpen ? "translate-x-0" : "translate-x-full"}`}
       >
-        <div className="w-full h-[120px] shrink-0 bg-[#F8FAFC] border-b border-[#E2E8F0] flex flex-col justify-center px-10 gap-1">
-          <div className="flex flex-row w-full justify-between items-center">
-            <p className="text-[#1E293B] text-[20px] font-bold">
-              Edit Competition
-            </p>
+        <div className="w-full shrink-0 bg-[#F8FAFC] border-b border-[#E2E8F0] flex flex-col justify-center px-8 py-6 gap-1">
+          <div className="flex justify-between items-center">
+            <p className="text-[#1E293B] text-[19px] font-bold">Edit Lomba</p>
             <button
               onClick={() => setIsEditOpen(false)}
               className="p-2 hover:bg-[#E2E8F0] rounded-full transition-colors"
             >
-              <X className="cursor-pointer text-[#64748B]" size={20} />
+              <X className="text-[#64748B]" size={20} />
             </button>
           </div>
-          <p className="text-[#64748B] text-[14px]">
-            Edit the details to update this competition info.
+          <p className="text-[#64748B] text-[13px]">
+            Ubah detail {selectedCompetition?.title || "lomba terpilih"}.
           </p>
         </div>
 
-        <div
-          key={selectedCompetition?.competition_id}
-          className="px-10 py-8 flex flex-col gap-6"
-        >
+        <div className="px-8 py-6 flex flex-col gap-5">
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              COMPETITION POSTER
-            </p>
-            <div className="bg-[#F8FAFC] w-full h-[180px] rounded-[8px] flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:bg-[#F1F5F9] hover:border-[#94A3B8] transition-all cursor-pointer">
-              <div className="bg-white rounded-[12px] w-[56px] h-[56px] flex justify-center items-center mb-3 shadow-sm border border-[#E2E8F0]">
-                <CloudUpload size={24} className="text-[#2563EB]" />
-              </div>
-              <p className="text-[#1E293B] font-semibold text-[15px] mb-1">
-                Click to upload or drag and drop
-              </p>
-              <p className="text-[#64748B] text-[13px]">(Max 5MB)</p>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              COMPETITION TITLE
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Judul Lomba
             </p>
             <input
               type="text"
-              defaultValue={selectedCompetition?.title || ""}
-              placeholder="Enter competition title..."
-              className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]"
+              defaultValue={selectedCompetition?.title}
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
-
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              COMPETITION ORGANIZER
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Penyelenggara
             </p>
             <input
               type="text"
-              defaultValue={selectedCompetition?.organizer || ""}
-              placeholder="Enter competition organizer..."
-              className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]"
+              defaultValue={selectedCompetition?.organizer}
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
-
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              CATEGORY
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Kategori
             </p>
             <div className="relative w-full">
               <select
-                defaultValue={selectedCompetition?.category || "Business Case"}
-                className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 pr-10 appearance-none outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]"
+                defaultValue={selectedCompetition?.category}
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
               >
-                <option>Business Case</option>
-                <option>Business Plan</option>
-                <option>Debat</option>
-                <option>LKTI</option>
-                <option>UI/UX</option>
-                <option>Hackathon</option>
+                {CATEGORY_FILTERS.slice(1).map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
               </select>
               <ChevronDown
                 size={18}
@@ -619,99 +480,29 @@ export default function InfoLomba() {
               />
             </div>
           </div>
-
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              COMPETITION LEVEL
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Deadline Pendaftaran
             </p>
             <input
-              type="text"
-              placeholder='"Surabaya", "Nasional", "Internasional"'
-              className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]"
-            />
-          </div>
-
-          <div className="flex gap-4 w-full">
-            <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-                EVENT DATE
-              </p>
-              <input
-                type="date"
-                className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]"
-              />
-            </div>
-
-            <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-                REGISTRATION DEADLINE
-              </p>
-              <input
-                type="date"
-                className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              TARGET PARTICIPANTS
-            </p>
-            <input
-              type="text"
-              placeholder='"Mahasiswa Aktif S1", "Siswa SMA"'
-              className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]"
-            />
-          </div>
-
-          <div className="flex gap-4 w-full">
-            <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-                PRIZEPOOL
-              </p>
-              <input
-                type="text"
-                placeholder="Rp 0"
-                className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]"
-              />
-            </div>
-
-            <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-                REGISTRATION FEE
-              </p>
-              <input
-                type="text"
-                placeholder="Rp 0"
-                className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[13px] uppercase font-bold tracking-wider">
-              REGISTRATION LINK (URL)
-            </p>
-            <input
-              type="url"
-              placeholder="https://..."
-              className="w-full h-[48px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-4 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all text-[#1E293B]"
+              type="date"
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
         </div>
 
-        <div className="mt-auto p-6 bg-white border-t border-[#E2E8F0] flex gap-4">
+        <div className="mt-auto p-6 bg-white border-t border-[#E2E8F0] flex gap-3">
           <button
             onClick={() => setIsEditOpen(false)}
-            className="flex-1 py-3 bg-white border border-[#CBD5E1] text-[#475569] font-bold rounded-[8px] hover:bg-[#F8FAFC] transition-colors"
+            className="flex-1 py-3 bg-white border border-[#E2E8F0] text-[#475569] font-bold rounded-[8px] hover:bg-[#F8FAFC] transition-colors"
           >
-            Discard Changes
+            Batal
           </button>
-          <button className="flex-1 py-3 bg-[#2563EB] text-white font-bold rounded-[8px] hover:bg-[#1D4ED8] transition-colors shadow-sm">
-            Save Changes
+          <button className="flex-1 py-3 bg-[#148F89] text-white font-bold rounded-[8px] hover:bg-[#117A75] transition-colors">
+            Simpan Perubahan
           </button>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
