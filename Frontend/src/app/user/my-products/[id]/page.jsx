@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/component/user/DashboardLayout";
 import EmptyState from "@/component/user/EmptyState";
+import { apiRequest } from "@/lib/api";
 
 const statusMeta = {
   completed: {
@@ -88,145 +89,32 @@ const MENTOR_AVAILABILITY = {
 // mentoring_sessions). Sesi ke-1 tiap paket mentoring udah kepilih waktu
 // checkout, sesi berikutnya sengaja "waiting_schedule" -- itu yang mau
 // dipilih user sendiri belakangan dari halaman ini. ---
-const products = {
-  "BC-001": {
-    type: "bootcamp",
-    title: "Winner Class Dan Module (Debate)",
-    description:
-      "Program intensif buat kamu yang ingin menguasai teknik debat kompetitif, dari dasar motion sampai simulasi penuh melawan lawan tanding.",
-    imageClass: "from-[#4C1D95] to-[#0D9488]",
-    sessions: [
-      {
-        title: "Pengenalan Motion & Framework Debat",
-        mentor: "Kak Alya Hamidah",
-        mentorId: "alya-hamidah",
-        startTime: "2026-06-02T19:00:00+07:00",
-        status: "completed",
-        recordingUrl: "https://example.com/rekaman/sesi-1",
-      },
-      {
-        title: "Case Building & Argumentasi",
-        mentor: "Kak Alya Hamidah",
-        mentorId: "alya-hamidah",
-        startTime: "2026-06-09T19:00:00+07:00",
-        status: "completed",
-        recordingUrl: "https://example.com/rekaman/sesi-2",
-      },
-      {
-        title: "POI (Point of Information) dan Rebuttal",
-        mentor: "Kak Adena Laksita",
-        mentorId: "adena-laksita",
-        startTime: "2026-07-20T19:00:00+07:00",
-        status: "scheduled",
-        meetingLink: "https://meet.google.com/abc-defg-hij",
-      },
-      {
-        title: "Simulasi Debat Penuh & Evaluasi",
-        mentor: "Kak Adena Laksita",
-        mentorId: "adena-laksita",
-        startTime: null,
-        status: "waiting_schedule",
-      },
-    ],
-  },
-  "BC-002": {
-    type: "bootcamp",
-    title: "Winner Class Dan Module (Debate)",
-    description:
-      "Batch lanjutan untuk pendalaman teknik debat kompetitif tingkat nasional.",
-    imageClass: "from-[#4C1D95] to-[#0D9488]",
-    sessions: [
-      {
-        title: "Pengenalan Motion & Framework Debat",
-        mentor: "Kak Alya Hamidah",
-        mentorId: "alya-hamidah",
-        startTime: inTwoHours,
-        status: "scheduled",
-        meetingLink: "https://meet.google.com/klm-nopq-rst",
-      },
-      {
-        title: "Case Building & Argumentasi",
-        mentor: "Kak Alya Hamidah",
-        mentorId: "alya-hamidah",
-        startTime: null,
-        status: "waiting_schedule",
-      },
-    ],
-  },
-  "MD-001": {
-    type: "modul",
-    title: "Masterclass Business Case Competition (BCC)",
-    description:
-      "Panduan komprehensif memecahkan kasus bisnis dari nol, mulai dari problem solving hingga menyusun winning pitch deck untuk kompetisi.",
-    imageClass: "from-[#4C1D95] to-[#2563EB]",
-    fileUrl: "https://example.com/modul/masterclass-bcc.pdf",
-    resources: [
-      "E-Book Panduan Analisis Kasus (50+ Halaman)",
-      "10 Winning Pitch Deck Finalis Nasional & Internasional",
-      "5 Template Presentasi Kasus Editable (Canva & PPT)",
-      "Video Bedah Kasus Eksklusif (45 Menit)",
-    ],
-    chapters: [
-      "Cara melakukan Root Cause Analysis (MECE, Issue Tree)",
-      "Pemilihan framework yang tepat (SWOT, Porter's 5 Forces, 4P, dll)",
-      "Menyusun strategi solusi dan rencana implementasi (Timeline & Budgeting)",
-      "Teknik Storytelling & Visualisasi Data untuk Pitch Deck yang meyakinkan juri",
-    ],
-  },
-  "MT-001": {
-    type: "mentoring",
-    title: "1-on-1 Career Mentoring",
-    description:
-      "Bimbingan personal buat matangin CV, LinkedIn, dan strategi karier bareng mentor.",
-    imageClass: "from-[#4C1D95] to-[#CA8A04]",
-    sessions: [
-      {
-        id: 1,
-        mentor: "Kak Alya Hamidah",
-        mentorId: "alya-hamidah",
-        startTime: "2026-07-25T14:00:00+07:00",
-        status: "scheduled",
-        zoomLink: "https://zoom.us/j/1234567890",
-      },
-    ],
-  },
-  "MT-002": {
-    type: "mentoring",
-    title: "Bundling PowerPack (Newbie Friendly)",
-    description:
-      "Paket 3 sesi buat kamu yang baru mulai ikut BCC dari nol, lengkap sama akses deck finalis. Sesi pertama udah dijadwalin pas checkout, sesi berikutnya kamu pilih sendiri di sini begitu udah siap.",
-    imageClass: "from-[#4C1D95] to-[#CA8A04]",
-    sessions: [
-      {
-        id: 1,
-        mentor: "Kak Adena Laksita",
-        mentorId: "adena-laksita",
-        startTime: "2026-06-10T10:00:00+07:00",
-        status: "completed",
-        recordingUrl: "https://example.com/rekaman/mt002-sesi-1",
-      },
-      {
-        id: 2,
-        mentor: "Kak Adena Laksita",
-        mentorId: "adena-laksita",
-        startTime: inTwoHours,
-        status: "scheduled",
-        zoomLink: "https://zoom.us/j/1112223333",
-      },
-      {
-        id: 3,
-        mentor: "Kak Adena Laksita",
-        mentorId: "adena-laksita",
-        startTime: null,
-        status: "waiting_schedule",
-      },
-    ],
-  },
-};
 
 export default function ProductDetail() {
+
+
   const params = useParams();
-  const product = products[params?.id];
+  const [product, setProduct] = useState(null);
+
+
+  useEffect(() => {
+      fetchDetail();
+  }, []);
+
+  async function fetchDetail() {
+    setLoading(true);
+
+    try {
+        const res = await apiRequest(
+            `/api/products/my-products/${params.id}/`
+        );
+
+        setProduct(res);
+    } finally {
+        setLoading(false);
+    }
+}
+
   const shouldReduceMotion = useReducedMotion() ?? false;
 
   // --- Refund (satu-satunya, level produk, bukan per-sesi) ---
@@ -242,6 +130,9 @@ export default function ProductDetail() {
   const [scheduleSubmitting, setScheduleSubmitting] = useState(false);
   const [scheduleSuccess, setScheduleSuccess] = useState(false);
   const [openSessionMenuKey, setOpenSessionMenuKey] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  
 
   const sectionReveal = {
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
@@ -268,6 +159,25 @@ export default function ProductDetail() {
         initial: { opacity: 0, scale: 0.96, y: 12 },
         animate: { opacity: 1, scale: 1, y: 0 },
       };
+
+  
+
+  if (loading) {
+    return (
+      <DashboardLayout title="Detail Produk">
+        <Link
+          href="/user/my-products"
+          className="inline-flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit"
+        >
+          <ArrowLeft size={16} />
+          Kembali ke Produk Saya
+        </Link>
+        <div className="text-center py-12">
+          <p className="text-[#9CA3AF] text-[13px]">Memuat data produk...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (!product) {
     return (
@@ -324,17 +234,27 @@ export default function ProductDetail() {
   };
   const closeScheduleModal = () => setScheduleModal(null);
 
-  const handleSubmitSchedule = (e) => {
+  const handleSubmitSchedule = async (e) => {
     e.preventDefault();
-    if (!selectedSlotId) return;
+
     setScheduleSubmitting(true);
-    // TODO: panggil API beneran -- kalau isInitial, insert startTime baru ke
-    // mentoring_sessions/bootcamp_sessions; kalau bukan, update yang udah
-    // ada + set mentor_availabilities lama balik jadi kosong
-    setTimeout(() => {
-      setScheduleSubmitting(false);
+
+    try {
+      await apiRequest(
+        `/api/products/my-products/sessions/${scheduleModal.session.id}/schedule/`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            session_type: "mentoring",
+            availability_slot_id: selectedSlotId,
+          })
+        }
+      );
+
       setScheduleSuccess(true);
-    }, 800);
+    } finally {
+      setScheduleSubmitting(false);
+    }
   };
 
   const openRefundModal = () => {
@@ -345,15 +265,26 @@ export default function ProductDetail() {
   };
   const closeRefundModal = () => setRefundModalOpen(false);
 
-  const handleSubmitRefund = (e) => {
+  const handleSubmitRefund = async (e) => {
     e.preventDefault();
-    if (!refundEligible) return;
+
     setRefundSubmitting(true);
-    // TODO: panggil API pengajuan refund beneran, buat SELURUH produk
-    setTimeout(() => {
-      setRefundSubmitting(false);
+
+    try {
+      await apiRequest(
+        `/api/products/my-products/${params.id}/refund/`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            reason: refundReason
+          })
+        }
+      );
+
       setRefundSuccess(true);
-    }, 900);
+    } finally {
+      setRefundSubmitting(false);
+    }
   };
 
   const availableSlots = scheduleModal?.session?.mentorId

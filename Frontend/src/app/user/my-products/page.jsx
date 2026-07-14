@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { FileText, Star, AlertCircle } from "lucide-react";
 import DashboardLayout from "@/component/user/DashboardLayout";
 import EmptyState from "@/component/user/EmptyState";
+import { apiRequest } from "@/lib/api";
 
 const FILTERS = ["Semua", "Bootcamp", "Mentoring", "Modul", "Riwayat"];
 
@@ -130,103 +131,26 @@ export default function MyProducts() {
         animate: { opacity: 1, scale: 1, y: 0 },
       };
 
-  // --- MOCK DATA (nanti ganti dengan query user_libraries + status turunan
-  // dari bootcamp_sessions/mentoring_sessions) ---
-  const bootcampClasses = [
-    {
-      id: "BC-001",
-      title: "Winner Class Dan Module (Debate)",
-      description: "Lorem ipsum dolor sit amet, consectetur adipisicing elit",
-      imageClass: "from-[#4C1D95] to-[#0D9488]",
-      currentSession: 3,
-      totalSessions: 4,
-      status: "active",
+  const [data, setData] = useState({
+    stats: {
+      mentoring_active: 0,
+      bootcamp_active: 0,
+      modul_active: 0,
     },
-    {
-      id: "BC-002",
-      title: "Frontend Engineering Sprint",
-      description: "Lorem ipsum dolor sit amet, consectetur adipisicing elit",
-      imageClass: "from-[#4C1D95] to-[#0D9488]",
-      currentSession: 1,
-      totalSessions: 2,
-      status: "active",
-    },
-    {
-      id: "BC-003",
-      title: "Public Speaking Bootcamp",
-      description: "Program 3 sesi buat ningkatin kemampuan presentasi",
-      imageClass: "from-[#4C1D95] to-[#0D9488]",
-      status: "completed",
-      hasRating: false,
-    },
-  ];
+    bootcamp: [],
+    mentoring: [],
+    modul: [],
+  });
 
-  const mentoringPackages = [
-    {
-      id: "MT-001",
-      title: "1-on-1 Career Mentoring",
-      description: "Bimbingan personal buat matangin CV dan strategi karier.",
-      imageClass: "from-[#4C1D95] to-[#CA8A04]",
-      currentSession: 1,
-      totalSessions: 1,
-      status: "active",
-    },
-    {
-      id: "MT-002",
-      title: "Bundling PowerPack (Newbie Friendly)",
-      description: "Paket 3 sesi buat kamu yang baru mulai ikut BCC dari nol.",
-      imageClass: "from-[#4C1D95] to-[#CA8A04]",
-      currentSession: 2,
-      totalSessions: 3,
-      status: "active",
-    },
-    {
-      id: "MT-003",
-      title: "Interview Preparation Session",
-      description: "Sesi persiapan interview kerja, dari CV review.",
-      imageClass: "from-[#4C1D95] to-[#CA8A04]",
-      status: "completed",
-      hasRating: true,
-    },
-  ];
+  const [loading, setLoading] = useState(true);
 
-  const moduleClasses = [
-    {
-      id: "MD-001",
-      title: "Winner Class Dan Module (Debate)",
-      description: "Lorem ipsum dolor sit amet, consectetur adipisicing elit",
-      imageClass: "from-[#4C1D95] to-[#2563EB]",
-    },
-    {
-      id: "MD-002",
-      title: "Winner Class Dan Module (Debate)",
-      description: "Lorem ipsum dolor sit amet, consectetur adipisicing elit",
-      imageClass: "from-[#4C1D95] to-[#2563EB]",
-    },
-    {
-      id: "MD-003",
-      title: "Winner Class Dan Module (Debate)",
-      description: "Lorem ipsum dolor sit amet, consectetur adipisicing elit",
-      imageClass: "from-[#4C1D95] to-[#2563EB]",
-    },
-  ];
+  useEffect(() => {
+      fetchProducts();
+  }, [activeFilter]);
 
-  const activeBootcamps = bootcampClasses.filter(
-    (p) => p.status !== "completed",
-  );
-  const pastBootcamps = bootcampClasses.filter((p) => p.status === "completed");
-  const activeMentoring = mentoringPackages.filter(
-    (p) => p.status !== "completed",
-  );
-  const pastMentoring = mentoringPackages.filter(
-    (p) => p.status === "completed",
-  );
+ 
 
-  const stats = [
-    { label: "Mentoring Aktif", value: activeMentoring.length },
-    { label: "Bootcamp Aktif", value: activeBootcamps.length },
-    { label: "Modul Aktif", value: moduleClasses.length },
-  ];
+  
 
   const isRiwayat = activeFilter === "Riwayat";
   const showBootcamp = activeFilter === "Semua" || activeFilter === "Bootcamp";
@@ -234,17 +158,6 @@ export default function MyProducts() {
     activeFilter === "Semua" || activeFilter === "Mentoring";
   const showModul = activeFilter === "Semua" || activeFilter === "Modul";
 
-  const bootcampList = isRiwayat
-    ? pastBootcamps
-    : showBootcamp
-      ? activeBootcamps
-      : [];
-  const mentoringList = isRiwayat
-    ? pastMentoring
-    : showMentoring
-      ? activeMentoring
-      : [];
-  const modulList = isRiwayat ? [] : showModul ? moduleClasses : [];
 
   const openRatingModal = (product) => {
     setRatingProduct(product);
@@ -253,17 +166,57 @@ export default function MyProducts() {
   };
   const closeRatingModal = () => setRatingProduct(null);
 
-  const handleSubmitRating = (e) => {
-    e.preventDefault();
-    if (ratingValue === 0) return;
-    setIsSubmittingRating(true);
-    // TODO: panggil API buat insert ke tabel reviews beneran
-    setTimeout(() => {
-      setIsSubmittingRating(false);
-      setRatedIds((prev) => [...prev, ratingProduct?.id]);
+  const handleSubmitRating = async (e) => {
+      e.preventDefault();
+
+      if (ratingValue === 0) return;
+
+      setIsSubmittingRating(true);
+
+      await apiRequest(
+          `/api/products/my-products/${ratingProduct.id}/rate/`,
+          {
+              method: "POST",
+              body: JSON.stringify({
+                  rating: ratingValue,
+                  review_text: ratingText,
+              }),
+          }
+      );
+
+      setRatedIds((prev) => [...prev, ratingProduct.id]);
+
       setRatingProduct(null);
-    }, 800);
+
+      setIsSubmittingRating(false);
   };
+
+  async function fetchProducts() {
+      setLoading(true);
+
+      const res = await apiRequest(
+          `/api/products/my-products/?filter=${activeFilter.toLowerCase()}`
+      );
+
+      setData(res);
+
+      setLoading(false);
+  }
+
+  const stats = [
+    {
+      label: "Mentoring Aktif",
+      value: data.stats.mentoring_active,
+    },
+    {
+      label: "Bootcamp Aktif",
+      value: data.stats.bootcamp_active,
+    },
+    {
+      label: "Modul Aktif",
+      value: data.stats.modul_active,
+    },
+  ];
 
   return (
     <DashboardLayout title="My Products">
@@ -330,7 +283,7 @@ export default function MyProducts() {
               Intensive Bootcamp
             </h3>
           </div>
-          {bootcampList.length === 0 ? (
+          {data.bootcamp.length === 0 ? (
             isRiwayat ? (
               <EmptyState message="Belum ada bootcamp yang selesai." />
             ) : (
@@ -342,7 +295,7 @@ export default function MyProducts() {
             )
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {bootcampList.map((item, index) => (
+              {data.bootcamp.map((item, index) => (
                 <motion.div
                   key={item.id}
                   {...cardReveal(index)}
@@ -380,7 +333,7 @@ export default function MyProducts() {
               On-Demand Mentoring
             </h3>
           </div>
-          {mentoringList.length === 0 ? (
+          {data.mentoring.length === 0 ? (
             isRiwayat ? (
               <EmptyState message="Belum ada sesi mentoring yang selesai." />
             ) : (
@@ -392,7 +345,7 @@ export default function MyProducts() {
             )
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {mentoringList.map((item, index) => (
+              {data.mentoring.map((item, index) => (
                 <motion.div
                   key={item.id}
                   {...cardReveal(index)}
@@ -428,7 +381,7 @@ export default function MyProducts() {
               E-Learning & Modul
             </h3>
           </div>
-          {modulList.length === 0 ? (
+          {data.modul.length === 0 ? (
             <EmptyState
               message="Kamu belum punya modul."
               ctaLabel="Jelajahi Produk"
@@ -436,7 +389,7 @@ export default function MyProducts() {
             />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {modulList.map((item, index) => (
+              {data.modul.map((item, index) => (
                 <motion.div
                   key={item.id}
                   {...cardReveal(index)}
