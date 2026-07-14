@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import DashboardLayout from "@/component/user/DashboardLayout";
+import { apiRequest } from "@/lib/api";
 
 function Field({ label, value, onChange, disabled, note, type = "text" }) {
   return (
@@ -38,22 +39,26 @@ export default function Settings() {
   const shouldReduceMotion = useReducedMotion();
 
   // TODO: ganti semua data ini dengan data user dari session/auth context
-  const email = "prabrorosub@gmail.com"; // readonly, ganti email lewat support
-  const initialInfo = {
-    fullName: "Prabroro Subriantoro",
-    phone: "0812-3456-7890",
-    institution: "Universitas Airlangga",
-    currentStatus: "5", // Tambahan Data
-    linkedIn: "linkedin.com/in/prabrorosub", // Tambahan Data
-  };
+  const [email, setEmail] = useState("");
+  const [initialInfo, setInitialInfo] = useState({
+    fullName: "",
+    phone: "",
+    institution: "",
+    currentStatus: "",
+    linkedIn: "",
+  });
 
-  const [fullName, setFullName] = useState(initialInfo.fullName);
-  const [phone, setPhone] = useState(initialInfo.phone);
-  const [institution, setInstitution] = useState(initialInfo.institution);
-  const [currentStatus, setCurrentStatus] = useState(initialInfo.currentStatus); // State Baru
-  const [linkedIn, setLinkedIn] = useState(initialInfo.linkedIn); // State Baru
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [institution, setInstitution] = useState("");
+  const [currentStatus, setCurrentStatus] = useState("");
+  const [linkedIn, setLinkedIn] = useState("");
 
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [infoSaved, setInfoSaved] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+
 
   const [cvFileName, setCvFileName] = useState("CV_Prabroro_2026.pdf");
 
@@ -79,12 +84,67 @@ export default function Settings() {
     setDeleteConfirmText("");
   };
 
-  const handleSaveInfo = (e) => {
+  const handleSaveInfo = async (e) => {
     e.preventDefault();
-    // TODO: panggil API update profil beneran
-    setInfoSaved(true);
-    setTimeout(() => setInfoSaved(false), 3000);
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const res = await apiRequest("/api/accounts/me/profile/", {
+        method: "PATCH",
+        body: JSON.stringify({
+          fullname: fullName,
+          phone,
+          institution,
+          current_status: currentStatus,
+          linkedin_url: linkedIn,
+        }),
+      });
+      const u = res.user;
+      setInitialInfo({
+        fullName: u.fullname,
+        phone: u.phone,
+        institution: u.institution,
+        currentStatus: u.current_status,
+        linkedIn: u.linkedin_url,
+      });
+      setInfoSaved(true);
+      setTimeout(() => setInfoSaved(false), 3000);
+    } catch (err) {
+      setSaveError(err?.message || "Gagal menyimpan perubahan.");
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+
+  useEffect(() => {
+    async function fetchProfile() {
+      try {
+        setLoadingProfile(true);
+        const res = await apiRequest("/api/accounts/me/profile/");
+        const u = res.user;
+        setEmail(u.email);
+        const info = {
+          fullName: u.fullname,
+          phone: u.phone,
+          institution: u.institution,
+          currentStatus: u.current_status,
+          linkedIn: u.linkedin_url,
+        };
+        setInitialInfo(info);
+        setFullName(info.fullName);
+        setPhone(info.phone);
+        setInstitution(info.institution);
+        setCurrentStatus(info.currentStatus);
+        setLinkedIn(info.linkedIn);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoadingProfile(false);
+      }
+    }
+    fetchProfile();
+  }, []);
 
   return (
     <DashboardLayout title="Pengaturan Akun">

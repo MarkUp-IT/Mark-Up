@@ -41,3 +41,36 @@ class RegisterForm(forms.ModelForm):
                 )
 
         return cleaned_data
+    
+
+class UpdateProfileForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ["fullname", "phone", "institution", "current_status", "linkedin_url"]
+
+    def clean_fullname(self):
+        fullname = self.cleaned_data.get("fullname", "").strip()
+        if not fullname:
+            raise forms.ValidationError("Nama lengkap tidak boleh kosong.")
+        return fullname
+
+    def clean_phone(self):
+        phone = self.cleaned_data.get("phone", "").strip()
+        if phone and not all(c.isdigit() or c in "+- " for c in phone):
+            raise forms.ValidationError("Format nomor WhatsApp tidak valid.")
+        return phone
+
+    def clean_linkedin_url(self):
+        value = self.cleaned_data.get("linkedin_url", "").strip()
+        if not value:
+            return value
+        if not value.startswith(("http://", "https://")):
+            value = f"https://{value}"
+        validator = forms.URLField()
+        try:
+            validator.clean(value)
+        except forms.ValidationError:
+            raise forms.ValidationError("URL LinkedIn tidak valid.")
+        if "linkedin.com" not in value:
+            raise forms.ValidationError("URL harus berupa link LinkedIn.")
+        return value

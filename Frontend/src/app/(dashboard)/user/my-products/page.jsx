@@ -143,8 +143,10 @@ export default function MyProducts() {
   });
 
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
+      fetchUser();
       fetchProducts();
   }, [activeFilter]);
 
@@ -203,6 +205,18 @@ export default function MyProducts() {
       setLoading(false);
   }
 
+  async function fetchUser() {
+    try {
+      const res = await apiRequest("/api/accounts/me/");
+
+      console.log("ME API:", res);
+
+      setUser(res.user);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   const stats = [
     {
       label: "Mentoring Aktif",
@@ -226,8 +240,8 @@ export default function MyProducts() {
       >
         <div className="flex flex-col gap-5">
           <div>
-            <h1 className="text-[28px] sm:text-[32px] font-bold text-white leading-tight">
-              Hai Prabroro!
+            <h1 className="text-white text-[32px] font-bold">
+              Hai {user?.profile_name || "User"}!
             </h1>
             <p className="text-[#9CA3AF] text-[14px] mt-1">
               Selamat datang di MarkUp Learning Platform

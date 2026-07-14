@@ -53,6 +53,10 @@ class User(AbstractUser):
         auto_now_add=True
     )   
 
+    institution = models.CharField(max_length=255, blank=True, default="")
+    current_status = models.CharField(max_length=100, blank=True, default="")
+    linkedin_url = models.URLField(blank=True, default="")
+
     class Meta:
         db_table = "users"
 

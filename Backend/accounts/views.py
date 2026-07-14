@@ -1,7 +1,7 @@
 ﻿from django.contrib.auth import authenticate
 from django.http import JsonResponse, HttpResponseNotAllowed
 from .utils import get_request_data
-from .forms import RegisterForm
+from .forms import RegisterForm, UpdateProfileForm
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, UserRole
@@ -178,3 +178,50 @@ def logout_user(request):
         return HttpResponseNotAllowed(["POST"])
 
     return JsonResponse({"detail": "Logout berhasil"}, status=200)
+
+
+@jwt_required
+def profile_view(request):
+    
+    user = request.user
+
+    if request.method == "GET":
+        data = {
+            "fullname": user.fullname,
+            "email": user.email,
+            "phone": user.phone or "",
+            "institution": user.institution or "",
+            "current_status": user.current_status or "",
+            "linkedin_url": user.linkedin_url or "",
+        }
+        return JsonResponse({"user": data}, status=200)
+
+    if request.method in ("PATCH", "POST"):
+        request_data = get_request_data(request)
+        if request_data is None:
+            return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+        form = UpdateProfileForm(request_data, instance=user)
+
+        if not form.is_valid():
+            errors = {k: list(v) for k, v in form.errors.items()}
+            return JsonResponse({"errors": errors}, status=400)
+
+        form.save()
+
+        return JsonResponse(
+            {
+                "detail": "Profil berhasil diperbarui.",
+                "user": {
+                    "fullname": user.fullname,
+                    "email": user.email,
+                    "phone": user.phone or "",
+                    "institution": user.institution or "",
+                    "current_status": user.current_status or "",
+                    "linkedin_url": user.linkedin_url or "",
+                },
+            },
+            status=200,
+        )
+
+    return HttpResponseNotAllowed(["GET", "PATCH", "POST"])

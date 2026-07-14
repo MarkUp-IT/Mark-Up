@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import login_view, register_view, get_user_summary, get_current_user, logout_user
+from .views import login_view, register_view, get_user_summary, get_current_user, logout_user, profile_view
 
 urlpatterns = [
     path("register/", register_view, name="api_register"),
@@ -8,4 +8,5 @@ urlpatterns = [
     path("login/", login_view, name="api_login"),
     path("logout/", logout_user, name="api_logout"),
     path("summary/", get_user_summary, name="api_users_summary"),
+    path("me/profile/", profile_view, name="api_profile"),
 ]
