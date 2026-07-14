@@ -1,188 +1,225 @@
 "use client";
 
-import { Eye, ChevronDown } from "lucide-react";
-import Sidebar from "@/component/admin/Sidebar";
-import Header from "@/component/admin/Header";
+import { Eye, EyeOff, ChevronDown, Star } from "lucide-react";
 import { useState } from "react";
+import DashboardLayout from "@/component/admin/DashboardLayout";
+import StatCard from "@/component/admin/StatCard";
+import EmptyState from "@/component/admin/EmptyState";
+
+function StarRating({ rating }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          size={13}
+          className={
+            n <= rating ? "fill-[#F59E0B] text-[#F59E0B]" : "text-[#E2E8F0]"
+          }
+        />
+      ))}
+    </div>
+  );
+}
 
 export default function Feedbacks() {
-  const [selectAll, setSelectAll] = useState(false);
-
-  const feedbacks = [
+  const [feedbacks, setFeedbacks] = useState([
     {
       id: 1,
       name: "Anisa Rahmawati",
-      email: "anisa.rahma@axiom.pro",
-      avatar: "https://i.pravatar.cc/150?img=5",
-      ulasan:
-        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
-      date: "12 Jan 2024",
+      email: "anisa.rahma@gmail.com",
+      avatar: "/images/pp.png",
+      rating: 5,
+      review:
+        "Mentornya sabar banget jelasinnya, banyak insight baru soal business case yang sebelumnya aku nggak kepikiran. Worth it banget buat persiapan lomba.",
+      date: "12 Jan 2026",
+      isHidden: false,
     },
     {
       id: 2,
-      name: "Anisa Rahmawati",
-      email: "anisa.rahma@axiom.pro",
-      avatar: "https://i.pravatar.cc/150?img=5",
-      ulasan:
-        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
-      date: "12 Jan 2024",
+      name: "Fathir Ramadhan",
+      email: "fathir.r@gmail.com",
+      avatar: "/images/pp.png",
+      rating: 4,
+      review:
+        "Materinya lengkap, cuma agak kepadetan buat 1 sesi doang. Overall bagus sih buat yang baru mulai.",
+      date: "10 Jan 2026",
+      isHidden: false,
     },
     {
       id: 3,
-      name: "Anisa Rahmawati",
-      email: "anisa.rahma@axiom.pro",
-      avatar: "https://i.pravatar.cc/150?img=5",
-      ulasan:
-        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
-      date: "12 Jan 2024",
+      name: "Prabroro Subriantoro",
+      email: "prabroro@gmail.com",
+      avatar: "/images/pp.png",
+      rating: 2,
+      review:
+        "Jadwalnya beberapa kali kepepet banget sama waktu real acara, agak kurang koordinasinya.",
+      date: "8 Jan 2026",
+      isHidden: true,
     },
-  ];
+  ]);
+
+  const [roleFilter, setRoleFilter] = useState("Semua");
+
+  const toggleHidden = (id) => {
+    setFeedbacks((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, isHidden: !f.isHidden } : f)),
+    );
+  };
+
+  const visibleCount = feedbacks.filter((f) => !f.isHidden).length;
+  const hiddenCount = feedbacks.filter((f) => f.isHidden).length;
 
   return (
-    <div className="w-full font-inter text-black bg-[#F8FAFC] min-h-screen relative flex flex-row overflow-x-hidden">
-      <Sidebar />
-      <div className="ml-[288px] flex-1">
-        <Header judulHalaman="Feedbacks" />
-        <div className="flex-1 flex items-center py-5 flex-col gap-5 px-10 bg-white min-h-screen">
-          {/* Title Area */}
-          <div className="flex flex-row items-center justify-between w-[1158px] mt-2">
-            <div>
-              <p className="font-bold text-[25px]">Feedbacks</p>
-              <p className="text-[#43474D] text-[15px] mt-1">
-                Kelola ulasan yang tampil pada platform MARK-UP.
-              </p>
+    <DashboardLayout title="Ulasan">
+      <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-bold text-[22px] text-[#0F172A]">Ulasan</h1>
+          <p className="text-[#64748B] text-[14px] mt-1">
+            Kelola ulasan mentor yang tampil di halaman publik MARK-UP.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-5">
+        <StatCard label="Total Ulasan" value={feedbacks.length} unit="ulasan" />
+        <StatCard
+          label="Ulasan Terlihat"
+          value={visibleCount}
+          unit="ulasan"
+          variant="success"
+        />
+        <StatCard
+          label="Disembunyikan"
+          value={hiddenCount}
+          unit="ulasan"
+          variant="warning"
+        />
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <h2 className="text-[16px] font-semibold text-[#0F172A]">
+            Daftar Ulasan
+          </h2>
+          <div className="flex items-center gap-2 text-[13px]">
+            <span className="text-[#64748B]">Filter Mentor:</span>
+            <div className="relative flex items-center">
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="pl-2 pr-7 py-1.5 font-semibold text-[#1E293B] appearance-none outline-none cursor-pointer bg-transparent"
+              >
+                <option>Semua</option>
+              </select>
+              <ChevronDown
+                size={14}
+                className="absolute right-0 text-[#64748B] pointer-events-none"
+              />
             </div>
           </div>
+        </div>
 
-          {/* Stats Cards Section */}
-          <div className="w-[1158px] flex justify-between gap-5 mt-2">
-            <div className="bg-[#F8FAFC] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm border border-[#E2E8F0]">
-              <p className="text-[#43474D] font-bold text-[14px] tracking-wide uppercase">
-                TOTAL ULASAN
-              </p>
-              <div className="flex flex-row items-baseline gap-2 mt-2">
-                <p className="font-bold text-[44px] text-[#0F172A] leading-none">
-                  151
-                </p>
-                <span className="text-[#64748B] text-[15px] font-medium lowercase">
-                  ulasan
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-[#2E1065] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
-              <p className="text-white/80 font-bold text-[14px] tracking-wide uppercase">
-                ULASAN TERLIHAT
-              </p>
-              <div className="flex flex-row items-baseline gap-2 mt-2">
-                <p className="font-bold text-[44px] text-white leading-none">
-                  101
-                </p>
-                <span className="text-white/90 text-[15px] font-medium lowercase">
-                  ulasan
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-[#8B5CF6] flex-1 h-[140px] rounded-[9px] flex flex-col justify-center px-7 shadow-sm">
-              <p className="text-white/90 font-bold text-[14px] tracking-wide uppercase">
-                ULASAN DISEMBUNYIKAN
-              </p>
-              <div className="flex flex-row items-baseline gap-2 mt-2">
-                <p className="font-bold text-[44px] text-white leading-none">
-                  50
-                </p>
-                <span className="text-white/90 text-[15px] font-medium lowercase">
-                  ulasan
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Table Area */}
-          <div className="w-[1158px] rounded-[8px] overflow-hidden mt-4 border border-[#E2E8F0] shadow-sm bg-white">
-            {/* Table Toolbar */}
-            <div className="flex justify-between items-center px-6 py-4 border-b border-[#E2E8F0]">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  checked={selectAll}
-                  onChange={() => setSelectAll(!selectAll)}
-                  className="w-4 h-4 rounded border-[#CBD5E1] text-[#2E1065] focus:ring-[#2E1065] cursor-pointer"
-                />
-                <span className="text-[13px] font-semibold text-[#43474D]">
-                  Pilih Semua
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-[13px]">
-                <span className="text-[#64748B]">Filter by Role:</span>
-                <div className="flex items-center gap-1 font-semibold text-[#1E293B] cursor-pointer hover:bg-[#F8FAFC] px-2 py-1 rounded-[4px] transition-colors">
-                  All Roles
-                  <ChevronDown size={14} className="text-[#64748B]" />
-                </div>
-              </div>
-            </div>
-
-            {/* Table Content */}
+        {feedbacks.length === 0 ? (
+          <EmptyState message="Belum ada ulasan yang masuk." />
+        ) : (
+          <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm bg-white">
             <div className="overflow-x-auto">
               <table className="w-full text-[13px] text-left">
                 <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                   <tr>
-                    <th className="px-6 py-4 w-[50px]"></th>
-                    <th className="px-6 py-4 font-bold text-[#43474D] text-[12px] tracking-wider uppercase w-[250px]">
-                      USER PROFILE
+                    <th
+                      className="px-6 py-3.5 font-bold text-[#64748B] text-[11px] tracking-wider uppercase"
+                      style={{ width: "230px" }}
+                    >
+                      USER
                     </th>
-                    <th className="px-6 py-4 font-bold text-[#43474D] text-[12px] tracking-wider uppercase">
+                    <th
+                      className="px-6 py-3.5 font-bold text-[#64748B] text-[11px] tracking-wider uppercase"
+                      style={{ width: "100px" }}
+                    >
+                      RATING
+                    </th>
+                    <th className="px-6 py-3.5 font-bold text-[#64748B] text-[11px] tracking-wider uppercase">
                       ULASAN
                     </th>
-                    <th className="px-6 py-4 font-bold text-[#43474D] text-[12px] tracking-wider uppercase w-[120px] text-center">
-                      DATE
+                    <th
+                      className="px-6 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider uppercase"
+                      style={{ width: "110px" }}
+                    >
+                      TANGGAL
                     </th>
-                    <th className="px-6 py-4 font-bold text-[#43474D] text-[12px] tracking-wider uppercase w-[100px] text-center">
-                      ACTIONS
+                    <th
+                      className="px-6 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider uppercase"
+                      style={{ width: "90px" }}
+                    >
+                      AKSI
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0]">
-                  {feedbacks.map((item, index) => (
+                  {feedbacks.map((item) => (
                     <tr
-                      key={index}
-                      className="hover:bg-[#F8FAFC] transition-colors"
+                      key={item.id}
+                      className={`hover:bg-[#F8FAFC] transition-colors ${item.isHidden ? "opacity-50" : ""}`}
                     >
                       <td className="px-6 py-5 align-top">
-                        <input
-                          type="checkbox"
-                          checked={selectAll}
-                          readOnly
-                          className="w-4 h-4 rounded border-[#CBD5E1] text-[#2E1065] focus:ring-[#2E1065] cursor-pointer mt-1"
-                        />
-                      </td>
-                      <td className="px-6 py-5 align-top">
                         <div className="flex items-start gap-3">
-                          <img
-                            src={item.avatar}
-                            alt={item.name}
-                            className="w-10 h-10 rounded-full object-cover border border-[#E2E8F0]"
-                          />
+                          <div
+                            style={{ width: "38px", height: "38px" }}
+                            className="rounded-full overflow-hidden border border-[#E2E8F0] shrink-0"
+                          >
+                            <img
+                              src={item.avatar}
+                              alt={item.name}
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                              }}
+                            />
+                          </div>
                           <div className="flex flex-col">
-                            <span className="font-bold text-[#1E293B] text-[14px]">
+                            <span className="font-bold text-[#1E293B] text-[13.5px]">
                               {item.name}
                             </span>
-                            <span className="text-[#64748B] text-[12px]">
+                            <span className="text-[#94A3B8] text-[12px]">
                               {item.email}
                             </span>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-5 align-top text-[#475569] text-[13px] leading-relaxed pr-10">
-                        {item.ulasan}
+                      <td className="px-6 py-5 align-top">
+                        <StarRating rating={item.rating} />
                       </td>
-                      <td className="px-6 py-5 align-top text-center text-[#1E293B] font-semibold text-[13px] whitespace-nowrap">
+                      <td
+                        className="px-6 py-5 align-top text-[#475569] leading-relaxed"
+                        style={{ maxWidth: "420px" }}
+                      >
+                        {item.review}
+                      </td>
+                      <td className="px-6 py-5 align-top text-center text-[#1E293B] font-semibold whitespace-nowrap">
                         {item.date}
                       </td>
                       <td className="px-6 py-5 align-top text-center">
-                        <button className="text-[#94A3B8] hover:text-[#2E1065] transition-colors p-2 rounded-full hover:bg-[#F3E8FF] mt-[-4px]">
-                          <Eye size={18} />
+                        <button
+                          onClick={() => toggleHidden(item.id)}
+                          title={
+                            item.isHidden
+                              ? "Tampilkan ulasan"
+                              : "Sembunyikan ulasan"
+                          }
+                          className={`p-2 rounded-full transition-colors ${
+                            item.isHidden
+                              ? "text-[#94A3B8] hover:bg-[#F1F5F9]"
+                              : "text-[#148F89] hover:bg-[#148F89]/10"
+                          }`}
+                        >
+                          {item.isHidden ? (
+                            <EyeOff size={17} />
+                          ) : (
+                            <Eye size={17} />
+                          )}
                         </button>
                       </td>
                     </tr>
@@ -191,25 +228,8 @@ export default function Feedbacks() {
               </table>
             </div>
           </div>
-
-          {/* Pagination */}
-          <div className="flex justify-center items-center mt-6 mb-10 gap-2 text-[#64748B] text-[14px]">
-            <span className="w-8 h-8 flex items-center justify-center bg-white border border-[#2E1065] text-[#2E1065] font-bold rounded-[6px] cursor-pointer hover:bg-[#F3E8FF] shadow-sm">
-              1
-            </span>
-            <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-[6px] font-medium">
-              2
-            </span>
-            <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-[6px] font-medium">
-              3
-            </span>
-            <span className="font-medium tracking-widest px-1">...</span>
-            <span className="w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded-[6px] font-medium">
-              12
-            </span>
-          </div>
-        </div>
+        )}
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
