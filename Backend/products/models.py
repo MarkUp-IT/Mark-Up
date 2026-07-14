@@ -76,8 +76,6 @@ class MentoringProduct(BaseProductDetail):
         MentorProfile,
         on_delete=models.CASCADE,
         related_name="mentoring_products",
-        null=True,
-        blank=True,
     )
     session_count = models.PositiveIntegerField(default=1)
     duration_minutes = models.PositiveIntegerField(default=60)
@@ -177,5 +175,157 @@ class Review(BaseModel):
                 name="unique_user_product_review"
             )
         ]
+
+
+class UserLibrary(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="product_libraries",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="user_libraries",
+    )
+    purchased_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "User Library"
+        verbose_name_plural = "User Libraries"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "product"],
+                name="unique_user_product_library"
+            )
+        ]
+        ordering = ["-purchased_at"]
+
+    def __str__(self) -> str:
+        return f"{self.user} -> {self.product}"
+
+
+class BootcampSession(models.Model):
+    class SessionStatus(models.TextChoices):
+        SCHEDULED = "scheduled", "Scheduled"
+        COMPLETED = "completed", "Completed"
+        WAITING_SCHEDULE = "waiting_schedule", "Waiting Schedule"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct,
+        on_delete=models.CASCADE,
+        related_name="user_sessions",
+    )
+    user_library = models.ForeignKey(
+        UserLibrary,
+        on_delete=models.CASCADE,
+        related_name="bootcamp_sessions",
+    )
+    order = models.PositiveIntegerField(default=1)
+    title = models.CharField(max_length=255)
+    mentor = models.ForeignKey(
+        MentorProfile,
+        on_delete=models.CASCADE,
+        related_name="bootcamp_sessions",
+        null=True,
+        blank=True,
+    )
+    start_time = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(
+        max_length=20,
+        choices=SessionStatus.choices,
+        default=SessionStatus.WAITING_SCHEDULE,
+    )
+    meeting_link = models.URLField(blank=True)
+    recording_url = models.URLField(blank=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Session"
+        verbose_name_plural = "Bootcamp Sessions"
+        ordering = ["order"]
+
+    def __str__(self) -> str:
+        return f"{self.bootcamp} - {self.title}"
+
+
+class MentoringSession(models.Model):
+    class SessionStatus(models.TextChoices):
+        SCHEDULED = "scheduled", "Scheduled"
+        COMPLETED = "completed", "Completed"
+        WAITING_SCHEDULE = "waiting_schedule", "Waiting Schedule"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    mentoring = models.ForeignKey(
+        MentoringProduct,
+        on_delete=models.CASCADE,
+        related_name="sessions",
+    )
+    user_library = models.ForeignKey(
+        UserLibrary,
+        on_delete=models.CASCADE,
+        related_name="mentoring_sessions",
+    )
+    order = models.PositiveIntegerField(default=1)
+    mentor = models.ForeignKey(
+        MentorProfile,
+        on_delete=models.CASCADE,
+        related_name="product_mentoring_sessions",
+    )
+    start_time = models.DateTimeField(blank=True, null=True)
+    availability_slot = models.ForeignKey(
+        "mentors.MentorAvailability",
+        on_delete=models.SET_NULL,
+        related_name="product_mentoring_sessions",
+        blank=True,
+        null=True,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=SessionStatus.choices,
+        default=SessionStatus.WAITING_SCHEDULE,
+    )
+    zoom_link = models.URLField(blank=True)
+    recording_url = models.URLField(blank=True)
+
+    class Meta:
+        verbose_name = "Mentoring Session"
+        verbose_name_plural = "Mentoring Sessions"
+        ordering = ["order"]
+
+    def __str__(self) -> str:
+        return f"{self.mentoring} - session {self.order}"
+
+
+class RefundRequest(models.Model):
+    class RefundStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_library = models.ForeignKey(
+        UserLibrary,
+        on_delete=models.CASCADE,
+        related_name="refund_requests",
+    )
+    reason = models.TextField()
+    status = models.CharField(
+        max_length=20,
+        choices=RefundStatus.choices,
+        default=RefundStatus.PENDING,
+    )
+    admin_fee_percent = models.PositiveIntegerField(default=10)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "Refund Request"
+        verbose_name_plural = "Refund Requests"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"RefundRequest {self.id} ({self.status})"
 
     

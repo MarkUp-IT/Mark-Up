@@ -1,4 +1,5 @@
 from django.http import JsonResponse, HttpResponseNotAllowed
+from django.utils import timezone
 from accounts.decorators import jwt_required, role_required
 from accounts.models import UserRole
 from .models import MentorProfile, MentorAvailability, MentoringSession
@@ -122,3 +123,55 @@ def get_user_mentoring_sessions(request):
 		)
 
 	return JsonResponse({"sessions": data}, status=200)
+
+@jwt_required
+def get_mentor_availability(request, mentor_id):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    try:
+        mentor = MentorProfile.objects.select_related("user").get(user__username=mentor_id)
+    except MentorProfile.DoesNotExist:
+        return JsonResponse({"detail": "Mentor profile tidak ditemukan."}, status=404)
+
+    slots = MentorAvailability.objects.filter(
+        mentor_profile=mentor,
+        is_booked=False,
+    ).order_by("start_time")
+
+    day_names = {
+        "Monday": "Senin",
+        "Tuesday": "Selasa",
+        "Wednesday": "Rabu",
+        "Thursday": "Kamis",
+        "Friday": "Jumat",
+        "Saturday": "Sabtu",
+        "Sunday": "Minggu",
+    }
+    month_names = {
+        1: "Januari",
+        2: "Februari",
+        3: "Maret",
+        4: "April",
+        5: "Mei",
+        6: "Juni",
+        7: "Juli",
+        8: "Agustus",
+        9: "September",
+        10: "Oktober",
+        11: "November",
+        12: "Desember",
+    }
+
+    data = []
+    for slot in slots:
+        local_dt = timezone.localtime(slot.start_time, timezone=timezone.get_fixed_timezone(7 * 60))
+        date_label = f"{day_names.get(local_dt.strftime('%A'), local_dt.strftime('%A'))}, {local_dt.day} {month_names[local_dt.month]} {local_dt.year}"
+        time_label = f"{local_dt.strftime('%H:%M')} WIB"
+        data.append({
+            "id": str(slot.id),
+            "date": date_label,
+            "time": time_label,
+        })
+
+    return JsonResponse({"availability": data}, status=200)
