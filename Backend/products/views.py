@@ -90,10 +90,14 @@ def get_products(request):
     fetch_all = request.GET.get("all") == "true"
 
     products = Product.objects.filter(
-        Q(mentoring_detail__is_active=True) |
-        Q(module_detail__is_active=True) |
-        Q(bootcamp_detail__is_active=True)
-    ).order_by("-created_at")
+		Q(mentoring_detail__is_active=True) |
+		Q(module_detail__is_active=True) |
+		Q(bootcamp_detail__is_active=True)
+	).select_related(
+		"mentoring_detail", "module_detail", "bootcamp_detail"
+	).prefetch_related(
+		"mentoring_detail__highlights"
+	).order_by("-created_at")
 
     if fetch_all:
         page_obj = None
@@ -145,19 +149,25 @@ def get_products(request):
         if detail:
             item.update({
                 "title": detail.title,
-				"description": detail.description,
-				"full_description": detail.explanation,
-				"image_url": detail.image_url,
-				"original_price": str(detail.original_price) if detail.original_price else None,
-				"new_price": str(detail.new_price) if detail.new_price else None,
-				"discount_percent": detail.discount_percent,
-				"sold_count": detail.sold_count,
-				"registration_link": detail.registration_link,
-				"is_active": detail.is_active,
-						})
+                "description": detail.description,
+                "full_description": detail.explanation,
+                "image_url": detail.image_url,
+                "original_price": str(detail.original_price) if detail.original_price is not None else None,
+                "new_price": str(detail.new_price) if detail.new_price is not None else None,
+                "discount_percent": detail.discount_percent,
+                "sold_count": detail.sold_count,
+                "registration_link": detail.registration_link,
+                "is_active": detail.is_active,
+            })
             if hasattr(detail, "file_pdf_url"):
                 item["file_pdf_url"] = detail.file_pdf_url
-
+                item["stock"] = detail.stock
+            if p.type == ProductType.MENTORING:
+                item["session_count"] = detail.session_count
+                item["duration_minutes"] = detail.duration_minutes
+                item["highlights"] = list(
+                    detail.highlights.order_by("order").values_list("text", flat=True)
+                )
         data.append(item)
 
     response = {"products": data}
@@ -168,39 +178,39 @@ def get_products(request):
 @jwt_required
 @role_required(UserRole.ADMIN)
 def get_product_summary(request):
-	if request.method != "GET":
-		return HttpResponseNotAllowed(["GET"])  
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
 
-	active_by_type = {
-		ProductType.MENTORING: Product.objects.filter(
-			type=ProductType.MENTORING,
-			mentoring_detail__is_active=True,
-		).count(),
-		ProductType.MODULE: Product.objects.filter(
-			type=ProductType.MODULE,
-			module_detail__is_active=True,
-		).count(),
-		ProductType.BOOTCAMP: Product.objects.filter(
-			type=ProductType.BOOTCAMP,
-			bootcamp_detail__is_active=True,
-		).count(),
-	}
+    active_by_type = {
+        ProductType.MENTORING: Product.objects.filter(
+            type=ProductType.MENTORING,
+            mentoring_detail__is_active=True,
+        ).count(),
+        ProductType.MODULE: Product.objects.filter(
+            type=ProductType.MODULE,
+            module_detail__is_active=True,
+        ).count(),
+        ProductType.BOOTCAMP: Product.objects.filter(
+            type=ProductType.BOOTCAMP,
+            bootcamp_detail__is_active=True,
+        ).count(),
+    }
 
-	total_active = sum(active_by_type.values())
-	total_products = Product.objects.count()
+    total_active = sum(active_by_type.values())
+    total_products = Product.objects.count()
 
-	return JsonResponse(
-		{
-			"active_by_type": {
-				ProductType.MENTORING: active_by_type[ProductType.MENTORING],
-				ProductType.MODULE: active_by_type[ProductType.MODULE],
-				ProductType.BOOTCAMP: active_by_type[ProductType.BOOTCAMP],
-			},
-			"total_active": total_active,
-			"total": total_products,
-		},
-		status=200,
-	)
+    return JsonResponse(
+        {
+            "active_by_type": {
+                ProductType.MENTORING: active_by_type[ProductType.MENTORING],
+                ProductType.MODULE: active_by_type[ProductType.MODULE],
+                ProductType.BOOTCAMP: active_by_type[ProductType.BOOTCAMP],
+            },
+            "total_active": total_active,
+            "total": total_products,
+        },
+        status=200,
+    )
 
 @jwt_required
 @role_required(UserRole.ADMIN)

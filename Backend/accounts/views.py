@@ -1,4 +1,4 @@
-from django.contrib.auth import authenticate
+﻿from django.contrib.auth import authenticate
 from django.http import JsonResponse, HttpResponseNotAllowed
 from .utils import get_request_data
 from .forms import RegisterForm

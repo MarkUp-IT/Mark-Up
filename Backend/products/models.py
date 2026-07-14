@@ -70,7 +70,17 @@ class MentoringProduct(BaseProductDetail):
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="mentoring_detail",
+        
     )
+    mentor = models.ForeignKey(
+        MentorProfile,
+        on_delete=models.CASCADE,
+        related_name="mentoring_products",
+        null=True,
+        blank=True,
+    )
+    session_count = models.PositiveIntegerField(default=1)
+    duration_minutes = models.PositiveIntegerField(default=60)
 
     class Meta:
         verbose_name = "Mentoring Product"
@@ -79,6 +89,22 @@ class MentoringProduct(BaseProductDetail):
 
     def __str__(self) -> str:
         return self.title
+
+
+class MentoringHighlight(models.Model):
+    mentoring = models.ForeignKey(
+        MentoringProduct,
+        on_delete=models.CASCADE,
+        related_name="highlights",
+    )
+    text = models.CharField(max_length=255)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["order"]
+
+    def __str__(self) -> str:
+        return self.text
 
 
 class ModuleProduct(BaseProductDetail):
@@ -123,8 +149,7 @@ class Review(BaseModel):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="reviews"
-        
+        related_name="reviews",
     )
     product = models.ForeignKey(
         Product,
@@ -142,8 +167,9 @@ class Review(BaseModel):
     )
     review_text = models.TextField(
         blank=True,
-        null=True
+        null=True,
     )
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
