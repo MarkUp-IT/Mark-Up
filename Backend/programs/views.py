@@ -1,12 +1,14 @@
 from django.http import JsonResponse, HttpResponseNotAllowed
 from .utils import get_request_data
 from .forms import CompetitionForm
-from .models import Competition
+from .models import Competition, CompetitionCategory
 from django.utils import timezone
 from accounts.decorators import jwt_required, role_required
 from accounts.models import UserRole
 from django.core.paginator import Paginator
+from django.views.decorators.csrf import csrf_exempt
 
+@csrf_exempt
 @jwt_required
 @role_required(UserRole.ADMIN)
 def add_competition(request):
@@ -32,10 +34,24 @@ def add_competition(request):
 	return JsonResponse(
 		{
 			"detail": "Kompetisi berhasil ditambahkan.",
-			"competition": {"id": str(competition.id), "title": competition.title, "category": competition.category, "organizer": competition.organizer},
+			"competition": {"id": str(competition.id), "title": competition.title, "category": competition.category.name,
+            "category_id": str(competition.category.id), "organizer": competition.organizer},
 		},
 		status=201,
 	)
+
+
+def get_categories(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    categories = CompetitionCategory.objects.order_by("name")
+    data = [
+        {"id": str(category.id), "name": category.name}
+        for category in categories
+    ]
+
+    return JsonResponse({"categories": data}, status=200)
 
 
 def get_competitions(request):
@@ -62,6 +78,7 @@ def get_competitions(request):
             "id": str(c.id),
             "title": c.title,
             "category": c.category.name if c.category_id else None,
+			"category_id": str(c.category.id) if c.category_id else None,
             "organizer": c.organizer,
             "date": c.event_date.isoformat() if c.event_date else None,
             "deadline": c.deadline.isoformat() if c.deadline else None,
@@ -110,6 +127,7 @@ def get_competition_summary(request):
 		status=200,
 	)
 
+@csrf_exempt
 @jwt_required
 @role_required(UserRole.ADMIN)
 def update_competition(request, competition_id):
@@ -140,7 +158,8 @@ def update_competition(request, competition_id):
 	return JsonResponse(
 		{
 			"detail": "Kompetisi berhasil diperbarui.",
-			"competition": {"id": str(competition.id), "title": competition.title, "category": competition.category, "organizer": competition.organizer},
+			"competition": {"id": str(competition.id), "title": competition.title, "category": competition.category.name,
+            "category_id": str(competition.category.id), "organizer": competition.organizer},
 		},
 		status=200,
 	)
