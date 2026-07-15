@@ -21,6 +21,7 @@ from accounts.decorators import jwt_required, role_required
 from accounts.models import UserRole
 from django.db.models import Q
 from mentors.models import MentorAvailability
+from django.views.decorators.csrf import csrf_exempt
 
 DETAIL_FORM_MAP = {
     ProductType.MENTORING: (MentoringProductForm, "mentoring_detail"),
@@ -496,7 +497,9 @@ def refund_my_product(request, product_id):
         status=201,
     )
 
-
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
 def add_product(request):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -662,6 +665,7 @@ def get_product_summary(request):
         status=200,
     )
 
+@csrf_exempt
 @jwt_required
 @role_required(UserRole.ADMIN)
 def update_product(request, product_id):

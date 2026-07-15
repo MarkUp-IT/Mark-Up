@@ -79,7 +79,6 @@ async function refreshAccessToken() {
   const res = await fetch(`${API_BASE}/api/auth/refresh/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include",
     body: JSON.stringify({ refresh }),
   });
 
@@ -95,7 +94,7 @@ async function refreshAccessToken() {
 
 export async function apiRequest(
   path,
-  { method = "GET", body, headers = {}, auth = true, credentials = "include", ...rest } = {}
+  { method = "GET", body, headers = {}, auth = true, credentials = "omit", ...rest } = {}
 ) {
   const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
 
@@ -112,7 +111,6 @@ export async function apiRequest(
     const options = {
       method,
       headers: buildHeaders(),
-      credentials,
       body: body ? JSON.stringify(body) : undefined,
       ...rest,
     };

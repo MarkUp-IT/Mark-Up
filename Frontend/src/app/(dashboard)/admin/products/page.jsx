@@ -24,6 +24,8 @@ import { useState, useEffect } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
+import Toast from "@/component/Toast";
+import { api, ApiError } from "@/lib/api";
 
 const CATEGORY_FILTERS = ["Semua", "Mentoring", "Bootcamp", "Modul"];
 const STATUS_FILTERS = ["Semua", "Aktif", "Nonaktif"];
@@ -41,52 +43,7 @@ export default function Products() {
     .adm-w-220 { width: 220px; }
   `;
 
-  const chartData = [
-    { product: "MENTORING", revenue: 200 },
-    { product: "BOOTCAMP", revenue: 700 },
-    { product: "MODUL", revenue: 300 },
-  ];
-
-  const products = [
-    {
-      id: "#ME003",
-      title: "101 Career Mentoring",
-      price: 110000,
-      originalPrice: null,
-      category: "Mentoring",
-      sessionCount: 1,
-      isActive: true,
-      sold: 12,
-    },
-    {
-      id: "#BO001",
-      title: "Essential Sprint Registration",
-      price: 110000,
-      originalPrice: null,
-      category: "Bootcamp",
-      isActive: false,
-      sold: 5,
-    },
-    {
-      id: "#MO001",
-      title: "Full-Throttle Coaching",
-      price: 110000,
-      originalPrice: 150000,
-      category: "Modul",
-      isActive: false,
-      sold: 8,
-    },
-    {
-      id: "#BO003",
-      title: "Bundling PowerPack (Newbie Friendly)",
-      price: 300000,
-      originalPrice: null,
-      category: "Mentoring",
-      sessionCount: 3,
-      isActive: true,
-      sold: 10,
-    },
-  ];
+  
 
   const [categoryFilter, setCategoryFilter] = useState("Semua");
   const [statusFilter, setStatusFilter] = useState("Semua");
@@ -95,12 +52,109 @@ export default function Products() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [formCategory, setFormCategory] = useState("Bootcamp");
 
+  const [purchaseSummary, setPurchaseSummary] = useState(null);
+  const [productSummary, setProductSummary] = useState(null);
+  const [revenueSummary, setRevenueSummary] = useState(null);
+  const [loadingSummary, setLoadingSummary] = useState(true);
+
+  const [products, setProducts] = useState([]);
+  const [pagination, setPagination] = useState(null);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const [formData, setFormData] = useState({
+      type: "BOOTCAMP",
+      title: "",
+      description: "",
+      explanation: "",
+      new_price: "",
+      original_price: "",
+      session_count: 1,
+      duration_minutes: 60,
+      registration_link: "",
+      image_url: "",
+      file_pdf_url: "",
+      stock: "",
+    });
+
+    const [editFormData, setEditFormData] = useState({
+    type: "",
+    title: "",
+    description: "",
+    explanation: "",
+    new_price: "",
+    original_price: "",
+    stock: "",
+    is_active: true,
+  });
+
+  const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState({
+    open: false,
+    type: "success",
+    title: "Berhasil",
+    message: "",
+  });
+
+  const showToast = (type, title, message) => {
+    setToast({ open: true, type, title, message });
+  };
+
   useEffect(() => {
     document.body.style.overflow = isAddOpen || isEditOpen ? "hidden" : "auto";
     return () => {
       document.body.style.overflow = "auto";
     };
   }, [isAddOpen, isEditOpen]);
+
+  useEffect(() => {
+    const fetchSummary = async () => {
+      try {
+        setLoadingSummary(true);
+
+        const [purchaseData, productData, revenueData,] = await Promise.all([
+          api.get("/api/transactions/summary/purchases/?period=all"),
+          api.get("/api/products/summary/"),
+          api.get("/api/transactions/summary/revenue/"),
+        ]);
+
+        setPurchaseSummary(purchaseData);
+        setProductSummary(productData);
+        setRevenueSummary(revenueData);
+      } catch (err) {
+        console.error(err);
+
+        if (err instanceof ApiError) {
+          console.error(err.message);
+        }
+      } finally {
+        setLoadingSummary(false);
+      }
+    };
+
+    fetchSummary();
+  }, []);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoadingProducts(true);
+
+        const data = await api.get(
+          `/api/products/?page=${currentPage}&page_size=10`
+        );
+
+        setProducts(data.products ?? []);
+        setPagination(data.pagination ?? null);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+
+    fetchProducts();
+  }, [currentPage]);
 
   const formatIDR = (val) =>
     val == null
@@ -111,17 +165,52 @@ export default function Products() {
           maximumFractionDigits: 0,
         }).format(val);
 
+  const chartData = loadingSummary
+    ? []
+    : [
+        {
+          product: "MENTORING",
+          revenue: Number(
+            revenueSummary?.revenue_by_type?.MENTORING ?? 0
+          ),
+        },
+        {
+          product: "BOOTCAMP",
+          revenue: Number(
+            revenueSummary?.revenue_by_type?.BOOTCAMP ?? 0
+          ),
+        },
+        {
+          product: "MODUL",
+          revenue: Number(
+            revenueSummary?.revenue_by_type?.MODULE ?? 0
+          ),
+        },
+      ];
+
+
   const filtered = products.filter((p) => {
+    const category =
+      p.type === "MENTORING"
+        ? "Mentoring"
+        : p.type === "BOOTCAMP"
+        ? "Bootcamp"
+        : "Modul";
+
     const matchCategory =
-      categoryFilter === "Semua" || p.category === categoryFilter;
+      categoryFilter === "Semua" || category === categoryFilter;
+
     const matchStatus =
       statusFilter === "Semua" ||
-      (statusFilter === "Aktif" ? p.isActive : !p.isActive);
+      (statusFilter === "Aktif"
+        ? p.is_active
+        : !p.is_active);
+
     return matchCategory && matchStatus;
   });
 
-  const renderCategorySpecificFields = () => {
-    if (formCategory === "Mentoring") {
+  const renderCategorySpecificFields = (data, setData, category) => {
+    if (category === "Mentoring") {
       return (
         <div className="flex flex-col gap-2">
           <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
@@ -129,9 +218,13 @@ export default function Products() {
           </p>
           <input
             type="number"
-            min={1}
-            placeholder="1"
-            className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+            value={data.original_price}
+            onChange={(e) =>
+              setData((prev) => ({
+                ...prev,
+                original_price: e.target.value,
+              }))
+            }
           />
           <p className="text-[#94A3B8] text-[11px]">
             Sesi pertama dipilih user pas checkout, sisanya dipilih sendiri dari
@@ -140,7 +233,7 @@ export default function Products() {
         </div>
       );
     }
-    if (formCategory === "Modul") {
+    if (category === "Modul") {
       return (
         <div className="flex flex-col gap-2">
           <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
@@ -158,6 +251,100 @@ export default function Products() {
       );
     }
     return null;
+  };
+
+  const handlePublish = async () => {
+    try {
+      setSubmitting(true);
+
+      const payload = {
+        ...formData,
+        new_price: Number(formData.new_price),
+        original_price:
+          formData.original_price === "" ? null : Number(formData.original_price),
+        stock: formData.stock === "" ? null : Number(formData.stock),
+      };
+
+      const res = await api.post("/api/products/add/", payload);
+      const successMessage =
+        typeof res?.detail === "string" && res.detail.trim()
+          ? res.detail
+          : "Produk berhasil diterbitkan.";
+
+      showToast("success", "Produk diterbitkan", successMessage);
+      setIsAddOpen(false);
+
+      const data = await api.get(`/api/products/?page=${currentPage}&page_size=10`);
+      setProducts(data.products ?? []);
+      setPagination(data.pagination ?? null);
+    } catch (err) {
+      console.error(err);
+
+      if (err instanceof ApiError) {
+        showToast("error", "Gagal menerbitkan produk", err.message);
+      } else {
+        showToast(
+          "error",
+          "Gagal menerbitkan produk",
+          "Terjadi kesalahan. Coba lagi."
+        );
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!selectedProduct) return;
+
+    try {
+      setSubmitting(true);
+
+      const payload = {
+        ...editFormData,
+        new_price: Number(editFormData.new_price),
+        original_price:
+          editFormData.original_price === ""
+            ? null
+            : Number(editFormData.original_price),
+        stock:
+          editFormData.stock === "" ? null : Number(editFormData.stock),
+        is_active: editFormData.is_active,
+      };
+
+      const res = await api.patch(
+        `/api/products/${selectedProduct.id}/`,
+        payload
+      );
+
+      const successMessage =
+        typeof res?.detail === "string" && res.detail.trim()
+          ? res.detail
+          : "Produk berhasil diperbarui.";
+
+      showToast("success", "Produk diperbarui", successMessage);
+      setIsEditOpen(false);
+
+      const data = await api.get(
+        `/api/products/?page=${currentPage}&page_size=10`
+      );
+      setProducts(data.products ?? []);
+      setPagination(data.pagination ?? null);
+    } catch (err) {
+      console.error(err);
+
+      if (err instanceof ApiError) {
+        showToast("error", "Gagal memperbarui produk", err.message);
+      } else {
+        showToast(
+          "error",
+          "Gagal memperbarui produk",
+          "Terjadi kesalahan. Coba lagi."
+        );
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -184,22 +371,53 @@ export default function Products() {
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Mentoring Terjual" value="19" unit="unit" />
-        <StatCard label="Bootcamp Terjual" value="1" unit="unit" />
-        <StatCard label="Modul Terjual" value="23" unit="unit" />
+        <StatCard
+          label="Mentoring Terjual"
+          value={
+            loadingSummary
+              ? "..."
+              : String(
+                  purchaseSummary?.counts_by_type?.MENTORING ?? 0
+                )
+          }
+          unit="unit"
+        />
+
+        <StatCard
+          label="Bootcamp Terjual"
+          value={
+            loadingSummary
+              ? "..."
+              : String(
+                  purchaseSummary?.counts_by_type?.BOOTCAMP ?? 0
+                )
+          }
+          unit="unit"
+        />
+
+        <StatCard
+          label="Modul Terjual"
+          value={
+            loadingSummary
+              ? "..."
+              : String(
+                  purchaseSummary?.counts_by_type?.MODULE ?? 0
+                )
+          }
+          unit="unit"
+        />
 
         <div className="col-span-2 row-span-2 bg-white border border-[#E2E8F0] shadow-sm rounded-[12px] p-6 flex flex-col">
           <div className="flex items-center justify-between mb-1">
             <p className="text-[12px] font-bold text-[#64748B] tracking-wide uppercase">
               Total Pendapatan Produk
             </p>
-            <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-[#148F89]/10 border border-[#148F89]/20">
-              <TrendingUp className="text-[#148F89]" size={14} />
-              <p className="font-bold text-[#148F89] text-[12px]">+12.5%</p>
-            </div>
+            
           </div>
           <p className="font-bold text-[28px] text-[#0F172A] mb-4">
-            Rp284.912.000
+            {loadingSummary
+              ? "..."
+              : formatIDR(Number(revenueSummary?.total_revenue ?? 0))}
           </p>
           <div className="flex-1" style={{ minHeight: "200px" }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -217,6 +435,7 @@ export default function Products() {
                 />
                 <YAxis hide />
                 <Tooltip
+                  formatter={(value) => formatIDR(value)}
                   cursor={{ fill: "#F8FAFC" }}
                   contentStyle={{
                     borderRadius: "8px",
@@ -238,11 +457,24 @@ export default function Products() {
 
         <StatCard
           label="Produk Aktif"
-          value="32"
+          value={
+            loadingSummary
+              ? "..."
+              : String(productSummary?.total_active ?? 0)
+          }
           unit="produk"
           variant="success"
         />
-        <StatCard label="Total Produk" value="1.280" unit="produk" />
+
+        <StatCard
+          label="Total Produk"
+          value={
+            loadingSummary
+              ? "..."
+              : String(productSummary?.total ?? 0)
+          }
+          unit="produk"
+        />
       </div>
 
       <div className="flex flex-col gap-4">
@@ -305,7 +537,9 @@ export default function Products() {
           </button>
         </div>
 
-        {filtered.length === 0 ? (
+        {loadingProducts ? (
+          <EmptyState message="Memuat produk..." />
+        ) : filtered.length === 0 ? (
           <EmptyState message="Nggak ada produk yang cocok sama filter ini." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
@@ -339,44 +573,54 @@ export default function Products() {
                 <tbody className="divide-y divide-[#E2E8F0] bg-white">
                   {filtered.map((item) => (
                     <tr
-                      key={item.id}
+                      key={`${item.type.slice(0, 2)}${String(item.id).slice(-4)}`}
                       className="hover:bg-[#F8FAFC] transition-colors"
                     >
                       <td className="px-6 py-4 text-[#64748B] font-medium">
-                        {item.id}
+                        {item.type.slice(0,2)}{String(item.id).slice(-4)}
                       </td>
                       <td className="px-6 py-4 text-[#1E293B] font-semibold">
                         {item.title}
-                        {item.sessionCount > 1 && (
+                        {item.session_count > 1 && (
                           <span className="ml-2 text-[#148F89] text-[11px] font-semibold">
-                            ({item.sessionCount}x sesi)
+                            ({item.session_count}x sesi)
                           </span>
                         )}
                       </td>
                       <td className="px-6 py-4 text-center text-[#334155] font-medium">
-                        {item.originalPrice && (
+                        {item.original_price && (
                           <span className="line-through text-[#94A3B8] mr-1.5">
-                            {formatIDR(item.originalPrice)}
+                            {formatIDR(item.original_price)}
                           </span>
                         )}
-                        {formatIDR(item.price)}
+                        {formatIDR(item.new_price)}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span
-                          className={`inline-flex px-3 py-1.5 text-[11px] rounded-[6px] font-semibold ${CATEGORY_BADGE[item.category]}`}
-                        >
-                          {item.category}
+                          className={`inline-flex px-3 py-1.5 text-[11px] rounded-[6px] font-semibold ${CATEGORY_BADGE[
+                              item.type === "MENTORING"
+                                ? "Mentoring"
+                                : item.type === "BOOTCAMP"
+                                ? "Bootcamp"
+                                : "Modul"
+                            ]}`}
+                          >
+                          {item.type === "MENTORING"
+                          ? "Mentoring"
+                          : item.type === "BOOTCAMP"
+                          ? "Bootcamp"
+                          : "Modul"}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span
-                          className={`inline-flex px-3 py-1.5 text-[11px] rounded-full font-bold ${item.isActive ? "bg-[#DCFCE7] text-[#166534]" : "bg-[#FEE2E2] text-[#991B1B]"}`}
+                          className={`inline-flex px-3 py-1.5 text-[11px] rounded-full font-bold ${item.is_active ? "bg-[#DCFCE7] text-[#166534]" : "bg-[#FEE2E2] text-[#991B1B]"}`}
                         >
-                          {item.isActive ? "AKTIF" : "NONAKTIF"}
+                          {item.is_active ? "AKTIF" : "NONAKTIF"}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center text-[#475569] font-medium">
-                        {item.sold}
+                        {item.sold_count}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex items-center justify-center gap-3">
@@ -388,7 +632,23 @@ export default function Products() {
                             size={17}
                             onClick={() => {
                               setSelectedProduct(item);
-                              setFormCategory(item.category);
+                              setFormCategory(
+                                item.type === "MENTORING"
+                                  ? "Mentoring"
+                                  : item.type === "BOOTCAMP"
+                                  ? "Bootcamp"
+                                  : "Modul"
+                              );
+                              setEditFormData({
+                                type: item.type,
+                                title: item.title ?? "",
+                                description: item.description ?? "",
+                                explanation: item.explanation ?? "",
+                                new_price: item.new_price ?? "",
+                                original_price: item.original_price ?? "",
+                                stock: item.stock ?? "",
+                                is_active: item.is_active,
+                              });
                               setIsEditOpen(true);
                             }}
                             className="cursor-pointer text-[#94A3B8] hover:text-[#148F89] transition-colors"
@@ -399,6 +659,31 @@ export default function Products() {
                   ))}
                 </tbody>
               </table>
+              {pagination && (
+                <div className="flex items-center justify-between px-6 py-4 border-t border-[#E2E8F0] bg-white">
+                  <p className="text-sm text-[#64748B]">
+                    Halaman {pagination.page} dari {pagination.total_pages}
+                  </p>
+
+                  <div className="flex gap-2">
+                    <button
+                      disabled={!pagination.has_previous}
+                      onClick={() => setCurrentPage((p) => p - 1)}
+                      className="px-4 py-2 border rounded disabled:opacity-40"
+                    >
+                      Sebelumnya
+                    </button>
+
+                    <button
+                      disabled={!pagination.has_next}
+                      onClick={() => setCurrentPage((p) => p + 1)}
+                      className="px-4 py-2 border rounded disabled:opacity-40"
+                    >
+                      Berikutnya
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -451,9 +736,13 @@ export default function Products() {
               Judul
             </p>
             <input
-              type="text"
-              placeholder="Nama produk..."
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                value={formData.title}
+                onChange={(e) =>
+                    setFormData((prev) => ({
+                        ...prev,
+                        title: e.target.value,
+                    }))
+                }
             />
           </div>
 
@@ -463,10 +752,23 @@ export default function Products() {
             </p>
             <div className="relative w-full">
               <select
-                value={formCategory}
-                onChange={(e) => setFormCategory(e.target.value)}
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
-              >
+                    value={formCategory}
+                    onChange={(e) => {
+                        const value = e.target.value;
+
+                        setFormCategory(value);
+
+                        setFormData((prev) => ({
+                            ...prev,
+                            type:
+                                value === "Mentoring"
+                                    ? "MENTORING"
+                                    : value === "Bootcamp"
+                                    ? "BOOTCAMP"
+                                    : "MODULE",
+                        }));
+                    }}
+                >
                 <option>Bootcamp</option>
                 <option>Mentoring</option>
                 <option>Modul</option>
@@ -483,9 +785,13 @@ export default function Products() {
               Deskripsi Singkat
             </p>
             <input
-              type="text"
-              placeholder="Maks. 100 karakter..."
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                value={formData.description}
+                onChange={(e)=>
+                    setFormData(prev=>({
+                        ...prev,
+                        description:e.target.value
+                    }))
+                }
             />
           </div>
 
@@ -494,34 +800,69 @@ export default function Products() {
               Deskripsi Lengkap
             </p>
             <textarea
-              placeholder="Penjelasan produk..."
-              style={{ height: "100px" }}
-              className="w-full py-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B] resize-none"
+                value={formData.explanation}
+                onChange={(e)=>
+                    setFormData(prev=>({
+                        ...prev,
+                        explanation:e.target.value
+                    }))
+                }
             />
           </div>
 
-          {renderCategorySpecificFields()}
+          {renderCategorySpecificFields(formData, setFormData, formCategory)}
 
-          <div className="flex gap-4 w-full">
-            <div className="flex flex-col gap-2 flex-1">
+          <div className="flex flex-col gap-5 w-full">
+            <div className="flex flex-col gap-2">
               <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-                Harga (Rp)
+                Stok
               </p>
               <input
                 type="number"
-                placeholder="0"
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                min="0"
+                placeholder="Jumlah stok"
+                value={formData.stock}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    stock: e.target.value,
+                  }))
+                }
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89]"
               />
             </div>
-            <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-                Harga Asli (opsional)
-              </p>
-              <input
-                type="number"
-                placeholder="Kosongkan kalau nggak diskon"
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
-              />
+
+            <div className="flex gap-4 w-full">
+              <div className="flex flex-col gap-2 flex-1">
+                <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                  Harga (Rp)
+                </p>
+                <input
+                  type="number"
+                  value={formData.new_price}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      new_price: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="flex flex-col gap-2 flex-1">
+                <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                  Harga Asli (opsional)
+                </p>
+                <input
+                  type="number"
+                  value={formData.original_price}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      original_price: e.target.value,
+                    }))
+                  }
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -533,8 +874,12 @@ export default function Products() {
           >
             Batalkan
           </button>
-          <button className="flex-1 py-3 bg-[#148F89] text-white font-bold rounded-[8px] hover:bg-[#117A75] transition-colors">
-            Publikasikan
+          <button
+              onClick={handlePublish}
+              disabled={submitting}
+              className="flex-1 py-3 bg-[#148F89] text-white font-bold rounded-[8px] hover:bg-[#117A75] disabled:opacity-50"
+          >
+              {submitting ? "Menyimpan..." : "Publikasikan"}
           </button>
         </div>
       </div>
@@ -571,7 +916,10 @@ export default function Products() {
             </p>
             <input
               type="text"
-              defaultValue={selectedProduct?.title}
+              value={editFormData.title}
+              onChange={(e) =>
+                setEditFormData((prev) => ({ ...prev, title: e.target.value }))
+              }
               className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
@@ -583,8 +931,8 @@ export default function Products() {
             <div className="relative w-full">
               <select
                 value={formCategory}
-                onChange={(e) => setFormCategory(e.target.value)}
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                disabled
+                className="w-full adm-h-48 bg-[#F1F5F9] border border-[#E2E8F0] rounded-[8px] px-4 appearance-none outline-none text-[#94A3B8] cursor-not-allowed"
               >
                 <option>Bootcamp</option>
                 <option>Mentoring</option>
@@ -592,33 +940,98 @@ export default function Products() {
               </select>
               <ChevronDown
                 size={18}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none"
               />
             </div>
+            <p className="text-[#94A3B8] text-[11px]">
+              Tipe produk tidak bisa diubah setelah dibuat.
+            </p>
           </div>
 
-          {renderCategorySpecificFields()}
+          <div className="flex flex-col gap-2">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Deskripsi Singkat
+            </p>
+            <input
+              value={editFormData.description}
+              onChange={(e) =>
+                setEditFormData((prev) => ({
+                  ...prev,
+                  description: e.target.value,
+                }))
+              }
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+            />
+          </div>
 
-          <div className="flex gap-4 w-full">
-            <div className="flex flex-col gap-2 flex-1">
+          <div className="flex flex-col gap-2">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Deskripsi Lengkap
+            </p>
+            <textarea
+              value={editFormData.explanation}
+              onChange={(e) =>
+                setEditFormData((prev) => ({
+                  ...prev,
+                  explanation: e.target.value,
+                }))
+              }
+              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+            />
+          </div>
+
+          {renderCategorySpecificFields(editFormData, setEditFormData, formCategory)}
+
+          <div className="flex flex-col gap-5 w-full">
+            <div className="flex flex-col gap-2">
               <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-                Harga (Rp)
+                Stok
               </p>
               <input
                 type="number"
-                defaultValue={selectedProduct?.price}
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                min="0"
+                placeholder="Jumlah stok"
+                value={editFormData.stock}
+                onChange={(e) =>
+                  setEditFormData((prev) => ({ ...prev, stock: e.target.value }))
+                }
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89]"
               />
             </div>
-            <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-                Harga Asli (opsional)
-              </p>
-              <input
-                type="number"
-                defaultValue={selectedProduct?.originalPrice || ""}
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
-              />
+
+            <div className="flex gap-4 w-full">
+              <div className="flex flex-col gap-2 flex-1">
+                <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                  Harga (Rp)
+                </p>
+                <input
+                  type="number"
+                  value={editFormData.new_price}
+                  onChange={(e) =>
+                    setEditFormData((prev) => ({
+                      ...prev,
+                      new_price: e.target.value,
+                    }))
+                  }
+                  className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                />
+              </div>
+              <div className="flex flex-col gap-2 flex-1">
+                <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                  Harga Asli (opsional)
+                </p>
+                <input
+                  type="number"
+                  value={editFormData.original_price}
+                  onChange={(e) =>
+                    setEditFormData((prev) => ({
+                      ...prev,
+                      original_price: e.target.value,
+                    }))
+                  }
+                  className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                />
+              </div>
             </div>
           </div>
 
@@ -628,7 +1041,13 @@ export default function Products() {
             </p>
             <div className="relative w-full">
               <select
-                defaultValue={selectedProduct?.isActive ? "Aktif" : "Nonaktif"}
+                value={editFormData.is_active ? "Aktif" : "Nonaktif"}
+                onChange={(e) =>
+                  setEditFormData((prev) => ({
+                    ...prev,
+                    is_active: e.target.value === "Aktif",
+                  }))
+                }
                 className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
               >
                 <option>Aktif</option>
@@ -649,11 +1068,24 @@ export default function Products() {
           >
             Batal
           </button>
-          <button className="flex-1 py-3 bg-[#148F89] text-white font-bold rounded-[8px] hover:bg-[#117A75] transition-colors">
-            Simpan Perubahan
+          <button
+            onClick={handleUpdate}
+            disabled={submitting}
+            className="flex-1 py-3 bg-[#148F89] text-white font-bold rounded-[8px] hover:bg-[#117A75] disabled:opacity-50"
+          >
+            {submitting ? "Menyimpan..." : "Simpan Perubahan"}
           </button>
         </div>
       </div>
+
+      <Toast
+        open={toast.open}
+        type={toast.type}
+        title={toast.title}
+        message={toast.message}
+        onClose={() => setToast((prev) => ({ ...prev, open: false }))}
+        position="bottom-right"
+      />
     </DashboardLayout>
   );
 }

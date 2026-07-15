@@ -160,7 +160,6 @@ def get_revenue_summary(request):
     )
     total_revenue = totals["total_revenue"] or 0
 
-    # Trend dibanding periode sebelumnya (untuk "all" nggak ada pembanding yang jelas)
     trend_percentage = None
     if period != "all":
         prev_revenue = _sum_revenue(_apply_date_filter(base_items, prev_start, prev_end))
@@ -169,7 +168,6 @@ def get_revenue_summary(request):
         else:
             trend_percentage = 100.0 if total_revenue else 0.0
 
-    # Data harian untuk bar chart. period == "all" -> batasi 30 hari terakhir.
     chart_start = start_date or (timezone.localdate() - timedelta(days=29))
     chart_end = end_date or timezone.localdate()
 
@@ -201,6 +199,82 @@ def get_revenue_summary(request):
             "total_revenue": str(total_revenue),
             "trend_percentage": trend_percentage,
             "daily_chart": daily_chart,
+        },
+        status=200,
+    )
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_product_revenue_summary(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    base_items = TransactionItem.objects.filter(
+        transaction__payment_status=PaymentStatus.PAID
+    )
+
+    totals = base_items.aggregate(
+        mentoring_revenue=Sum(
+            Case(
+                When(product__type=ProductType.MENTORING, then=REVENUE_EXPRESSION),
+                default=0,
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )
+        ),
+        module_revenue=Sum(
+            Case(
+                When(product__type=ProductType.MODULE, then=REVENUE_EXPRESSION),
+                default=0,
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )
+        ),
+        bootcamp_revenue=Sum(
+            Case(
+                When(product__type=ProductType.BOOTCAMP, then=REVENUE_EXPRESSION),
+                default=0,
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )
+        ),
+        total_revenue=Sum(REVENUE_EXPRESSION),
+    )
+
+    revenue_by_type = {
+        ProductType.MENTORING: float(totals["mentoring_revenue"] or 0),
+        ProductType.BOOTCAMP: float(totals["bootcamp_revenue"] or 0),
+        ProductType.MODULE: float(totals["module_revenue"] or 0),
+    }
+
+    chart_qs = (
+        base_items
+        .values("product__type")
+        .annotate(revenue=Sum(REVENUE_EXPRESSION))
+    )
+
+    revenue_map = {
+        row["product__type"]: float(row["revenue"] or 0)
+        for row in chart_qs
+    }
+
+    chart_data = [
+        {
+            "product": ProductType.MENTORING,
+            "revenue": revenue_map.get(ProductType.MENTORING, 0),
+        },
+        {
+            "product": ProductType.BOOTCAMP,
+            "revenue": revenue_map.get(ProductType.BOOTCAMP, 0),
+        },
+        {
+            "product": ProductType.MODULE,
+            "revenue": revenue_map.get(ProductType.MODULE, 0),
+        },
+    ]
+
+    return JsonResponse(
+        {
+            "total_revenue": float(totals["total_revenue"] or 0),
+            "revenue_by_type": revenue_by_type,
+            "chart_data": chart_data,
         },
         status=200,
     )

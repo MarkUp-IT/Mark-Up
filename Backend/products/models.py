@@ -39,7 +39,10 @@ class Product(BaseModel):
 class BaseProductDetail(BaseModel):
     title = models.CharField(max_length=255)
     description = models.TextField(max_length=500)
-    explanation = models.TextField(default='')
+    explanation = models.TextField(
+        blank=True,
+        default=""
+    )
     published_at = models.DateTimeField(blank=True, null=True)
     image_url = models.URLField(blank=True, null=True)
     original_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -72,11 +75,7 @@ class MentoringProduct(BaseProductDetail):
         related_name="mentoring_detail",
         
     )
-    mentor = models.ForeignKey(
-        MentorProfile,
-        on_delete=models.CASCADE,
-        related_name="mentoring_products",
-    )
+
     session_count = models.PositiveIntegerField(default=1)
     duration_minutes = models.PositiveIntegerField(default=60)
 
