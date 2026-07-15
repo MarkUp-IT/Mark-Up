@@ -81,7 +81,10 @@ export default function Login() {
         { auth: false },
       );
 
-      setTokens({ access: data.access, refresh: data.refresh });
+      setTokens({
+        access: data.access,
+        refresh: data.refresh,
+      });
 
       showToast(
         "success",
@@ -89,8 +92,23 @@ export default function Login() {
         "Kamu akan diarahkan ke dashboard.",
       );
 
+      const role = data.user?.role;
+
       window.setTimeout(() => {
-        router.push("/user/my-products");
+        switch (role) {
+          case "ADMIN":
+            router.push("/admin");
+            break;
+
+          case "MENTOR":
+            router.push("/mentor/active-classes");
+            break;
+
+          case "STUDENT":
+          default:
+            router.push("/user/my-products");
+            break;
+        }
       }, 1600);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -220,4 +238,5 @@ export default function Login() {
       />
     </div>
   );
-}
+  }
+

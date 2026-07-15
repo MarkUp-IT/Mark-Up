@@ -1,6 +1,6 @@
 "use client";
 
-import { TrendingUp, Download } from "lucide-react";
+import { TrendingUp, TrendingDown, Download } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -10,9 +10,10 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
+import { api, ApiError } from "@/lib/api";
 
 const PERIOD_FILTERS = [
   { key: "all", label: "Semua Waktu" },
@@ -21,17 +22,43 @@ const PERIOD_FILTERS = [
   { key: "month", label: "Bulan Ini" },
 ];
 
+const formatRupiah = (value) =>
+  `Rp${Math.round(Number(value)).toLocaleString("id-ID")}`;
+
+function TrendBadge({ trend }) {
+  if (typeof trend !== "number") return null;
+
+  const isUp = trend >= 0;
+  const sign = trend > 0 ? "+" : "";
+
+  return (
+    <div
+      className={
+        isUp
+          ? "flex items-center gap-1 px-3 py-1 rounded-full bg-[#148F89]/10 border border-[#148F89]/20"
+          : "flex items-center gap-1 px-3 py-1 rounded-full bg-[#FEE2E2] border border-[#FCA5A5]"
+      }
+    >
+      {isUp ? (
+        <TrendingUp className="text-[#148F89]" size={14} />
+      ) : (
+        <TrendingDown className="text-[#991B1B]" size={14} />
+      )}
+      <p className={isUp ? "font-bold text-[12px] text-[#148F89]" : "font-bold text-[12px] text-[#991B1B]"}>
+        {sign}{trend}%
+      </p>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [activePeriod, setActivePeriod] = useState("all");
 
-  const chartData = [
-    { day: "29/03", revenue: 400 },
-    { day: "30/03", revenue: 300 },
-    { day: "31/03", revenue: 600 },
-    { day: "01/04", revenue: 500 },
-    { day: "02/04", revenue: 300 },
-    { day: "03/04", revenue: 500 },
-  ];
+  const [revenue, setRevenue] = useState(null);
+  const [counts, setCounts] = useState(null);
+  const [userSummary, setUserSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const logs = [
     {
@@ -78,12 +105,54 @@ export default function AdminDashboard() {
     REMOVED: "bg-[#FEE2E2] text-[#991B1B]",
   };
 
+  const fetchDashboard = useCallback(async (period) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [revenueResult, countsResult, userResult] = await Promise.allSettled([
+        api.get(`/api/transactions/summary/revenue/?period=${period}`),
+        api.get(`/api/transactions/summary/purchases/?period=${period}`),
+        api.get("/api/accounts/summary/"),
+      ]);
+
+      if (revenueResult.status === "fulfilled") {
+        setRevenue(revenueResult.value);
+      } else {
+        console.error("Revenue API Error:", revenueResult.reason);
+        setError("Gagal memuat data pendapatan.");
+      }
+
+      if (countsResult.status === "fulfilled") {
+        setCounts(countsResult.value);
+      } else {
+        console.error("Counts API Error:", countsResult.reason);
+      }
+
+      if (userResult.status === "fulfilled") {
+        setUserSummary(userResult.value);
+      } else {
+        console.error("User Summary API Error:", userResult.reason);
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("Terjadi kesalahan saat memuat data dashboard.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDashboard(activePeriod);
+  }, [activePeriod, fetchDashboard]);
+
   return (
     <DashboardLayout title="Dashboard">
       <style>{`.adm-h-42 { height: 42px; }`}</style>
 
-      {/* Page header -- pola baku: h1 22px + subtitle 14px + aksi kanan.
-          Nggak pakai flex-col/flex-row responsive lagi, cukup flex-wrap. */}
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-bold text-[22px] text-[#0F172A]">
@@ -100,7 +169,8 @@ export default function AdminDashboard() {
               <button
                 key={f.key}
                 onClick={() => setActivePeriod(f.key)}
-                className={`px-3.5 py-2 rounded-[6px] font-medium text-[12.5px] transition-colors whitespace-nowrap ${
+                disabled={loading}
+                className={`px-3.5 py-2 rounded-[6px] font-medium text-[12.5px] transition-colors whitespace-nowrap disabled:opacity-60 ${
                   activePeriod === f.key
                     ? "bg-white text-[#0F172A] shadow-sm"
                     : "text-[#64748B] hover:bg-white/60"
@@ -117,12 +187,28 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Grid stat + chart -- semua StatCard sama persis ukurannya (satu
-          komponen), grid tetap 3 kolom (admin didesain buat desktop) */}
+      {error && (
+        <div className="rounded-[8px] border border-[#FCA5A5] bg-[#FEE2E2] text-[#991B1B] text-[13px] px-4 py-3">
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Penjualan Mentoring" value="19" unit="unit" />
-        <StatCard label="Penjualan Bootcamp" value="1" unit="unit" />
-        <StatCard label="Penjualan Modul" value="23" unit="unit" />
+        <StatCard
+          label="Penjualan Mentoring"
+          value={loading ? "…" : String(counts?.counts_by_type?.MENTORING ?? 0)}
+          unit="unit"
+        />
+        <StatCard
+          label="Penjualan Bootcamp"
+          value={loading ? "…" : String(counts?.counts_by_type?.BOOTCAMP ?? 0)}
+          unit="unit"
+        />
+        <StatCard
+          label="Penjualan Modul"
+          value={loading ? "…" : String(counts?.counts_by_type?.MODULE ?? 0)}
+          unit="unit"
+        />
 
         <div className="col-span-2 row-span-2 bg-white border border-[#E2E8F0] shadow-sm rounded-[12px] p-6 flex flex-col">
           <div className="flex flex-col mb-4">
@@ -130,19 +216,16 @@ export default function AdminDashboard() {
               <p className="text-[12px] font-bold text-[#64748B] tracking-wide uppercase">
                 Total Pendapatan
               </p>
-              <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-[#148F89]/10 border border-[#148F89]/20">
-                <TrendingUp className="text-[#148F89]" size={14} />
-                <p className="font-bold text-[#148F89] text-[12px]">+12.5%</p>
-              </div>
+              <TrendBadge trend={revenue?.trend_percentage} />
             </div>
             <p className="font-bold text-[28px] text-[#0F172A] mt-1">
-              Rp284.912.000
+              {loading ? "…" : formatRupiah(revenue?.total_revenue ?? 0)}
             </p>
           </div>
           <div className="flex-1" style={{ minHeight: "220px" }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={chartData}
+                data={revenue?.daily_chart ?? []}
                 barCategoryGap={30}
                 margin={{ top: 10, right: 0, left: -20, bottom: 0 }}
               >
@@ -156,6 +239,7 @@ export default function AdminDashboard() {
                 <YAxis hide />
                 <Tooltip
                   cursor={{ fill: "#F8FAFC" }}
+                  formatter={(value) => [formatRupiah(value), "Pendapatan"]}
                   contentStyle={{
                     borderRadius: "8px",
                     border: "1px solid #E2E8F0",
@@ -163,12 +247,10 @@ export default function AdminDashboard() {
                   }}
                 />
                 <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
-                  {chartData.map((entry, index) => (
+                  {(revenue?.daily_chart ?? []).map((entry, index, arr) => (
                     <Cell
                       key={index}
-                      fill={
-                        index === chartData.length - 1 ? "#148F89" : "#CDEEEB"
-                      }
+                      fill={index === arr.length - 1 ? "#148F89" : "#CDEEEB"}
                     />
                   ))}
                 </Bar>
@@ -179,15 +261,17 @@ export default function AdminDashboard() {
 
         <StatCard
           label="Penjualan Hari Ini"
-          value="43"
+          value={loading ? "…" : String(counts?.today_count ?? 0)}
           unit="unit"
           variant="success"
         />
-        <StatCard label="User Aktif" value="42.8k" unit="online" />
+        <StatCard
+          label="User Aktif"
+          value={loading ? "…" : String(userSummary?.total_users ?? 0)}
+          unit="online"
+        />
       </div>
 
-      {/* Audit Trail ringkas -- pola section header baku: h2 16px + subtitle
-          13px + link kanan */}
       <div className="flex flex-col gap-4">
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div>
@@ -198,6 +282,7 @@ export default function AdminDashboard() {
               Aktivitas administratif terbaru di seluruh platform.
             </p>
           </div>
+
           <a
             href="/admin/audit-trail"
             className="text-[#148F89] font-bold text-[13px] hover:underline"

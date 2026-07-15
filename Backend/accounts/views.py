@@ -60,7 +60,7 @@ def login_view(request):
 	if user_obj:
 		user = authenticate(
 			request,
-			username=user_obj.username,
+			email=user_obj.email,
 			password=password,
 		)
 	else:
@@ -83,6 +83,8 @@ def login_view(request):
 				"id": str(user.id),
 				"email": user.email,
 				"fullname": user.fullname,
+				"role": user.role, 
+				
 			},
 		},
 		status=200,
@@ -104,6 +106,7 @@ def get_users(request):
 			"email": u.email,
 			"phone": u.phone,
 			"role": u.role,
+			"profile_image": u.profile_image_url,
 			"status": u.status,
 			"image": u.profile_image_url,
 			"created_at": u.created_at.isoformat() if getattr(u, "created_at", None) else None,
