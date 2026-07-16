@@ -5,8 +5,13 @@ from django.core.validators import MinValueValidator
 from django.db import models
 
 from products.models import Product
+from django.utils import timezone
 
 User = get_user_model()
+
+def generate_transaction_id():
+    return f"TRX-{timezone.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
+
 
 
 class PaymentStatus(models.TextChoices):
@@ -29,36 +34,24 @@ class Transaction(models.Model):
     id = models.CharField(
         primary_key=True,
         max_length=30,
+        default=generate_transaction_id,
+        editable=False,
         help_text="Human-readable transaction code",
     )
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="transactions",
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="transactions")
+    buyer_phone = models.CharField(max_length=20, blank=True, null=True) 
     sub_total = models.DecimalField(max_digits=12, decimal_places=2)
     promo_code = models.CharField(max_length=100, blank=True, null=True)
-    discount_amount = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=0,
-    )
-    tax = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=0,
-    )
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     grand_total = models.DecimalField(max_digits=12, decimal_places=2)
-    payment_method = models.CharField(
-        max_length=20,
-        choices=PaymentMethod.choices,
-        default=PaymentMethod.BANK_TRANSFER,
-    )
-    payment_status = models.CharField(
-        max_length=20,
-        choices=PaymentStatus.choices,
-        default=PaymentStatus.PENDING,
-    )
+    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.BANK_TRANSFER)
+    payment_status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
+    proof_of_payment = models.FileField(
+            upload_to="payment_proofs/%Y/%m/",
+            blank=True,
+            null=True,
+        )
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(blank=True, null=True)
 

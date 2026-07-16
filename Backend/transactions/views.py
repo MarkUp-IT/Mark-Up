@@ -9,6 +9,11 @@ from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Sum, Case, When, F, DecimalField
 from django.db.models.functions import TruncDate
+from django.db import transaction as db_transaction
+from mentors.models import MentorAvailability
+from .models import Transaction, TransactionItem, UserLibrary, PaymentStatus
+from .utils import get_request_data  
+from django.views.decorators.csrf import csrf_exempt
 
 def _resolve_period_range(period: str):
     """
@@ -417,4 +422,144 @@ def get_user_purchased_product_detail(request, product_id):
             "product": product_detail,
         },
         status=200,
+    )
+
+DISCOUNT_RATE = 0.10  # sementara: samain dengan logic frontend (10% flat kalau ada voucher)
+# TODO: ganti dengan validasi voucher yang sebenarnya begitu ada model Voucher.
+
+@csrf_exempt
+@jwt_required
+def checkout_product(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    if not request.user.is_authenticated:
+        return JsonResponse({"detail": "Authentication required."}, status=401)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    product_id = request_data.get("product_id")
+    voucher_code = request_data.get("voucher_code")
+    buyer_phone = request_data.get("buyer_phone")
+    mentor_availability_id = request_data.get("availability_slot_id")
+    proof_file = request.FILES.get("proof_of_payment")
+
+    if not product_id:
+        return JsonResponse({"detail": "product_id diperlukan."}, status=400)
+
+    if not proof_file:
+        return JsonResponse({"detail": "Bukti pembayaran diperlukan."}, status=400)
+    
+    ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "pdf"}
+    MAX_FILE_SIZE = 5 * 1024 * 1024  
+
+    ext = proof_file.name.rsplit(".", 1)[-1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        return JsonResponse({"detail": "Format file tidak didukung."}, status=400)
+
+    if proof_file.size > MAX_FILE_SIZE:
+        return JsonResponse({"detail": "Ukuran file maksimal 5MB."}, status=400)
+
+    try:
+        product = Product.objects.select_related(
+            "mentoring_detail", "module_detail", "bootcamp_detail"
+        ).get(id=product_id)
+    except Product.DoesNotExist:
+        return JsonResponse({"detail": "Produk tidak ditemukan."}, status=404)
+
+    detail = None
+    if product.type == ProductType.MENTORING:
+        detail = getattr(product, "mentoring_detail", None)
+    elif product.type == ProductType.MODULE:
+        detail = getattr(product, "module_detail", None)
+    elif product.type == ProductType.BOOTCAMP:
+        detail = getattr(product, "bootcamp_detail", None)
+
+    if detail is None or not detail.is_active:
+        return JsonResponse({"detail": "Produk tidak tersedia."}, status=400)
+
+    if product.type == ProductType.MENTORING and not mentor_availability_id:
+        return JsonResponse(
+            {"detail": "availability_slot_id diperlukan untuk produk mentoring."},
+            status=400,
+        )
+
+    price = detail.new_price if getattr(detail, "new_price", None) else detail.original_price
+    discount_amount = round(float(price) * DISCOUNT_RATE, 2) if voucher_code else 0
+    grand_total = float(price) - discount_amount
+
+    try:
+        with db_transaction.atomic():
+            mentor_availability = None
+
+            if product.type == ProductType.MENTORING:
+                try:
+                    mentor_availability = MentorAvailability.objects.select_for_update().get(
+                        id=mentor_availability_id
+                    )
+                except MentorAvailability.DoesNotExist:
+                    return JsonResponse({"detail": "Slot jadwal tidak ditemukan."}, status=404)
+
+                if mentor_availability.is_booked:
+                    return JsonResponse({"detail": "Slot ini sudah dibooking orang lain."}, status=400)
+
+                mentor_availability.is_booked = True
+                mentor_availability.save()
+
+            elif product.type in (ProductType.MODULE, ProductType.BOOTCAMP):
+        
+                detail_locked = type(detail).objects.select_for_update().get(pk=detail.pk)
+
+                if getattr(detail_locked, "stock", None) is not None:
+                    if detail_locked.stock <= 0:
+                        return JsonResponse({"detail": "Stok produk habis."}, status=400)
+                    detail_locked.stock -= 1
+
+                detail_locked.sold_count = (detail_locked.sold_count or 0) + 1
+                detail_locked.save()
+
+            if product.type == ProductType.MENTORING:
+                detail_locked_mentoring = type(detail).objects.select_for_update().get(pk=detail.pk)
+                detail_locked_mentoring.sold_count = (detail_locked_mentoring.sold_count or 0) + 1
+                detail_locked_mentoring.save()
+
+            txn = Transaction.objects.create(
+                user=request.user,
+                buyer_phone=buyer_phone,
+                sub_total=price,
+                promo_code=voucher_code,
+                discount_amount=discount_amount,
+                tax=0,
+                grand_total=grand_total,
+                proof_of_payment=proof_file,
+                payment_status=PaymentStatus.PENDING,  
+            )
+
+            item = TransactionItem.objects.create(
+                transaction=txn,
+                product=product,
+                price_at_checkout=price,
+                quantity=1,
+                mentor_availability=mentor_availability,
+            )
+
+            UserLibrary.objects.create(
+                user=request.user,
+                transaction_item=item,
+                active_date=timezone.now(),
+            )
+
+    except Exception as e:
+        return JsonResponse({"detail": f"Checkout gagal: {str(e)}"}, status=500)
+
+    return JsonResponse(
+        {
+            "detail": "Transaksi berhasil dibuat, menunggu verifikasi admin.",
+            "transaction_id": txn.id,
+            "status": txn.payment_status,
+            "grand_total": str(txn.grand_total),
+        },
+        status=201,
     )

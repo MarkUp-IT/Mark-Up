@@ -29,13 +29,14 @@ const CARD_BASE =
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B19EEF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#060010]";
 
+
 function mapApiMentor(item) {
   return {
-    name: item.fullname,
-    role: item.role || "",
-    photo: item.photo_url || "",
-    linkedin: item.linkedin_url || "",
-    instagram: item.instagram_url || "",
+    name: item.name,
+    role: item.headline || "",
+    photo: item.photo || "",
+    linkedin: item.linkedin || "",
+    instagram: item.instagram || "",
   };
 }
 // Ambil 2 huruf pertama dari nama depan+tengah, buang gelar (mis. ", FMVA")

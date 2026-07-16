@@ -8,12 +8,14 @@ from .views import (
     refund_my_product,
     schedule_my_product_session,
     get_products,
+    get_product,
     get_product_summary,
     update_product,
 )
 
 urlpatterns = [
     path("", get_products, name="api_products_list"),
+    path("<uuid:product_id>/", get_product, name="get_product"),
     path("summary/", get_product_summary, name="api_products_summary"),
     path("add/", add_product, name="api_products_add"),
     path("my-products/", get_my_products, name="api_my_products_list"),

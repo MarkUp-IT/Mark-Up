@@ -27,6 +27,12 @@ class MentorProfile(models.Model):
         related_name="mentor_profile"
     )
 
+    headline = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+    )
+
     bio = models.TextField(
         blank=True,
         null=True
@@ -42,6 +48,14 @@ class MentorProfile(models.Model):
         max_length=255,
         blank=True,
         null=True,
+    )
+
+    review_count = models.PositiveIntegerField(default=0)
+
+    rating = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        default=0,
     )
 
     created_at = models.DateTimeField(

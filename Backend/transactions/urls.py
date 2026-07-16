@@ -6,11 +6,13 @@ from .views import (
     get_transactions,
     get_user_purchased_product_detail,
     get_user_purchased_products,
-    get_product_revenue_summary
+    get_product_revenue_summary,
+    checkout_product
 )
 
 urlpatterns = [
     path("", get_transactions, name="api_transactions_list"),
+    path("checkout/", checkout_product, name="checkout_product"),
     path("summary/revenue/", get_revenue_summary, name="api_transactions_revenue_summary"),
     path("summary/purchases/", get_product_purchase_counts, name="api_transactions_purchase_counts"),
     path("summary/revenue/", get_product_revenue_summary, name="api_product_revenue_summary"),

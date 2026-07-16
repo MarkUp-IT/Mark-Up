@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
@@ -19,6 +19,8 @@ import {
   CalendarClock,
 } from "lucide-react";
 import Navbar from "@/component/Navbar";
+import { api, ApiError } from "@/lib/api";
+import { useCheckoutFormStore } from "@/store/formstore";
 
 // Jarak & lebar krusial dipaksa lewat inline style (bukan class Tailwind) --
 // biar dijamin kepakai apa pun kondisi build/cache Tailwind di project ini.
@@ -45,198 +47,48 @@ const getInitials = (name) =>
     .join("")
     .toUpperCase();
 
-const PRODUCT = {
-  id: "MT-010",
-  type: "mentoring",
-  title: "Bundling PowerPack (Newbie Friendly)",
-  price: 300000,
-  image: "/images/bund.png",
-  sessionCount: 3, // matching product_mentoring.session_count
-};
 
-// --- MOCK DATA (nanti ganti query mentor_profiles + mentor_expertises,
-// filter yang punya keahlian relevan sama produk ini). Sengaja dibikin agak
-// banyak (10) biar search & scroll internal kepakai beneran, sesuai
-// skenario "mentor ada puluhan" yang diomongin. ---
-const MENTORS = [
-  {
-    id: "M1",
-    name: "Kak Budi Santoso",
-    headline: "Senior UI/UX Designer",
-    rating: 4.9,
-    reviewCount: 32,
-    avatarGradient: "from-[#4C1D95] to-[#0D9488]",
-    bio: "Praktisi desain produk dengan pengalaman 6+ tahun membangun produk digital di startup dan korporasi.",
-    linkedin: "https://linkedin.com/in/budisantoso",
-    expertise: ["Business Case Competition", "Career Mentoring"],
-    experience: [
-      { title: "Senior Product Designer, Gojek", period: "2022 — Sekarang" },
-      { title: "UI/UX Designer, Tokopedia", period: "2019 — 2022" },
-    ],
-    slots: [
-      { id: "S1", date: "Sab, 12 Jul", time: "18:00" },
-      { id: "S2", date: "Min, 13 Jul", time: "10:00" },
-      { id: "S3", date: "Sen, 14 Jul", time: "14:00" },
-    ],
-  },
-  {
-    id: "M2",
-    name: "Kak Siska Wijaya",
-    headline: "Product Design Lead",
-    rating: 4.8,
-    reviewCount: 21,
-    avatarGradient: "from-[#4C1D95] to-[#CA8A04]",
-    bio: "Membimbing 50+ tim dalam kompetisi bisnis nasional dan internasional, fokus di business case dan pitching.",
-    linkedin: "https://linkedin.com/in/siskawijaya",
-    expertise: ["Business Plan Competition", "Career Mentoring"],
-    experience: [
-      { title: "Design Lead, Traveloka", period: "2021 — Sekarang" },
-      {
-        title: "Business Consultant, PT Konsultan Maju",
-        period: "2018 — 2021",
-      },
-    ],
-    slots: [
-      { id: "S4", date: "Sel, 15 Jul", time: "09:00" },
-      { id: "S5", date: "Rab, 16 Jul", time: "16:00" },
-    ],
-  },
-  {
-    id: "M3",
-    name: "Kak Alya Hamidah",
-    headline: "Business Consultant",
-    rating: 5.0,
-    reviewCount: 47,
-    avatarGradient: "from-[#4C1D95] to-[#B45309]",
-    bio: "Konsultan bisnis dengan pengalaman membimbing tim juara di kompetisi BCC nasional dan internasional.",
-    linkedin: "https://linkedin.com/in/alyahamidah",
-    expertise: ["Business Case Competition"],
-    experience: [
-      {
-        title: "Business Consultant, PT Konsultan Maju Bersama",
-        period: "2023 — Sekarang",
-      },
-    ],
-    slots: [
-      { id: "S6", date: "Kam, 17 Jul", time: "13:00" },
-      { id: "S7", date: "Jum, 18 Jul", time: "19:00" },
-    ],
-  },
-  {
-    id: "M4",
-    name: "Kak Adena Laksita",
-    headline: "Debate Coach & Public Speaking Trainer",
-    rating: 4.7,
-    reviewCount: 18,
-    avatarGradient: "from-[#4C1D95] to-[#0D9488]",
-    bio: "Mantan juara debat nasional, sekarang aktif melatih tim debat dan public speaking untuk kompetisi.",
-    linkedin: "https://linkedin.com/in/adenalaksita",
-    expertise: ["Career Mentoring"],
-    experience: [
-      { title: "Debate Coach, Freelance", period: "2020 — Sekarang" },
-    ],
-    slots: [{ id: "S8", date: "Sab, 19 Jul", time: "10:00" }],
-  },
-  {
-    id: "M5",
-    name: "Kak Fahri Ramadhan",
-    headline: "Startup Founder & Business Plan Mentor",
-    rating: 4.9,
-    reviewCount: 29,
-    avatarGradient: "from-[#4C1D95] to-[#CA8A04]",
-    bio: "Founder startup dengan pengalaman menyusun business plan yang berhasil meraih pendanaan.",
-    linkedin: "https://linkedin.com/in/fahriramadhan",
-    expertise: ["Business Plan Competition"],
-    experience: [
-      { title: "Co-Founder, RintisTech", period: "2021 — Sekarang" },
-    ],
-    slots: [
-      { id: "S9", date: "Min, 20 Jul", time: "15:00" },
-      { id: "S10", date: "Sen, 21 Jul", time: "11:00" },
-    ],
-  },
-  {
-    id: "M6",
-    name: "Kak Nadia Putri",
-    headline: "HR Business Partner",
-    rating: 4.6,
-    reviewCount: 15,
-    avatarGradient: "from-[#4C1D95] to-[#B45309]",
-    bio: "Berpengalaman di rekrutmen dan pengembangan karier, sering jadi mentor persiapan interview kerja.",
-    linkedin: "https://linkedin.com/in/nadiaputri",
-    expertise: ["Career Mentoring"],
-    experience: [
-      { title: "HR Business Partner, Bank Mandiri", period: "2020 — Sekarang" },
-    ],
-    slots: [{ id: "S11", date: "Sel, 22 Jul", time: "16:00" }],
-  },
-  {
-    id: "M7",
-    name: "Kak Reza Firmansyah",
-    headline: "Management Consultant",
-    rating: 4.8,
-    reviewCount: 24,
-    avatarGradient: "from-[#4C1D95] to-[#0D9488]",
-    bio: "Konsultan manajemen di firma consulting Big 4, spesialis case study dan problem solving framework.",
-    linkedin: "https://linkedin.com/in/rezafirmansyah",
-    expertise: ["Business Case Competition"],
-    experience: [
-      {
-        title: "Associate Consultant, Deloitte Indonesia",
-        period: "2022 — Sekarang",
-      },
-    ],
-    slots: [{ id: "S12", date: "Rab, 23 Jul", time: "18:00" }],
-  },
-  {
-    id: "M8",
-    name: "Kak Clarissa Wijaya",
-    headline: "Venture Capital Analyst",
-    rating: 4.9,
-    reviewCount: 20,
-    avatarGradient: "from-[#4C1D95] to-[#CA8A04]",
-    bio: "Analis VC yang sering menilai business plan startup, paham banget apa yang bikin proposal menang.",
-    linkedin: "https://linkedin.com/in/clarissawijaya",
-    expertise: ["Business Plan Competition"],
-    experience: [
-      { title: "Investment Analyst, East Ventures", period: "2021 — Sekarang" },
-    ],
-    slots: [{ id: "S13", date: "Kam, 24 Jul", time: "10:00" }],
-  },
-  {
-    id: "M9",
-    name: "Kak Gilang Ramadhan",
-    headline: "Career Coach",
-    rating: 4.7,
-    reviewCount: 33,
-    avatarGradient: "from-[#4C1D95] to-[#B45309]",
-    bio: "Career coach bersertifikat, udah bantu 100+ mahasiswa dapat pekerjaan pertama mereka.",
-    linkedin: "https://linkedin.com/in/gilangramadhan",
-    expertise: ["Career Mentoring"],
-    experience: [
-      { title: "Career Coach, Independen", period: "2019 — Sekarang" },
-    ],
-    slots: [{ id: "S14", date: "Jum, 25 Jul", time: "14:00" }],
-  },
-  {
-    id: "M10",
-    name: "Kak Intan Permatasari",
-    headline: "Strategy Consultant",
-    rating: 5.0,
-    reviewCount: 41,
-    avatarGradient: "from-[#4C1D95] to-[#0D9488]",
-    bio: "Konsultan strategi bisnis, mentor tetap buat tim BCC juara di beberapa kompetisi nasional.",
-    linkedin: "https://linkedin.com/in/intanpermatasari",
-    expertise: ["Business Case Competition", "Business Plan Competition"],
-    experience: [
-      {
-        title: "Strategy Consultant, McKinsey & Company",
-        period: "2022 — Sekarang",
-      },
-    ],
-    slots: [{ id: "S15", date: "Sab, 26 Jul", time: "09:00" }],
-  },
+
+const AVATAR_GRADIENTS = [
+  "from-[#4C1D95] to-[#0D9488]",
+  "from-[#4C1D95] to-[#CA8A04]",
+  "from-[#4C1D95] to-[#B45309]",
 ];
+
+function pickAvatarGradient(id) {
+  // hash sederhana dari id supaya gradient-nya konsisten tiap render,
+  // bukan random tiap kali komponen re-render
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash + id.charCodeAt(i)) % AVATAR_GRADIENTS.length;
+  }
+  return AVATAR_GRADIENTS[hash];
+}
+
+function formatExperiencePeriod(exp) {
+  const startYear = new Date(exp.start_date).getFullYear();
+  const endYear = exp.end_date ? new Date(exp.end_date).getFullYear() : "Sekarang";
+  return `${startYear} — ${endYear}`;
+}
+
+function mapMentorFromApi(m) {
+  return {
+    id: m.id,
+    name: m.name,
+    headline: m.headline || "Mentor",
+    rating: m.rating,
+    reviewCount: m.review_count,
+    bio: m.bio,
+    linkedin: m.linkedin,
+    expertise: m.expertise,
+    avatarGradient: pickAvatarGradient(m.id),
+    experience: m.experience.map((exp) => ({
+      title: exp.title,
+      period: formatExperiencePeriod(exp),
+    })),
+    slots: m.slots, // sudah sesuai bentuk {id, date, time}
+  };
+}
 
 function StarRating({ rating }) {
   return (
@@ -280,19 +132,33 @@ function StepPill({ current }) {
   );
 }
 
+
+
 export default function CheckoutDetailPage() {
   const params = useParams();
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
 
-  const product = { ...PRODUCT, id: params.productId || PRODUCT.id };
-  const isMentoring = product.type === "mentoring";
+  const [product, setProduct] = useState(null);
+  const [isLoadingProduct, setIsLoadingProduct] = useState(true);
+  const [productError, setProductError] = useState("");
+  
+  const [mentors, setMentors] = useState([]);
+  const [isLoadingMentors, setIsLoadingMentors] = useState(false);
+  const [mentorsError, setMentorsError] = useState("");
 
-  const [buyerInfo, setBuyerInfo] = useState({
-    email: "prabrorosub@gmail.com",
-    fullName: "Prabroro Subriantoro",
-    phone: "",
-  });
+
+  const isMentoring = product?.type === "MENTORING";
+
+  const buyerInfo = useCheckoutFormStore((s) => s.buyerInfo);
+  const setBuyerInfo = useCheckoutFormStore((s) => s.setBuyerInfo);
+
+  const voucherCode = useCheckoutFormStore((s) => s.voucherCode);
+  const setVoucherCode = useCheckoutFormStore((s) => s.setVoucherCode);
+
+  const setCheckoutSummary = useCheckoutFormStore((s) => s.setCheckoutSummary);
+  const setMentorSelection = useCheckoutFormStore((s) => s.setMentorSelection);
+  const clearMentorSelection = useCheckoutFormStore((s) => s.clearMentorSelection);
 
   const [mentorSearch, setMentorSearch] = useState("");
   const [selectedMentorId, setSelectedMentorId] = useState("");
@@ -301,27 +167,28 @@ export default function CheckoutDetailPage() {
 
   const [showVoucherInput, setShowVoucherInput] = useState(false);
   const [voucherInput, setVoucherInput] = useState("");
-  const [appliedVoucher, setAppliedVoucher] = useState(null);
 
   const [formError, setFormError] = useState("");
 
-  const selectedMentor = MENTORS.find((m) => m.id === selectedMentorId) || null;
+  const selectedMentor = mentors.find((m) => m.id === selectedMentorId) || null;
   const selectedSlot =
     selectedMentor?.slots.find((s) => s.id === selectedSlotId) || null;
 
   const filteredMentors = useMemo(() => {
     const query = mentorSearch.trim().toLowerCase();
-    if (!query) return MENTORS;
-    return MENTORS.filter(
+    if (!query) return mentors;
+    return mentors.filter(
       (m) =>
         m.name.toLowerCase().includes(query) ||
         m.headline.toLowerCase().includes(query) ||
         m.expertise.some((e) => e.toLowerCase().includes(query)),
     );
-  }, [mentorSearch]);
+  }, [mentorSearch, mentors]);
 
-  const discount = appliedVoucher ? Math.round(product.price * 0.1) : 0;
-  const total = product.price - discount;
+  const price = product?.new_price ?? 0;
+
+  const discount = voucherCode ? Math.round(price * 0.1) : 0;
+  const total = price - discount;
 
   const fadeIn = {
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 12 },
@@ -337,7 +204,7 @@ export default function CheckoutDetailPage() {
 
   const applyVoucher = () => {
     if (!voucherInput.trim()) return;
-    setAppliedVoucher(voucherInput.trim().toUpperCase());
+    setVoucherCode(voucherInput.trim().toUpperCase());
     setVoucherInput("");
     setShowVoucherInput(false);
   };
@@ -360,15 +227,86 @@ export default function CheckoutDetailPage() {
       return;
     }
     setFormError("");
-    const query = new URLSearchParams({
-      total: String(total),
-      ...(appliedVoucher ? { voucher: appliedVoucher } : {}),
-      ...(selectedMentorId ? { mentor: selectedMentorId } : {}),
-      ...(selectedSlotId ? { schedule: selectedSlotId } : {}),
+
+    setCheckoutSummary({
+      productId: product.id,
+      productTitle: product.title,
+      total,
     });
-    router.push(`/checkout/${product.id}/payment?${query.toString()}`);
+
+    if (isMentoring) {
+      setMentorSelection(selectedMentor, selectedSlot);
+    } else {
+      clearMentorSelection();
+    }
+
+    router.push(`/checkout/${product.id}/payment`);
   };
 
+  useEffect(() => {
+    if (!params.productId) return;
+
+    async function fetchProduct() {
+      setIsLoadingProduct(true);
+      setProductError("");
+      try {
+        const data = await api.get(`/api/products/${params.productId}/`, { auth: false });
+        setProduct(data);
+      } catch (err) {
+        if (err instanceof ApiError) {
+          setProductError(err.message);
+        } else {
+          setProductError("Gagal memuat produk.");
+        }
+      } finally {
+        setIsLoadingProduct(false);
+      }
+    }
+
+    fetchProduct();
+  }, [params.productId]);
+
+  useEffect(() => {
+    if (!isMentoring) return;
+
+    async function fetchMentors() {
+      setIsLoadingMentors(true);
+      setMentorsError("");
+      try {
+        const data = await api.get("/api/mentors/", { auth: false });
+        setMentors(data.mentors.map(mapMentorFromApi));
+      } catch (err) {
+        setMentorsError(
+          err instanceof ApiError ? err.message : "Gagal memuat daftar mentor."
+        );
+      } finally {
+        setIsLoadingMentors(false);
+      }
+    }
+
+    fetchMentors();
+  }, [isMentoring]);
+
+
+  if (isLoadingProduct) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white">
+        Loading...
+      </div>
+    );
+  }
+
+  if (productError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-red-400">
+        {productError}
+      </div>
+    );
+  }
+
+  if (!product) {
+    return null;
+  }
   return (
     <div style={{ backgroundColor: "#060010", minHeight: "100vh" }}>
       <style>{`
@@ -395,7 +333,7 @@ export default function CheckoutDetailPage() {
           {/* Top bar */}
           <div className="flex items-center justify-between">
             <Link
-              href="/produk"
+              href="/products"
               className={`inline-flex items-center gap-1.5 text-[#A19DAB] hover:text-white text-[13px] transition-colors rounded-[6px] ${focusRing}`}
             >
               <ArrowLeft size={15} />
@@ -432,7 +370,7 @@ export default function CheckoutDetailPage() {
                   {product.title}
                 </span>
                 <span className="text-[#148F89] font-bold text-[15px] whitespace-nowrap">
-                  {formatIDR(product.price)}
+                  {formatIDR(product.new_price)}
                 </span>
               </div>
               {product.sessionCount > 1 && (
@@ -453,6 +391,25 @@ export default function CheckoutDetailPage() {
                 <h2 className="font-bold text-[15px] text-white">
                   Pilih Mentor
                 </h2>
+
+                {isLoadingMentors && (
+                  <p className="text-[#6B7280] text-[12px] text-center py-4">
+                    Memuat daftar mentor...
+                  </p>
+                )}
+
+                {mentorsError && (
+                  <p className="flex items-start gap-2 text-red-400 text-[11px] bg-red-500/10 border border-red-500/30 rounded-[8px] px-3 py-2.5">
+                    <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                    {mentorsError}
+                  </p>
+                )}
+
+                {!isLoadingMentors && !mentorsError && (
+                  <>
+                    {/* Search input, mentor terpilih, dan list mentor tetap di sini seperti sebelumnya */}
+                  </>
+                )}
 
                 {/* Search */}
                 <div className="relative">
@@ -726,12 +683,12 @@ export default function CheckoutDetailPage() {
               <div className="flex justify-between text-[#E2E8F0]">
                 <span>Harga Produk</span>
                 <span className="font-semibold">
-                  {formatIDR(product.price)}
+                  {formatIDR(product.new_price)}
                 </span>
               </div>
-              {appliedVoucher && (
+              {voucherCode && (
                 <div className="flex justify-between text-[#9CA3AF]">
-                  <span>Diskon ({appliedVoucher})</span>
+                  <span>Diskon ({voucherCode})</span>
                   <span className="font-semibold text-red-400">
                     -{formatIDR(discount)}
                   </span>
@@ -761,9 +718,7 @@ export default function CheckoutDetailPage() {
                 className={`flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[12px] font-medium transition-colors w-fit ${focusRing}`}
               >
                 <Ticket size={14} />
-                {appliedVoucher
-                  ? `Voucher: ${appliedVoucher}`
-                  : "Punya kode voucher?"}
+                {voucherCode ? `Voucher: ${voucherCode}` : "Punya kode voucher?"}
               </button>
             )}
 

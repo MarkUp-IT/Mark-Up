@@ -124,6 +124,46 @@ def _serialize_user_product_card(user_library, reviewed_product_ids):
     return None
 
 
+def _serialize_product_item(p):
+    item = {
+        "id": str(p.id),
+        "type": p.type,
+        "created_at": p.created_at.isoformat() if getattr(p, "created_at", None) else None,
+    }
+    detail = None
+    if p.type == ProductType.MENTORING:
+        detail = getattr(p, "mentoring_detail", None)
+    elif p.type == ProductType.MODULE:
+        detail = getattr(p, "module_detail", None)
+    elif p.type == ProductType.BOOTCAMP:
+        detail = getattr(p, "bootcamp_detail", None)
+
+    if detail:
+        item.update({
+            "title": detail.title,
+            "description": detail.description,
+            "full_description": detail.explanation,
+            "image_url": detail.image_url,
+            "original_price": str(detail.original_price) if detail.original_price is not None else None,
+            "new_price": str(detail.new_price) if detail.new_price is not None else None,
+            "discount_percent": detail.discount_percent,
+            "sold_count": detail.sold_count,
+            "registration_link": detail.registration_link,
+            "is_active": detail.is_active,
+        })
+        if hasattr(detail, "file_pdf_url"):
+            item["file_pdf_url"] = detail.file_pdf_url
+            item["stock"] = detail.stock
+        if p.type == ProductType.MENTORING:
+            item["session_count"] = detail.session_count
+            item["duration_minutes"] = detail.duration_minutes
+            item["highlights"] = list(
+                detail.highlights.order_by("order").values_list("text", flat=True)
+            )
+
+    return item
+
+
 def _compute_active_counts(user_libraries):
     mentoring_active = 0
     bootcamp_active = 0
@@ -584,49 +624,31 @@ def get_products(request):
             "has_previous": page_obj.has_previous(),
         }
 
-    data = []
-    for p in object_list:
-        item = {
-            "id": str(p.id),
-            "type": p.type,
-            "created_at": p.created_at.isoformat() if getattr(p, "created_at", None) else None,
-        }
-        detail = None
-        if p.type == ProductType.MENTORING:
-            detail = getattr(p, "mentoring_detail", None)
-        elif p.type == ProductType.MODULE:
-            detail = getattr(p, "module_detail", None)
-        elif p.type == ProductType.BOOTCAMP:
-            detail = getattr(p, "bootcamp_detail", None)
-
-        if detail:
-            item.update({
-                "title": detail.title,
-                "description": detail.description,
-                "full_description": detail.explanation,
-                "image_url": detail.image_url,
-                "original_price": str(detail.original_price) if detail.original_price is not None else None,
-                "new_price": str(detail.new_price) if detail.new_price is not None else None,
-                "discount_percent": detail.discount_percent,
-                "sold_count": detail.sold_count,
-                "registration_link": detail.registration_link,
-                "is_active": detail.is_active,
-            })
-            if hasattr(detail, "file_pdf_url"):
-                item["file_pdf_url"] = detail.file_pdf_url
-                item["stock"] = detail.stock
-            if p.type == ProductType.MENTORING:
-                item["session_count"] = detail.session_count
-                item["duration_minutes"] = detail.duration_minutes
-                item["highlights"] = list(
-                    detail.highlights.order_by("order").values_list("text", flat=True)
-                )
-        data.append(item)
+    data = [_serialize_product_item(p) for p in object_list]
 
     response = {"products": data}
     if pagination:
         response["pagination"] = pagination
     return JsonResponse(response, status=200)
+
+def get_product(request, product_id):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    try:
+        product = Product.objects.select_related(
+            "mentoring_detail", "module_detail", "bootcamp_detail"
+        ).prefetch_related(
+            "mentoring_detail__highlights"
+        ).get(id=product_id)
+    except Product.DoesNotExist:
+        return JsonResponse({"detail": "Produk tidak ditemukan."}, status=404)
+
+    detail = _get_product_detail(product)
+    if detail is None or not detail.is_active:
+        return JsonResponse({"detail": "Produk tidak ditemukan."}, status=404)
+
+    return JsonResponse(_serialize_product_item(product), status=200)
 
 @jwt_required
 @role_required(UserRole.ADMIN)

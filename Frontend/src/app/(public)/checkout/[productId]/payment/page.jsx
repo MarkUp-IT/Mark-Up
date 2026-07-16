@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -16,6 +16,9 @@ import {
   Timer,
 } from "lucide-react";
 import Navbar from "@/component/Navbar";
+import { getAccessToken, API_BASE } from "@/lib/api";
+import { useCheckoutFormStore } from "@/store/formstore";
+import Toast from "@/component/Toast";
 
 const NAVBAR_CLEARANCE = 150;
 const CONTENT_WIDTH = 640;
@@ -48,27 +51,6 @@ const getInitials = (name) =>
     .join("")
     .toUpperCase();
 
-const MENTORS = {
-  M1: {
-    name: "Kak Budi Santoso",
-    avatarGradient: "from-[#4C1D95] to-[#0D9488]",
-  },
-  M2: {
-    name: "Kak Siska Wijaya",
-    avatarGradient: "from-[#4C1D95] to-[#CA8A04]",
-  },
-};
-
-const SCHEDULES = {
-  S1: { date: "Sabtu, 12 Juli 2026", time: "18:00 WIB" },
-  S2: { date: "Minggu, 13 Juli 2026", time: "10:00 WIB" },
-  S3: { date: "Senin, 14 Juli 2026", time: "14:00 WIB" },
-  S4: { date: "Selasa, 15 Juli 2026", time: "09:00 WIB" },
-  S5: { date: "Rabu, 16 Juli 2026", time: "16:00 WIB" },
-};
-
-const PRODUCT_TITLE = "Bundling PowerPack (Newbie Friendly)";
-
 const mockBank = {
   name: "Bank Central Asia (BCA)",
   account: "1234567890",
@@ -78,19 +60,11 @@ const mockBank = {
 function StepPill({ current }) {
   return (
     <div className="flex items-center gap-2 text-[12px]">
-      <span
-        className={
-          current === 1 ? "text-white font-semibold" : "text-[#6B7280]"
-        }
-      >
+      <span className={current === 1 ? "text-white font-semibold" : "text-[#6B7280]"}>
         1. Detail
       </span>
       <span className="text-[#3A3545]">→</span>
-      <span
-        className={
-          current === 2 ? "text-white font-semibold" : "text-[#6B7280]"
-        }
-      >
+      <span className={current === 2 ? "text-white font-semibold" : "text-[#6B7280]"}>
         2. Bayar
       </span>
     </div>
@@ -100,22 +74,40 @@ function StepPill({ current }) {
 export default function CheckoutPaymentPage() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const shouldReduceMotion = useReducedMotion();
 
-  const total = Number(searchParams.get("total")) || 300000;
-  const voucher = searchParams.get("voucher");
-  const mentorId = searchParams.get("mentor");
-  const scheduleId = searchParams.get("schedule");
-  const isMentoring = Boolean(mentorId && scheduleId);
-  const mentor = mentorId ? MENTORS[mentorId] : null;
-  const schedule = scheduleId ? SCHEDULES[scheduleId] : null;
+  const checkoutSummary = useCheckoutFormStore((s) => s.checkoutSummary);
+  const buyerInfo = useCheckoutFormStore((s) => s.buyerInfo);
+  const voucherCode = useCheckoutFormStore((s) => s.voucherCode);
+  const selectedMentor = useCheckoutFormStore((s) => s.selectedMentor);
+  const selectedSlot = useCheckoutFormStore((s) => s.selectedSlot);
+  const proofFile = useCheckoutFormStore((s) => s.proofFile);
+  const setProofFile = useCheckoutFormStore((s) => s.setProofFile);
+  const reset = useCheckoutFormStore((s) => s.reset);
 
-  const [proofFile, setProofFile] = useState(null);
+  const isMentoring = Boolean(selectedMentor && selectedSlot);
+  const total = checkoutSummary.total;
+
   const [isCopied, setIsCopied] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(RESERVATION_SECONDS);
   const [isExpired, setIsExpired] = useState(false);
+
+  const [toast, setToast] = useState({
+    open: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
+
+  const [isLeavingAfterSuccess, setIsLeavingAfterSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!checkoutSummary.productId && !isLeavingAfterSuccess) {
+      router.replace(`/checkout/${params.productId}`);
+    }
+  }, [checkoutSummary.productId, isLeavingAfterSuccess, params.productId, router]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -137,20 +129,77 @@ export default function CheckoutPaymentPage() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const handleConfirmPayment = () => {
-    if (!proofFile || isExpired) return;
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      router.push("/user/transactions");
-    }, 1200);
-  };
+  const handleConfirmPayment = async () => {
+      if (!proofFile || isExpired) return;
 
+      setIsSubmitting(true);
+      setSubmitError("");
+
+      try {
+        const formData = new FormData();
+        formData.append("product_id", checkoutSummary.productId);
+        formData.append("buyer_phone", buyerInfo.phone);
+
+        if (voucherCode) {
+          formData.append("voucher_code", voucherCode);
+        }
+
+        if (selectedSlot?.id) {
+          formData.append("availability_slot_id", selectedSlot.id);
+        }
+
+        formData.append("proof_of_payment", proofFile);
+
+        const token = getAccessToken();
+        const res = await fetch(`${API_BASE}/api/transactions/checkout/`, {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          // JANGAN set Content-Type manual di sini -- browser yang harus
+          // generate boundary multipart-nya sendiri.
+          body: formData,
+        });
+
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok) {
+          throw new Error(data?.detail || "Gagal mengonfirmasi pembayaran.");
+        }
+
+        setToast({
+          open: true,
+          type: "success",
+          title: "Pembayaran Berhasil",
+          message: "Pembayaran berhasil dikonfirmasi. Mengalihkan ke halaman transaksi...",
+        });
+
+        setIsLeavingAfterSuccess(true);
+
+        setTimeout(() => {
+          reset();
+          router.push("/user/transactions");
+        }, 1500);
+      } catch (err) {
+        setSubmitError(err.message || "Gagal mengonfirmasi pembayaran.");
+
+        setToast({
+          open: true,
+          type: "error",
+          title: "Checkout Gagal",
+          message: err.message || "Gagal mengonfirmasi pembayaran.",
+        });
+      }finally {
+        setIsSubmitting(false);
+      }
+    };
   const fadeIn = {
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 12 },
     animate: { opacity: 1, y: 0 },
     transition: { duration: shouldReduceMotion ? 0.15 : 0.3 },
   };
+
+  if (!checkoutSummary.productId) {
+    return null; // lagi redirect, lihat useEffect guard di atas
+  }
 
   return (
     <div style={{ backgroundColor: "#060010", minHeight: "100vh" }}>
@@ -230,36 +279,36 @@ export default function CheckoutPaymentPage() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-white font-semibold text-[14px]">
-                      {PRODUCT_TITLE}
+                      {checkoutSummary.productTitle}
                     </span>
                     <span className="text-[#148F89] font-bold text-[16px] whitespace-nowrap">
                       {formatIDR(total)}
                     </span>
                   </div>
-                  {isMentoring && mentor && (
+                  {isMentoring && selectedMentor && (
                     <div className="flex items-center gap-2.5 border-t border-[#2D2342] pt-3">
                       <div
-                        className={`w-8 h-8 rounded-full bg-gradient-to-br ${mentor.avatarGradient} flex items-center justify-center text-white text-[11px] font-bold shrink-0`}
+                        className={`w-8 h-8 rounded-full bg-gradient-to-br ${selectedMentor.avatarGradient} flex items-center justify-center text-white text-[11px] font-bold shrink-0`}
                       >
-                        {getInitials(mentor.name)}
+                        {getInitials(selectedMentor.name)}
                       </div>
                       <div className="flex flex-col min-w-0">
                         <span className="text-white text-[12px] font-medium truncate">
-                          {mentor.name}
+                          {selectedMentor.name}
                         </span>
-                        {schedule && (
+                        {selectedSlot && (
                           <span className="text-[#9CA3AF] text-[11px] truncate">
-                            {schedule.date}, {schedule.time}
+                            {selectedSlot.date}, {selectedSlot.time}
                           </span>
                         )}
                       </div>
                     </div>
                   )}
-                  {voucher && (
+                  {voucherCode && (
                     <div className="flex justify-between text-[#9CA3AF] text-[12px] border-t border-[#2D2342] pt-3">
                       <span>Voucher</span>
                       <span className="font-semibold text-[#148F89]">
-                        {voucher}
+                        {voucherCode}
                       </span>
                     </div>
                   )}
@@ -275,9 +324,7 @@ export default function CheckoutPaymentPage() {
                 >
                   <Timer size={15} className="shrink-0" />
                   <p className="text-[12px] font-medium">
-                    {isMentoring
-                      ? "Jadwal direservasi selama"
-                      : "Selesaikan dalam"}{" "}
+                    {isMentoring ? "Jadwal direservasi selama" : "Selesaikan dalam"}{" "}
                     <span className="font-mono font-bold text-[14px]">
                       {formatCountdown(secondsLeft)}
                     </span>
@@ -328,10 +375,7 @@ export default function CheckoutPaymentPage() {
                   </div>
 
                   <div className="flex items-start gap-2 bg-[#F59E0B]/10 border border-[#F59E0B]/30 p-3 rounded-[8px]">
-                    <AlertCircle
-                      size={15}
-                      className="text-[#F59E0B] shrink-0 mt-0.5"
-                    />
+                    <AlertCircle size={15} className="text-[#F59E0B] shrink-0 mt-0.5" />
                     <p className="text-[#FBBF24] text-[11px] leading-relaxed">
                       Transfer sesuai nominal persis sampai{" "}
                       <span className="font-bold">3 digit terakhir</span>.
@@ -355,10 +399,7 @@ export default function CheckoutPaymentPage() {
                   {proofFile ? (
                     <div className="flex items-center justify-between gap-3 bg-[#0F081C] border border-[#148F89]/50 rounded-[8px] px-4 py-3.5">
                       <div className="flex items-center gap-3 min-w-0">
-                        <ImageIcon
-                          size={18}
-                          className="text-[#148F89] shrink-0"
-                        />
+                        <ImageIcon size={18} className="text-[#148F89] shrink-0" />
                         <div className="flex flex-col min-w-0">
                           <span className="text-white text-[12px] font-medium truncate">
                             {proofFile.name}
@@ -376,19 +417,32 @@ export default function CheckoutPaymentPage() {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() =>
-                        setProofFile({ name: "Bukti_Transfer_MarkUp.jpg" })
-                      }
-                      className={`flex flex-col items-center justify-center gap-2.5 border-2 border-dashed border-[#2D2342] rounded-[10px] py-8 text-[#9CA3AF] hover:border-[#148F89]/50 hover:bg-[#148F89]/5 transition-all ${focusRing}`}
+                    <label
+                      className={`flex flex-col items-center justify-center gap-2.5 border-2 border-dashed border-[#2D2342] rounded-[10px] py-8 text-[#9CA3AF] hover:border-[#148F89]/50 hover:bg-[#148F89]/5 transition-all cursor-pointer ${focusRing}`}
                     >
+                      <input
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) setProofFile(file); // simpan File object aslinya di store
+                        }}
+                      />
                       <div className="w-9 h-9 rounded-full bg-[#1A1128] flex items-center justify-center">
                         <Upload size={16} className="text-[#148F89]" />
                       </div>
                       <span className="text-[12px] font-semibold text-[#E2E8F0]">
                         Klik untuk memilih file
                       </span>
-                    </button>
+                    </label>
+                  )}
+
+                  {submitError && (
+                    <p className="flex items-start gap-2 text-red-400 text-[11px] bg-red-500/10 border border-red-500/30 rounded-[8px] px-3 py-2.5">
+                      <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                      {submitError}
+                    </p>
                   )}
 
                   <button
@@ -414,6 +468,18 @@ export default function CheckoutPaymentPage() {
           </div>
         </main>
       </div>
+      <Toast
+        open={toast.open}
+        type={toast.type}
+        title={toast.title}
+        message={toast.message}
+        onClose={() =>
+          setToast((prev) => ({
+            ...prev,
+            open: false,
+          }))
+        }
+      />
     </div>
   );
 }

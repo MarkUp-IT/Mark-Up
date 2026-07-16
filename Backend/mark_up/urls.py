@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -24,4 +26,9 @@ urlpatterns = [
     path('api/mentors/', include('mentors.urls')),
     path('api/programs/', include('programs.urls')),
     path('api/transactions/', include('transactions.urls')),
-]
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+
+# KHUSUS DEVELOPMENT
+# Kalau nanti production,
+#  ini biasanya di-serve lewat nginx/cloud storage, bukan Django langsung — tapi itu urusan deployment, nggak perlu dipikir sekarang.
