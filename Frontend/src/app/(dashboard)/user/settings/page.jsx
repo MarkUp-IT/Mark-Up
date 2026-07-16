@@ -13,7 +13,8 @@ import {
   X,
 } from "lucide-react";
 import DashboardLayout from "@/component/user/DashboardLayout";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
+import Toast from "@/component/Toast";
 
 function Field({ label, value, onChange, disabled, note, type = "text" }) {
   return (
@@ -54,9 +55,17 @@ export default function Settings() {
   const [currentStatus, setCurrentStatus] = useState("");
   const [linkedIn, setLinkedIn] = useState("");
 
+  const [profileImage, setProfileImage] = useState(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState(null);
+
   const [loadingProfile, setLoadingProfile] = useState(true);
-  const [infoSaved, setInfoSaved] = useState(false);
-  const [saveError, setSaveError] = useState(null);
+  const [toast, setToast] = useState({
+    open: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
   const [isSaving, setIsSaving] = useState(false);
 
 
@@ -86,18 +95,16 @@ export default function Settings() {
 
   const handleSaveInfo = async (e) => {
     e.preventDefault();
-    setIsSaving(true);
-    setSaveError(null);
     try {
       const res = await apiRequest("/api/accounts/me/profile/", {
         method: "PATCH",
-        body: JSON.stringify({
+        body: {
           fullname: fullName,
           phone,
           institution,
           current_status: currentStatus,
           linkedin_url: linkedIn,
-        }),
+        },
       });
       const u = res.user;
       setInitialInfo({
@@ -107,14 +114,66 @@ export default function Settings() {
         currentStatus: u.current_status,
         linkedIn: u.linkedin_url,
       });
-      setInfoSaved(true);
-      setTimeout(() => setInfoSaved(false), 3000);
+      setToast({
+        open: true,
+        type: "success",
+        title: "Berhasil",
+        message: "Perubahan berhasil disimpan.",
+      });
     } catch (err) {
-      setSaveError(err?.message || "Gagal menyimpan perubahan.");
+      setToast({
+        open: true,
+        type: "error",
+        title: "Gagal",
+        message: err?.message || "Gagal menyimpan perubahan.",
+      });
     } finally {
       setIsSaving(false);
     }
   };
+
+  const handleUploadPhoto = async (file) => {
+  if (!file) return;
+  setIsUploadingPhoto(true);
+  setPhotoError(null);
+  try {
+    const formData = new FormData();
+    formData.append("photo", file);
+
+    const token = getAccessToken();
+    const res = await fetch(`${API_BASE}/api/accounts/me/profile/photo/`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.detail || "Gagal mengunggah foto.");
+    }
+
+    setProfileImage(data.profile_image);
+  } catch (err) {
+    setPhotoError(err.message || "Gagal mengunggah foto.");
+  } finally {
+    setIsUploadingPhoto(false);
+  }
+};
+
+const handleDeletePhoto = async () => {
+  setIsUploadingPhoto(true);
+  setPhotoError(null);
+  try {
+    await apiRequest("/api/accounts/me/profile/photo/delete/", {
+      method: "POST",
+    });
+    setProfileImage(null);
+  } catch (err) {
+    setPhotoError(err.message || "Gagal menghapus foto.");
+  } finally {
+    setIsUploadingPhoto(false);
+  }
+};
 
 
   useEffect(() => {
@@ -124,6 +183,7 @@ export default function Settings() {
         const res = await apiRequest("/api/accounts/me/profile/");
         const u = res.user;
         setEmail(u.email);
+        setProfileImage(u.profile_image || null); // BARU
         const info = {
           fullName: u.fullname,
           phone: u.phone,
@@ -163,31 +223,67 @@ export default function Settings() {
         className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col sm:flex-row sm:items-center gap-5"
       >
         <div className="relative shrink-0">
-          <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#2D2342]">
-            <img
-              src="/images/pp.png"
-              alt="Foto profil"
-              className="w-full h-full object-cover"
-            />
+          <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#2D2342] bg-[#0F081C] flex items-center justify-center">
+            {profileImage ? (
+              <img
+                src={profileImage}
+                alt="Foto profil"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-[#6B7280] text-[11px]">Tidak ada foto</span>
+            )}
           </div>
-          <button
+          <label
             aria-label="Ganti foto"
-            className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#148F89] flex items-center justify-center border-2 border-[#170F26] hover:bg-[#117A75] transition-colors"
+            className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#148F89] flex items-center justify-center border-2 border-[#170F26] hover:bg-[#117A75] transition-colors cursor-pointer"
           >
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleUploadPhoto(file);
+              }}
+            />
             <Camera size={13} className="text-white" />
-          </button>
+          </label>
         </div>
         <div className="flex-1">
           <h3 className="text-white font-semibold text-[15px]">Foto Profil</h3>
           <p className="text-[#9CA3AF] text-[12px] mt-1">
             JPG atau PNG, maksimal 2MB.
           </p>
+          {photoError && (
+            <p className="text-red-400 text-[11px] mt-1">{photoError}</p>
+          )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <button className="px-4 py-2 rounded-[8px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors">
-            Unggah Foto
-          </button>
-          <button className="px-4 py-2 rounded-[8px] border border-[#2D2342] text-[#9CA3AF] text-[12px] font-semibold hover:text-white hover:border-red-500/40 transition-colors">
+          <label
+            className={`px-4 py-2 rounded-[8px] text-white text-[12px] font-semibold transition-colors cursor-pointer ${
+              isUploadingPhoto
+                ? "bg-[#148F89]/60 cursor-wait"
+                : "bg-[#148F89] hover:bg-[#117A75]"
+            }`}
+          >
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png"
+              className="hidden"
+              disabled={isUploadingPhoto}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleUploadPhoto(file);
+              }}
+            />
+            {isUploadingPhoto ? "Mengunggah..." : "Unggah Foto"}
+          </label>
+          <button
+            onClick={handleDeletePhoto}
+            disabled={isUploadingPhoto || !profileImage}
+            className="px-4 py-2 rounded-[8px] border border-[#2D2342] text-[#9CA3AF] text-[12px] font-semibold hover:text-white hover:border-red-500/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
             Hapus
           </button>
         </div>
@@ -250,18 +346,18 @@ export default function Settings() {
           >
             Simpan Perubahan
           </button>
-          <AnimatePresence>
-            {infoSaved && (
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-[#148F89] text-[12px] font-medium"
-              >
-                Perubahan tersimpan.
-              </motion.span>
-            )}
-          </AnimatePresence>
+          <Toast
+            open={toast.open}
+            type={toast.type}
+            title={toast.title}
+            message={toast.message}
+            onClose={() =>
+              setToast((prev) => ({
+                ...prev,
+                open: false,
+              }))
+            }
+          />
         </div>
       </motion.form>
 

@@ -10,6 +10,12 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 import json
 
+
+def _get_profile_image_url(user, request):
+    if not user.profile_image:
+        return None
+    return request.build_absolute_uri(user.profile_image.url)
+
 @csrf_exempt
 def register_view(request):
 	if request.method != "POST":
@@ -100,13 +106,14 @@ def get_users(request):
 	users = User.objects.all().order_by("-created_at")
 	data = []
 	for u in users:
+		image_url = _get_profile_image_url(u, request)
 		item = {
 			"id": str(u.id),
 			"fullname": u.fullname,
 			"email": u.email,
 			"phone": u.phone,
 			"role": u.role,
-			"profile_image": u.profile_image_url,
+			"profile_image": image_url,
 			"status": u.status,
 			"image": u.profile_image_url,
 			"created_at": u.created_at.isoformat() if getattr(u, "created_at", None) else None,
@@ -155,9 +162,9 @@ def get_current_user(request):
     )
 
     avatar_src = (
-        getattr(user, "profile_image_url", None)
-        or f"https://api.dicebear.com/7.x/notionists/svg?seed={profile_name}"
-    )
+		_get_profile_image_url(user, request)
+		or f"https://api.dicebear.com/7.x/notionists/svg?seed={profile_name}"
+	)
 
     data = {
         "id": str(user.id),
@@ -182,7 +189,7 @@ def logout_user(request):
 
     return JsonResponse({"detail": "Logout berhasil"}, status=200)
 
-
+@csrf_exempt
 @jwt_required
 def profile_view(request):
     
@@ -196,6 +203,7 @@ def profile_view(request):
             "institution": user.institution or "",
             "current_status": user.current_status or "",
             "linkedin_url": user.linkedin_url or "",
+			"profile_image": _get_profile_image_url(user, request),
         }
         return JsonResponse({"user": data}, status=200)
 
@@ -228,3 +236,57 @@ def profile_view(request):
         )
 
     return HttpResponseNotAllowed(["GET", "PATCH", "POST"])
+
+ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png"}
+MAX_PROFILE_IMAGE_SIZE = 2 * 1024 * 1024  # 2MB, sesuai teks di frontend
+
+
+@csrf_exempt
+@jwt_required
+def upload_profile_photo(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    photo = request.FILES.get("photo")
+    if not photo:
+        return JsonResponse({"detail": "File foto diperlukan."}, status=400)
+
+    ext = photo.name.rsplit(".", 1)[-1].lower()
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        return JsonResponse({"detail": "Format file harus JPG atau PNG."}, status=400)
+
+    if photo.size > MAX_PROFILE_IMAGE_SIZE:
+        return JsonResponse({"detail": "Ukuran file maksimal 2MB."}, status=400)
+
+    user = request.user
+
+    # Hapus file lama dari storage kalau ada, biar nggak numpuk file yatim
+    if user.profile_image:
+        user.profile_image.delete(save=False)
+
+    user.profile_image = photo
+    user.save()
+
+    return JsonResponse(
+        {
+            "detail": "Foto profil berhasil diunggah.",
+            "profile_image": _get_profile_image_url(user, request),
+        },
+        status=200,
+    )
+
+
+@csrf_exempt
+@jwt_required
+def delete_profile_photo(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    user = request.user
+
+    if user.profile_image:
+        user.profile_image.delete(save=False)
+        user.profile_image = None
+        user.save()
+
+    return JsonResponse({"detail": "Foto profil berhasil dihapus."}, status=200)

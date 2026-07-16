@@ -48,9 +48,10 @@ class User(AbstractUser):
         default=UserStatus.ACTIVE
     )
 
-    profile_image_url = models.TextField(
+    profile_image = models.ImageField(
+        upload_to="profile_photos/%Y/%m/",
         blank=True,
-        null=True
+        null=True,
     )
 
     created_at = models.DateTimeField(
