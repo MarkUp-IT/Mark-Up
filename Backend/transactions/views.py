@@ -1,18 +1,34 @@
 from django.db.models import Case, DecimalField, ExpressionWrapper, F, Sum, When
 from django.http import JsonResponse, HttpResponseNotAllowed, HttpResponseBadRequest
-from .models import PaymentStatus, Transaction, TransactionItem
-from products.models import Product, ProductType
+from .models import (
+    PaymentStatus,
+    Transaction,
+    TransactionItem,
+    ReferralCode,
+    ReferralCodeUsage,
+    DiscountType,
+    MentorPayout,
+    PayoutStatus,
+)
+from products.models import (
+    Product,
+    ProductType,
+    UserLibrary,
+    MentoringSession,
+    BootcampSession,
+)
+from programs.models import BootcampSession as BootcampSessionTemplate
 from django.utils.dateparse import parse_date
 from accounts.decorators import jwt_required, role_required
-from accounts.models import UserRole
+from accounts.models import UserRole, AuditAction
+from accounts.utils import log_audit
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Sum, Case, When, F, DecimalField
 from django.db.models.functions import TruncDate
 from django.db import transaction as db_transaction
-from mentors.models import MentorAvailability
-from .models import Transaction, TransactionItem, UserLibrary, PaymentStatus
-from .utils import get_request_data  
+from mentors.models import MentorAvailability, MentorProfile
+from .utils import get_request_data
 from django.views.decorators.csrf import csrf_exempt
 
 def _resolve_period_range(period: str):
@@ -75,7 +91,8 @@ def _serialize_product_detail(product):
         "title": detail.title,
         "description": detail.description,
         "image_url": detail.image_url,
-        "price": str(detail.price),
+        "original_price": str(detail.original_price) if detail.original_price is not None else None,
+        "price": str(detail.new_price) if detail.new_price is not None else None,
         "is_active": detail.is_active,
     }
 
@@ -106,21 +123,105 @@ def get_transactions(request):
     data = []
 
     for item in items:
+        product_detail = _serialize_product_detail(item.product)
         data.append({
             "transaction_id": item.transaction.id,
             "user_id": str(item.transaction.user.id),
             "user_name": item.transaction.user.fullname,
             "product_id": str(item.product.id),
+            "product_title": product_detail.get("title") if product_detail else None,
             "date_time": item.transaction.created_at.isoformat(),
             "amount": str(item.transaction.grand_total),
             "method": item.transaction.payment_method,
             "status": item.transaction.payment_status,
+            "proof_of_payment": item.transaction.proof_of_payment.url if item.transaction.proof_of_payment else None,
         })
 
     return JsonResponse(
         {"transactions": data},
         status=200
     )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def verify_transaction(request, transaction_id):
+    if request.method != "PATCH":
+        return HttpResponseNotAllowed(["PATCH"])
+
+    try:
+        txn = Transaction.objects.get(id=transaction_id)
+    except Transaction.DoesNotExist:
+        return JsonResponse({"detail": "Transaksi tidak ditemukan."}, status=404)
+
+    if txn.payment_status != PaymentStatus.PENDING:
+        return JsonResponse(
+            {"detail": "Transaksi ini sudah diverifikasi sebelumnya."}, status=400
+        )
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    decision = request_data.get("decision")
+    if decision not in ("paid", "failed"):
+        return JsonResponse(
+            {"detail": "decision harus 'paid' atau 'failed'."}, status=400
+        )
+
+    if decision == "paid":
+        txn.payment_status = PaymentStatus.PAID
+        txn.paid_at = timezone.now()
+    else:
+        txn.payment_status = PaymentStatus.FAILED
+
+    txn.save()
+
+    log_audit(
+        request, AuditAction.UPDATE, "transactions", object_id=txn.id,
+        old_data={"status": "PENDING"}, new_data={"status": txn.payment_status},
+    )
+
+    return JsonResponse(
+        {
+            "detail": "Status transaksi berhasil diperbarui.",
+            "transaction_id": txn.id,
+            "status": txn.payment_status,
+        },
+        status=200,
+    )
+
+
+@jwt_required
+def get_my_transactions(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    items = (
+        TransactionItem.objects.filter(transaction__user=request.user)
+        .select_related("transaction", "product")
+        .order_by("-transaction__created_at")
+    )
+
+    data = []
+    for item in items:
+        product_detail = _serialize_product_detail(item.product)
+        data.append(
+            {
+                "transaction_id": item.transaction.id,
+                "product_id": str(item.product.id),
+                "product_type": item.product.type,
+                "product_title": product_detail.get("title") if product_detail else None,
+                "created_at": item.transaction.created_at.isoformat(),
+                "amount": str(item.transaction.grand_total),
+                "method": item.transaction.payment_method,
+                "status": item.transaction.payment_status,
+                "proof_of_payment": item.transaction.proof_of_payment.url if item.transaction.proof_of_payment else None,
+            }
+        )
+
+    return JsonResponse({"transactions": data}, status=200)
 
 @jwt_required
 @role_required(UserRole.ADMIN)
@@ -204,82 +305,6 @@ def get_revenue_summary(request):
             "total_revenue": str(total_revenue),
             "trend_percentage": trend_percentage,
             "daily_chart": daily_chart,
-        },
-        status=200,
-    )
-
-@jwt_required
-@role_required(UserRole.ADMIN)
-def get_product_revenue_summary(request):
-    if request.method != "GET":
-        return HttpResponseNotAllowed(["GET"])
-
-    base_items = TransactionItem.objects.filter(
-        transaction__payment_status=PaymentStatus.PAID
-    )
-
-    totals = base_items.aggregate(
-        mentoring_revenue=Sum(
-            Case(
-                When(product__type=ProductType.MENTORING, then=REVENUE_EXPRESSION),
-                default=0,
-                output_field=DecimalField(max_digits=14, decimal_places=2),
-            )
-        ),
-        module_revenue=Sum(
-            Case(
-                When(product__type=ProductType.MODULE, then=REVENUE_EXPRESSION),
-                default=0,
-                output_field=DecimalField(max_digits=14, decimal_places=2),
-            )
-        ),
-        bootcamp_revenue=Sum(
-            Case(
-                When(product__type=ProductType.BOOTCAMP, then=REVENUE_EXPRESSION),
-                default=0,
-                output_field=DecimalField(max_digits=14, decimal_places=2),
-            )
-        ),
-        total_revenue=Sum(REVENUE_EXPRESSION),
-    )
-
-    revenue_by_type = {
-        ProductType.MENTORING: float(totals["mentoring_revenue"] or 0),
-        ProductType.BOOTCAMP: float(totals["bootcamp_revenue"] or 0),
-        ProductType.MODULE: float(totals["module_revenue"] or 0),
-    }
-
-    chart_qs = (
-        base_items
-        .values("product__type")
-        .annotate(revenue=Sum(REVENUE_EXPRESSION))
-    )
-
-    revenue_map = {
-        row["product__type"]: float(row["revenue"] or 0)
-        for row in chart_qs
-    }
-
-    chart_data = [
-        {
-            "product": ProductType.MENTORING,
-            "revenue": revenue_map.get(ProductType.MENTORING, 0),
-        },
-        {
-            "product": ProductType.BOOTCAMP,
-            "revenue": revenue_map.get(ProductType.BOOTCAMP, 0),
-        },
-        {
-            "product": ProductType.MODULE,
-            "revenue": revenue_map.get(ProductType.MODULE, 0),
-        },
-    ]
-
-    return JsonResponse(
-        {
-            "total_revenue": float(totals["total_revenue"] or 0),
-            "revenue_by_type": revenue_by_type,
-            "chart_data": chart_data,
         },
         status=200,
     )
@@ -424,8 +449,64 @@ def get_user_purchased_product_detail(request, product_id):
         status=200,
     )
 
-DISCOUNT_RATE = 0.10  # sementara: samain dengan logic frontend (10% flat kalau ada voucher)
-# TODO: ganti dengan validasi voucher yang sebenarnya begitu ada model Voucher.
+def _create_mentoring_sessions(user_library, mentoring_detail, first_slot):
+    """Bikin baris MentoringSession sejumlah session_count paket. Sesi pertama
+    langsung terjadwal sesuai slot yang dipilih saat checkout, sisanya
+    menunggu dijadwalkan user lewat dashboard."""
+    mentor_profile = first_slot.mentor_profile
+    sessions = []
+    for order in range(1, mentoring_detail.session_count + 1):
+        if order == 1:
+            sessions.append(
+                MentoringSession(
+                    mentoring=mentoring_detail,
+                    user_library=user_library,
+                    order=order,
+                    mentor=mentor_profile,
+                    start_time=first_slot.start_time,
+                    availability_slot=first_slot,
+                    status=MentoringSession.SessionStatus.SCHEDULED,
+                )
+            )
+        else:
+            sessions.append(
+                MentoringSession(
+                    mentoring=mentoring_detail,
+                    user_library=user_library,
+                    order=order,
+                    mentor=mentor_profile,
+                    status=MentoringSession.SessionStatus.WAITING_SCHEDULE,
+                )
+            )
+    MentoringSession.objects.bulk_create(sessions)
+
+
+def _create_bootcamp_sessions(user_library, product):
+    """Clone template sesi bootcamp (dikelola admin di app programs) jadi
+    baris progress per-pembeli di products.BootcampSession."""
+    templates = (
+        BootcampSessionTemplate.objects.filter(bootcamp=product.id)
+        .prefetch_related("session_mentors__mentor_profile")
+        .order_by("start_time")
+    )
+
+    sessions = []
+    for order, template in enumerate(templates, start=1):
+        first_assignment = template.session_mentors.first()
+        sessions.append(
+            BootcampSession(
+                bootcamp_id=product.id,
+                user_library=user_library,
+                order=order,
+                title=template.title,
+                mentor=first_assignment.mentor_profile if first_assignment else None,
+                start_time=template.start_time,
+                status=BootcampSession.SessionStatus.SCHEDULED,
+                meeting_link=template.meeting_link or "",
+            )
+        )
+    BootcampSession.objects.bulk_create(sessions)
+
 
 @csrf_exempt
 @jwt_required
@@ -487,12 +568,38 @@ def checkout_product(request):
         )
 
     price = detail.new_price if getattr(detail, "new_price", None) else detail.original_price
-    discount_amount = round(float(price) * DISCOUNT_RATE, 2) if voucher_code else 0
-    grand_total = float(price) - discount_amount
+
+    referral_code = None
+    discount_amount = 0
+    if voucher_code:
+        try:
+            referral_code = ReferralCode.objects.get(code__iexact=voucher_code)
+        except ReferralCode.DoesNotExist:
+            return JsonResponse({"detail": "Kode referral tidak ditemukan."}, status=400)
+
+        if not referral_code.is_valid_for_product(product, user=request.user):
+            return JsonResponse(
+                {"detail": "Kode referral tidak berlaku, sudah tidak aktif, atau sudah pernah kamu pakai."},
+                status=400,
+            )
+
+        discount_amount = referral_code.compute_discount(price)
+
+    grand_total = float(price) - float(discount_amount)
 
     try:
         with db_transaction.atomic():
             mentor_availability = None
+
+            if referral_code is not None:
+                locked_referral = ReferralCode.objects.select_for_update().get(pk=referral_code.pk)
+                if not locked_referral.is_valid_for_product(product, user=request.user):
+                    return JsonResponse(
+                        {"detail": "Kode referral tidak berlaku, kuotanya habis, atau sudah pernah kamu pakai."},
+                        status=400,
+                    )
+                locked_referral.used_count += 1
+                locked_referral.save()
 
             if product.type == ProductType.MENTORING:
                 try:
@@ -534,7 +641,7 @@ def checkout_product(request):
                 tax=0,
                 grand_total=grand_total,
                 proof_of_payment=proof_file,
-                payment_status=PaymentStatus.PENDING,  
+                payment_status=PaymentStatus.PENDING,
             )
 
             item = TransactionItem.objects.create(
@@ -545,11 +652,23 @@ def checkout_product(request):
                 mentor_availability=mentor_availability,
             )
 
-            UserLibrary.objects.create(
+            if referral_code is not None:
+                ReferralCodeUsage.objects.create(
+                    referral_code=referral_code,
+                    transaction=txn,
+                    user=request.user,
+                    discount_amount=discount_amount,
+                )
+
+            user_library, _ = UserLibrary.objects.get_or_create(
                 user=request.user,
-                transaction_item=item,
-                active_date=timezone.now(),
+                product=product,
             )
+
+            if product.type == ProductType.MENTORING:
+                _create_mentoring_sessions(user_library, detail, mentor_availability)
+            elif product.type == ProductType.BOOTCAMP:
+                _create_bootcamp_sessions(user_library, product)
 
     except Exception as e:
         return JsonResponse({"detail": f"Checkout gagal: {str(e)}"}, status=500)
@@ -563,3 +682,229 @@ def checkout_product(request):
         },
         status=201,
     )
+
+
+def _serialize_referral_code(code):
+    return {
+        "id": str(code.id),
+        "code": code.code,
+        "discount_type": code.discount_type,
+        "discount_value": str(code.discount_value),
+        "max_discount": str(code.max_discount) if code.max_discount is not None else None,
+        "quota": code.quota,
+        "used_count": code.used_count,
+        "is_active": code.is_active,
+        "applies_to_all": code.applies_to_all,
+        "product_ids": [str(pid) for pid in code.products.values_list("id", flat=True)],
+    }
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_referral_codes(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    codes = ReferralCode.objects.prefetch_related("products").order_by("-created_at")
+    return JsonResponse(
+        {"referral_codes": [_serialize_referral_code(c) for c in codes]}, status=200
+    )
+
+
+def _apply_referral_code_data(referral_code, data):
+    referral_code.code = data.get("code", referral_code.code).strip().upper()
+    referral_code.discount_type = data.get("discount_type", referral_code.discount_type)
+    referral_code.discount_value = data.get("discount_value", referral_code.discount_value)
+    referral_code.max_discount = data.get("max_discount") or None
+    referral_code.quota = data.get("quota", referral_code.quota)
+    referral_code.applies_to_all = data.get("applies_to_all", referral_code.applies_to_all)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def add_referral_code(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    code_value = (request_data.get("code") or "").strip().upper()
+    if not code_value:
+        return JsonResponse({"errors": {"code": ["Kode wajib diisi."]}}, status=400)
+    if ReferralCode.objects.filter(code__iexact=code_value).exists():
+        return JsonResponse({"errors": {"code": ["Kode ini sudah dipakai."]}}, status=400)
+
+    if request_data.get("discount_type") not in DiscountType.values:
+        return JsonResponse({"errors": {"discount_type": ["Tipe diskon tidak valid."]}}, status=400)
+
+    referral_code = ReferralCode(
+        code=code_value,
+        discount_type=request_data["discount_type"],
+        discount_value=request_data.get("discount_value") or 0,
+        max_discount=request_data.get("max_discount") or None,
+        quota=request_data.get("quota") or 0,
+        applies_to_all=request_data.get("applies_to_all", True),
+    )
+    referral_code.save()
+
+    if not referral_code.applies_to_all:
+        product_ids = request_data.get("product_ids") or []
+        referral_code.products.set(Product.objects.filter(id__in=product_ids))
+
+    log_audit(
+        request, AuditAction.CREATE, "referral_codes", object_id=referral_code.id,
+        new_data=_serialize_referral_code(referral_code),
+    )
+
+    return JsonResponse(
+        {"detail": "Kode referral berhasil dibuat.", "referral_code": _serialize_referral_code(referral_code)},
+        status=201,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_referral_code(request, referral_code_id):
+    if request.method not in ["PATCH", "PUT"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT"])
+
+    try:
+        referral_code = ReferralCode.objects.get(id=referral_code_id)
+    except ReferralCode.DoesNotExist:
+        return JsonResponse({"detail": "Kode referral tidak ditemukan."}, status=404)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    old_data = _serialize_referral_code(referral_code)
+
+    new_quota = request_data.get("quota")
+    if new_quota is not None and int(new_quota) < referral_code.used_count:
+        return JsonResponse(
+            {"errors": {"quota": ["Kuota tidak boleh kurang dari jumlah yang sudah terpakai."]}},
+            status=400,
+        )
+
+    if "is_active" in request_data and len(request_data) == 1:
+        referral_code.is_active = request_data["is_active"]
+    else:
+        _apply_referral_code_data(referral_code, request_data)
+        if "is_active" in request_data:
+            referral_code.is_active = request_data["is_active"]
+
+    referral_code.save()
+
+    if not referral_code.applies_to_all and "product_ids" in request_data:
+        referral_code.products.set(Product.objects.filter(id__in=request_data["product_ids"]))
+    elif referral_code.applies_to_all:
+        referral_code.products.clear()
+
+    log_audit(
+        request, AuditAction.UPDATE, "referral_codes", object_id=referral_code.id,
+        old_data=old_data, new_data=_serialize_referral_code(referral_code),
+    )
+
+    return JsonResponse(
+        {"detail": "Kode referral berhasil diperbarui.", "referral_code": _serialize_referral_code(referral_code)},
+        status=200,
+    )
+
+
+def _serialize_payout(payout):
+    source_title = None
+    session_date = None
+    if payout.mentoring_session_id:
+        session = payout.mentoring_session
+        source_title = f"{session.mentoring.title} - Sesi {session.order}"
+        session_date = session.start_time.isoformat() if session.start_time else None
+    elif payout.bootcamp_session_id:
+        session = payout.bootcamp_session
+        source_title = f"{session.bootcamp.title} - Sesi {session.order}"
+        session_date = session.start_time.isoformat() if session.start_time else None
+
+    return {
+        "id": str(payout.id),
+        "mentor_id": str(payout.mentor_profile_id),
+        "mentor_name": payout.mentor_profile.user.fullname,
+        "source_type": payout.source_type,
+        "source_title": source_title,
+        "session_date": session_date,
+        "gross_amount": str(payout.gross_amount),
+        "fee_percent": payout.fee_percent,
+        "net_amount": str(payout.net_amount),
+        "status": payout.status,
+        "bank_name": payout.mentor_profile.bank_name,
+        "bank_account": payout.mentor_profile.bank_account,
+        "bank_account_holder": payout.mentor_profile.bank_account_holder,
+        "paid_at": payout.paid_at.isoformat() if payout.paid_at else None,
+        "created_at": payout.created_at.isoformat(),
+    }
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_payouts(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    payouts = MentorPayout.objects.select_related(
+        "mentor_profile__user",
+        "mentoring_session__mentoring",
+        "bootcamp_session__bootcamp",
+    ).order_by("-created_at")
+
+    status_filter = request.GET.get("status")
+    if status_filter and status_filter != "Semua":
+        payouts = payouts.filter(status=status_filter)
+
+    return JsonResponse({"payouts": [_serialize_payout(p) for p in payouts]}, status=200)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def mark_payout_paid(request, payout_id):
+    if request.method not in ["PATCH", "PUT"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT"])
+
+    try:
+        payout = MentorPayout.objects.select_related("mentor_profile__user").get(id=payout_id)
+    except MentorPayout.DoesNotExist:
+        return JsonResponse({"detail": "Data pencairan tidak ditemukan."}, status=404)
+
+    if payout.status == PayoutStatus.PAID:
+        return JsonResponse({"detail": "Pencairan ini sudah ditandai lunas sebelumnya."}, status=400)
+
+    payout.status = PayoutStatus.PAID
+    payout.paid_at = timezone.now()
+    payout.save()
+
+    log_audit(
+        request, AuditAction.UPDATE, "mentor_payouts", object_id=payout.id,
+        old_data={"status": "pending"}, new_data={"status": "paid"},
+    )
+
+    return JsonResponse({"detail": "Pencairan berhasil ditandai lunas.", "payout": _serialize_payout(payout)}, status=200)
+
+
+@jwt_required
+@role_required(UserRole.MENTOR)
+def get_my_payouts(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    try:
+        mentor_profile = request.user.mentor_profile
+    except MentorProfile.DoesNotExist:
+        return JsonResponse({"detail": "Mentor profile tidak ditemukan."}, status=404)
+
+    payouts = MentorPayout.objects.filter(mentor_profile=mentor_profile).select_related(
+        "mentoring_session__mentoring", "bootcamp_session__bootcamp"
+    ).order_by("-created_at")
+
+    return JsonResponse({"payouts": [_serialize_payout(p) for p in payouts]}, status=200)

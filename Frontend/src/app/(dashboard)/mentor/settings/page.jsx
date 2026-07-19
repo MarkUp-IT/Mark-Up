@@ -1,21 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Camera,
   ChevronRight,
-  ShieldAlert,
-  X,
-  Landmark,
   Link2,
   Briefcase,
   Pencil,
   Trash2,
   Plus,
+  X,
+  Landmark,
 } from "lucide-react";
 import DashboardLayout from "@/component/mentor/DashboardLayout";
+import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 
 function Field({ label, value, onChange, disabled, note, textarea, icon }) {
   const Component = textarea ? "textarea" : "input";
@@ -29,7 +29,7 @@ function Field({ label, value, onChange, disabled, note, textarea, icon }) {
           </span>
         )}
         <Component
-          value={value}
+          value={value ?? ""}
           onChange={onChange ? (e) => onChange(e.target.value) : undefined}
           disabled={disabled}
           rows={textarea ? 3 : undefined}
@@ -47,14 +47,6 @@ function Field({ label, value, onChange, disabled, note, textarea, icon }) {
   );
 }
 
-// Pilihan keahlian -- mapping ke tabel expertises/mentor_expertises. Mentor
-// wajib pilih minimal 1, bisa pilih lebih dari satu.
-const EXPERTISE_OPTIONS = [
-  { id: "bcc", label: "Business Case Competition (BCC)" },
-  { id: "bpc", label: "Business Plan Competition (BPC)" },
-  { id: "career", label: "Career Mentoring" },
-];
-
 const formatMonthYear = (dateStr) => {
   if (!dateStr) return "";
   const date = new Date(dateStr);
@@ -65,46 +57,32 @@ const formatMonthYear = (dateStr) => {
 export default function MentorSettings() {
   const shouldReduceMotion = useReducedMotion() ?? false;
 
-  // TODO: ganti semua data ini dengan data mentor dari session/auth context
-  const email = "prabrorosub@gmail.com"; // readonly, ganti email lewat support
-  const initialInfo = {
-    fullName: "Prabroro Subriantoro",
-    phone: "0812-3456-7890",
-    linkedin: "https://linkedin.com/in/prabroro-subriantoro",
-    bio: "Praktisi konsultan bisnis dengan pengalaman membimbing 50+ tim di berbagai kompetisi nasional dan internasional.",
-  };
-  const initialBank = {
-    bankName: "BCA",
-    accountNumber: "1234567890",
-    accountHolder: "Prabroro Subriantoro",
-  };
-  const initialExpertise = ["bcc", "career"];
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState("");
 
-  const [fullName, setFullName] = useState(initialInfo.fullName);
-  const [phone, setPhone] = useState(initialInfo.phone);
-  const [linkedin, setLinkedin] = useState(initialInfo.linkedin);
-  const [bio, setBio] = useState(initialInfo.bio);
+  const [initialInfo, setInitialInfo] = useState({ fullName: "", phone: "", linkedin: "", bio: "" });
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [linkedin, setLinkedin] = useState("");
+  const [bio, setBio] = useState("");
   const [infoSaved, setInfoSaved] = useState(false);
 
-  const [selectedExpertise, setSelectedExpertise] = useState(initialExpertise);
+  const [expertiseOptions, setExpertiseOptions] = useState([]);
+  const [initialExpertise, setInitialExpertise] = useState([]);
+  const [selectedExpertise, setSelectedExpertise] = useState([]);
   const [expertiseSaved, setExpertiseSaved] = useState(false);
 
-  const [bankName, setBankName] = useState(initialBank.bankName);
-  const [accountNumber, setAccountNumber] = useState(initialBank.accountNumber);
-  const [accountHolder, setAccountHolder] = useState(initialBank.accountHolder);
+  const [initialBank, setInitialBank] = useState({ bankName: "", accountNumber: "", accountHolder: "" });
+  const [bankName, setBankName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [accountHolder, setAccountHolder] = useState("");
   const [bankSaved, setBankSaved] = useState(false);
 
-  // --- Pengalaman (mentor_experiences: title, description, start_date, end_date) ---
-  const [experiences, setExperiences] = useState([
-    {
-      id: "exp-1",
-      title: "Business Consultant, PT Konsultan Maju",
-      description:
-        "Membimbing 50+ tim dalam kompetisi bisnis nasional dan internasional.",
-      startDate: "2023-01-01",
-      endDate: null, // null = masih berlangsung
-    },
-  ]);
+  const [profileImage, setProfileImage] = useState(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState(null);
+
+  const [experiences, setExperiences] = useState([]);
   const [showExpModal, setShowExpModal] = useState(false);
   const [editingExpId, setEditingExpId] = useState(null);
   const [expForm, setExpForm] = useState({
@@ -114,9 +92,6 @@ export default function MentorSettings() {
     endDate: "",
     isOngoing: false,
   });
-
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   const isInfoDirty =
     fullName !== initialInfo.fullName ||
@@ -148,16 +123,79 @@ export default function MentorSettings() {
         animate: { opacity: 1, scale: 1, y: 0 },
       };
 
-  const closeDeleteModal = () => {
-    setShowDeleteModal(false);
-    setDeleteConfirmText("");
-  };
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      try {
+        const [profileRes, expertiseRes, meRes] = await Promise.all([
+          apiRequest("/api/mentors/me/profile/"),
+          apiRequest("/api/mentors/expertise/", { auth: false }),
+          apiRequest("/api/accounts/me/profile/"),
+        ]);
 
-  const handleSaveInfo = (e) => {
+        setExpertiseOptions(expertiseRes?.expertise || []);
+
+        setEmail(meRes?.user?.email || "");
+        setProfileImage(meRes?.user?.profile_image || null);
+
+        const info = {
+          fullName: profileRes.fullname,
+          phone: profileRes.phone,
+          linkedin: profileRes.linkedin_url,
+          bio: profileRes.bio,
+        };
+        setInitialInfo(info);
+        setFullName(info.fullName);
+        setPhone(info.phone);
+        setLinkedin(info.linkedin);
+        setBio(info.bio);
+
+        setInitialExpertise(profileRes.expertise || []);
+        setSelectedExpertise(profileRes.expertise || []);
+
+        const bank = {
+          bankName: profileRes.bank_name || "",
+          accountNumber: profileRes.bank_account || "",
+          accountHolder: profileRes.bank_account_holder || "",
+        };
+        setInitialBank(bank);
+        setBankName(bank.bankName);
+        setAccountNumber(bank.accountNumber);
+        setAccountHolder(bank.accountHolder);
+
+        setExperiences(
+          (profileRes.experiences || []).map((exp) => ({
+            id: exp.id,
+            title: exp.title,
+            description: exp.description,
+            startDate: exp.start_date,
+            endDate: exp.end_date,
+          })),
+        );
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  const closeExpModal = () => setShowExpModal(false);
+
+  const handleSaveInfo = async (e) => {
     e.preventDefault();
-    // TODO: panggil API update profil mentor beneran
-    setInfoSaved(true);
-    setTimeout(() => setInfoSaved(false), 3000);
+    try {
+      await apiRequest("/api/mentors/me/profile/", {
+        method: "PATCH",
+        body: { fullname: fullName, phone, linkedin_url: linkedin, bio },
+      });
+      setInitialInfo({ fullName, phone, linkedin, bio });
+      setInfoSaved(true);
+      setTimeout(() => setInfoSaved(false), 3000);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const toggleExpertise = (id) => {
@@ -166,32 +204,80 @@ export default function MentorSettings() {
     );
   };
 
-  const handleSaveExpertise = (e) => {
+  const handleSaveExpertise = async (e) => {
     e.preventDefault();
     if (!isExpertiseValid) return;
-    // TODO: sinkronkan ke tabel mentor_expertises (hapus yang di-uncheck,
-    // insert yang baru dicentang)
-    setExpertiseSaved(true);
-    setTimeout(() => setExpertiseSaved(false), 3000);
+    try {
+      await apiRequest("/api/mentors/me/expertise/", {
+        method: "PUT",
+        body: { expertise_ids: selectedExpertise },
+      });
+      setInitialExpertise(selectedExpertise);
+      setExpertiseSaved(true);
+      setTimeout(() => setExpertiseSaved(false), 3000);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const handleSaveBank = (e) => {
+  const handleSaveBank = async (e) => {
     e.preventDefault();
-    // TODO: panggil API update rekening beneran, idealnya perlu verifikasi
-    // tambahan (OTP/re-login) karena ini data sensitif buat payout
-    setBankSaved(true);
-    setTimeout(() => setBankSaved(false), 3000);
+    try {
+      await apiRequest("/api/mentors/me/profile/", {
+        method: "PATCH",
+        body: {
+          bank_name: bankName,
+          bank_account: accountNumber,
+          bank_account_holder: accountHolder,
+        },
+      });
+      setInitialBank({ bankName, accountNumber, accountHolder });
+      setBankSaved(true);
+      setTimeout(() => setBankSaved(false), 3000);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleUploadPhoto = async (file) => {
+    if (!file) return;
+    setIsUploadingPhoto(true);
+    setPhotoError(null);
+    try {
+      const formData = new FormData();
+      formData.append("photo", file);
+      const token = getAccessToken();
+      const res = await fetch(`${API_BASE}/api/accounts/me/profile/photo/`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail || "Gagal mengunggah foto.");
+      setProfileImage(data.profile_image);
+    } catch (err) {
+      setPhotoError(err.message || "Gagal mengunggah foto.");
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleDeletePhoto = async () => {
+    setIsUploadingPhoto(true);
+    setPhotoError(null);
+    try {
+      await apiRequest("/api/accounts/me/profile/photo/delete/", { method: "POST" });
+      setProfileImage(null);
+    } catch (err) {
+      setPhotoError(err.message || "Gagal menghapus foto.");
+    } finally {
+      setIsUploadingPhoto(false);
+    }
   };
 
   const openAddExperience = () => {
     setEditingExpId(null);
-    setExpForm({
-      title: "",
-      description: "",
-      startDate: "",
-      endDate: "",
-      isOngoing: false,
-    });
+    setExpForm({ title: "", description: "", startDate: "", endDate: "", isOngoing: false });
     setShowExpModal(true);
   };
 
@@ -207,32 +293,62 @@ export default function MentorSettings() {
     setShowExpModal(true);
   };
 
-  const closeExpModal = () => setShowExpModal(false);
-
-  const handleDeleteExperience = (id) => {
-    setExperiences((prev) => prev.filter((exp) => exp.id !== id));
+  const handleDeleteExperience = async (id) => {
+    try {
+      await apiRequest(`/api/mentors/me/experiences/${id}/`, { method: "DELETE" });
+      setExperiences((prev) => prev.filter((exp) => exp.id !== id));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const handleSubmitExperience = (e) => {
+  const handleSubmitExperience = async (e) => {
     e.preventDefault();
     if (!expForm.title.trim() || !expForm.startDate) return;
-    const payload = {
-      id: editingExpId || `exp-${Date.now()}`,
+
+    const body = {
       title: expForm.title.trim(),
       description: expForm.description.trim(),
-      startDate: expForm.startDate,
-      endDate: expForm.isOngoing ? null : expForm.endDate || null,
+      start_date: expForm.startDate,
+      end_date: expForm.isOngoing ? null : expForm.endDate || null,
     };
-    // TODO: panggil API create/update ke tabel mentor_experiences
-    if (editingExpId) {
-      setExperiences((prev) =>
-        prev.map((exp) => (exp.id === editingExpId ? payload : exp)),
-      );
-    } else {
-      setExperiences((prev) => [...prev, payload]);
+
+    try {
+      if (editingExpId) {
+        const res = await apiRequest(`/api/mentors/me/experiences/${editingExpId}/`, {
+          method: "PATCH",
+          body,
+        });
+        setExperiences((prev) =>
+          prev.map((exp) =>
+            exp.id === editingExpId
+              ? { id: res.id, title: res.title, description: res.description, startDate: res.start_date, endDate: res.end_date }
+              : exp,
+          ),
+        );
+      } else {
+        const res = await apiRequest("/api/mentors/me/experiences/", {
+          method: "POST",
+          body,
+        });
+        setExperiences((prev) => [
+          ...prev,
+          { id: res.id, title: res.title, description: res.description, startDate: res.start_date, endDate: res.end_date },
+        ]);
+      }
+      setShowExpModal(false);
+    } catch (err) {
+      console.error(err);
     }
-    setShowExpModal(false);
   };
+
+  if (loading) {
+    return (
+      <DashboardLayout title="Settings">
+        <p className="text-[#6B7280] text-[13px]">Memuat pengaturan...</p>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Settings">
@@ -251,31 +367,48 @@ export default function MentorSettings() {
         className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col sm:flex-row sm:items-center gap-5"
       >
         <div className="relative shrink-0">
-          <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#2D2342]">
-            <img
-              src="/images/pp.png"
-              alt="Foto profil"
-              className="w-full h-full object-cover"
-            />
+          <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#2D2342] bg-[#0F081C] flex items-center justify-center">
+            {profileImage ? (
+              <img src={profileImage} alt="Foto profil" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-[#6B7280] text-[11px]">Tidak ada foto</span>
+            )}
           </div>
-          <button
+          <label
             aria-label="Ganti foto"
-            className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#148F89] flex items-center justify-center border-2 border-[#170F26] hover:bg-[#117A75] transition-colors"
+            className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#148F89] flex items-center justify-center border-2 border-[#170F26] hover:bg-[#117A75] transition-colors cursor-pointer"
           >
             <Camera size={13} className="text-white" />
-          </button>
+            <input
+              type="file"
+              accept="image/jpeg,image/png"
+              className="hidden"
+              onChange={(e) => handleUploadPhoto(e.target.files?.[0])}
+            />
+          </label>
         </div>
         <div className="flex-1">
           <h3 className="text-white font-semibold text-[15px]">Foto Profil</h3>
           <p className="text-[#9CA3AF] text-[12px] mt-1">
             Ditampilkan di halaman Mentors publik. JPG/PNG, maksimal 2MB.
           </p>
+          {photoError && <p className="text-red-400 text-[11px] mt-1">{photoError}</p>}
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <button className="px-4 py-2 rounded-[8px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors">
-            Unggah Foto
-          </button>
-          <button className="px-4 py-2 rounded-[8px] border border-[#2D2342] text-[#9CA3AF] text-[12px] font-semibold hover:text-white hover:border-red-500/40 transition-colors">
+          <label className="px-4 py-2 rounded-[8px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors cursor-pointer">
+            {isUploadingPhoto ? "Memproses..." : "Unggah Foto"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png"
+              className="hidden"
+              onChange={(e) => handleUploadPhoto(e.target.files?.[0])}
+            />
+          </label>
+          <button
+            onClick={handleDeletePhoto}
+            disabled={!profileImage || isUploadingPhoto}
+            className="px-4 py-2 rounded-[8px] border border-[#2D2342] text-[#9CA3AF] text-[12px] font-semibold hover:text-white hover:border-red-500/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
             Hapus
           </button>
         </div>
@@ -288,9 +421,7 @@ export default function MentorSettings() {
         className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col gap-5"
       >
         <div>
-          <h3 className="text-white font-semibold text-[15px]">
-            Informasi Pribadi
-          </h3>
+          <h3 className="text-white font-semibold text-[15px]">Informasi Pribadi</h3>
           <p className="text-[#9CA3AF] text-[12px] mt-1">
             Bio dan LinkedIn ditampilkan di halaman Mentors publik agar mentee
             bisa mengenalmu lebih baik.
@@ -299,12 +430,7 @@ export default function MentorSettings() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Nama Lengkap" value={fullName} onChange={setFullName} />
-          <Field
-            label="Email"
-            value={email}
-            disabled
-            note="Hubungi support untuk mengubah email."
-          />
+          <Field label="Email" value={email} disabled note="Hubungi support untuk mengubah email." />
           <Field label="Nomor WhatsApp" value={phone} onChange={setPhone} />
           <Field
             label="LinkedIn"
@@ -336,7 +462,7 @@ export default function MentorSettings() {
         </div>
       </motion.form>
 
-      {/* Keahlian -- mapping ke expertises/mentor_expertises, wajib pilih min 1 */}
+      {/* Keahlian */}
       <motion.form
         {...sectionReveal}
         onSubmit={handleSaveExpertise}
@@ -351,7 +477,7 @@ export default function MentorSettings() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {EXPERTISE_OPTIONS.map((opt) => {
+          {expertiseOptions.map((opt) => {
             const isSelected = selectedExpertise.includes(opt.id);
             return (
               <button
@@ -364,15 +490,13 @@ export default function MentorSettings() {
                     : "bg-[#0F081C] border-[#2D2342] text-[#9CA3AF] hover:border-[#9CA3AF] hover:text-white"
                 }`}
               >
-                {opt.label}
+                {opt.name}
               </button>
             );
           })}
         </div>
         {!isExpertiseValid && (
-          <p className="text-[#EF4444] text-[12px]">
-            Pilih minimal 1 keahlian.
-          </p>
+          <p className="text-[#EF4444] text-[12px]">Pilih minimal 1 keahlian.</p>
         )}
 
         <div className="flex items-center gap-3">
@@ -395,7 +519,7 @@ export default function MentorSettings() {
         </div>
       </motion.form>
 
-      {/* Pengalaman -- mapping ke mentor_experiences, CRUD via modal */}
+      {/* Pengalaman */}
       <motion.div
         {...sectionReveal}
         className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col gap-4"
@@ -404,9 +528,7 @@ export default function MentorSettings() {
           <div className="flex items-center gap-2">
             <Briefcase size={17} className="text-[#148F89]" />
             <div>
-              <h3 className="text-white font-semibold text-[15px]">
-                Pengalaman
-              </h3>
+              <h3 className="text-white font-semibold text-[15px]">Pengalaman</h3>
               <p className="text-[#9CA3AF] text-[12px] mt-1">
                 Ditampilkan di halaman Mentors publik sebagai riwayat kerja.
               </p>
@@ -423,9 +545,7 @@ export default function MentorSettings() {
         </div>
 
         {experiences.length === 0 ? (
-          <p className="text-[#6B7280] text-[12px] italic">
-            Belum ada pengalaman ditambahkan.
-          </p>
+          <p className="text-[#6B7280] text-[12px] italic">Belum ada pengalaman ditambahkan.</p>
         ) : (
           <div className="flex flex-col gap-3">
             {experiences.map((exp) => (
@@ -434,17 +554,13 @@ export default function MentorSettings() {
                 className="bg-[#0F081C] border border-[#2D2342] rounded-[8px] p-4 flex items-start justify-between gap-3"
               >
                 <div className="flex flex-col gap-1 min-w-0">
-                  <h4 className="text-white font-semibold text-[14px] line-clamp-2">
-                    {exp.title}
-                  </h4>
+                  <h4 className="text-white font-semibold text-[14px] line-clamp-2">{exp.title}</h4>
                   <p className="text-[#9CA3AF] text-[12px]">
                     {formatMonthYear(exp.startDate)} &ndash;{" "}
                     {exp.endDate ? formatMonthYear(exp.endDate) : "Sekarang"}
                   </p>
                   {exp.description && (
-                    <p className="text-[#9CA3AF] text-[12px] mt-1 leading-relaxed">
-                      {exp.description}
-                    </p>
+                    <p className="text-[#9CA3AF] text-[12px] mt-1 leading-relaxed">{exp.description}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -469,8 +585,7 @@ export default function MentorSettings() {
         )}
       </motion.div>
 
-      {/* Rekening Bank -- khusus mentor, dipakai buat pencairan pendapatan
-          (lihat "Dicairkan ke [bank]" di halaman Transactions) */}
+      {/* Rekening Bank */}
       <motion.form
         {...sectionReveal}
         onSubmit={handleSaveBank}
@@ -479,9 +594,7 @@ export default function MentorSettings() {
         <div className="flex items-center gap-2">
           <Landmark size={17} className="text-[#148F89]" />
           <div>
-            <h3 className="text-white font-semibold text-[15px]">
-              Rekening Bank
-            </h3>
+            <h3 className="text-white font-semibold text-[15px]">Rekening Bank</h3>
             <p className="text-[#9CA3AF] text-[12px] mt-1">
               Tujuan transfer pendapatanmu dari sesi bootcamp dan mentoring.
             </p>
@@ -490,11 +603,7 @@ export default function MentorSettings() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Nama Bank" value={bankName} onChange={setBankName} />
-          <Field
-            label="Nomor Rekening"
-            value={accountNumber}
-            onChange={setAccountNumber}
-          />
+          <Field label="Nomor Rekening" value={accountNumber} onChange={setAccountNumber} />
         </div>
         <Field
           label="Nama Pemilik Rekening"
@@ -529,53 +638,15 @@ export default function MentorSettings() {
         className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col gap-4"
       >
         <div>
-          <h3 className="text-white font-semibold text-[15px]">
-            Keamanan Akun
-          </h3>
-          <p className="text-[#9CA3AF] text-[12px] mt-1">
-            Kata sandi terakhir diubah 2 bulan lalu.
-          </p>
+          <h3 className="text-white font-semibold text-[15px]">Keamanan Akun</h3>
         </div>
         <Link
           href="/mentor/settings/change-password"
           className="flex items-center justify-between px-4 py-3.5 rounded-[8px] border border-[#2D2342] hover:border-[#148F89]/50 transition-colors group"
         >
-          <span className="text-white text-[13px] font-medium">
-            Ubah Kata Sandi
-          </span>
-          <ChevronRight
-            size={16}
-            className="text-[#9CA3AF] group-hover:text-[#148F89] transition-colors"
-          />
+          <span className="text-white text-[13px] font-medium">Ubah Kata Sandi</span>
+          <ChevronRight size={16} className="text-[#9CA3AF] group-hover:text-[#148F89] transition-colors" />
         </Link>
-      </motion.div>
-
-      {/* Zona Berbahaya */}
-      <motion.div
-        {...sectionReveal}
-        className="bg-[#170F26] border border-red-500/20 rounded-[12px] p-6 flex flex-col gap-4"
-      >
-        <div className="flex items-center gap-2">
-          <ShieldAlert size={17} className="text-red-400" />
-          <h3 className="text-red-400 font-semibold text-[15px]">
-            Zona Berbahaya
-          </h3>
-        </div>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <p className="text-white text-[13px] font-medium">Hapus Akun</p>
-            <p className="text-[#9CA3AF] text-[12px] mt-0.5">
-              Semua data, sertifikat, dan riwayat pendapatan akan dihapus
-              permanen.
-            </p>
-          </div>
-          <button
-            onClick={() => setShowDeleteModal(true)}
-            className="px-4 py-2.5 rounded-[8px] border border-red-500/40 text-red-400 text-[13px] font-semibold hover:bg-red-500/10 transition-colors shrink-0"
-          >
-            Hapus Akun
-          </button>
-        </div>
       </motion.div>
 
       {/* --- MODAL: Tambah/Edit Pengalaman --- */}
@@ -622,32 +693,21 @@ export default function MentorSettings() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[#E2E8F0] text-[13px] font-medium">
-                    Mulai
-                  </label>
+                  <label className="text-[#E2E8F0] text-[13px] font-medium">Mulai</label>
                   <input
                     type="date"
                     value={expForm.startDate}
-                    onChange={(e) =>
-                      setExpForm((f) => ({
-                        ...f,
-                        startDate: e.target.value,
-                      }))
-                    }
+                    onChange={(e) => setExpForm((f) => ({ ...f, startDate: e.target.value }))}
                     className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[13px] text-white outline-none focus:border-[#148F89]/60 transition-colors"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[#E2E8F0] text-[13px] font-medium">
-                    Selesai
-                  </label>
+                  <label className="text-[#E2E8F0] text-[13px] font-medium">Selesai</label>
                   <input
                     type="date"
                     value={expForm.endDate}
                     disabled={expForm.isOngoing}
-                    onChange={(e) =>
-                      setExpForm((f) => ({ ...f, endDate: e.target.value }))
-                    }
+                    onChange={(e) => setExpForm((f) => ({ ...f, endDate: e.target.value }))}
                     className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[13px] outline-none transition-colors ${
                       expForm.isOngoing
                         ? "text-[#6B7280] cursor-not-allowed"
@@ -670,9 +730,7 @@ export default function MentorSettings() {
                   }
                   className="w-4 h-4 rounded accent-[#148F89]"
                 />
-                <span className="text-[#E2E8F0] text-[13px]">
-                  Masih berlangsung sampai sekarang
-                </span>
+                <span className="text-[#E2E8F0] text-[13px]">Masih berlangsung sampai sekarang</span>
               </label>
 
               <button
@@ -684,66 +742,6 @@ export default function MentorSettings() {
               </button>
             </div>
           </motion.form>
-        </motion.div>
-      )}
-
-      {/* --- MODAL: Konfirmasi Hapus Akun --- */}
-      {showDeleteModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-          onClick={closeDeleteModal}
-        >
-          <motion.div
-            {...modalMotion}
-            transition={{ duration: 0.18 }}
-            onClick={(e) => e.stopPropagation()}
-            className="bg-[#170F26] w-full max-w-[420px] rounded-[16px] border border-red-500/30 shadow-2xl p-6 flex flex-col gap-4"
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-white font-bold text-[17px]">
-                Hapus Akun Permanen
-              </h3>
-              <button
-                onClick={closeDeleteModal}
-                aria-label="Tutup"
-                className="text-[#9CA3AF] hover:text-white transition-colors"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <p className="text-[#9CA3AF] text-[13px] leading-relaxed">
-              Tindakan ini tidak bisa dibatalkan. Semua sertifikat, riwayat
-              pendapatan, dan profil publikmu di halaman Mentors akan dihapus
-              permanen dari Mark-Up.
-            </p>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[#E2E8F0] text-[12px]">
-                Ketik <span className="font-bold text-white">HAPUS</span> untuk
-                konfirmasi
-              </label>
-              <input
-                value={deleteConfirmText}
-                onChange={(e) => setDeleteConfirmText(e.target.value)}
-                className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-2.5 text-[13px] text-white outline-none focus:border-red-500/50 transition-colors"
-              />
-            </div>
-            <div className="flex items-center gap-3 mt-1">
-              <button
-                onClick={closeDeleteModal}
-                className="flex-1 py-2.5 rounded-[8px] border border-[#2D2342] text-[#9CA3AF] text-[13px] font-semibold hover:text-white transition-colors"
-              >
-                Batal
-              </button>
-              <button
-                disabled={deleteConfirmText !== "HAPUS"}
-                className="flex-1 py-2.5 rounded-[8px] bg-red-500 text-white text-[13px] font-semibold hover:bg-red-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Hapus Akun
-              </button>
-            </div>
-          </motion.div>
         </motion.div>
       )}
     </DashboardLayout>

@@ -24,7 +24,7 @@ import { useState, useEffect } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
-import Toast from "@/component/Toast";
+import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 
 const CATEGORY_FILTERS = ["Semua", "Mentoring", "Bootcamp", "Modul"];
@@ -49,6 +49,8 @@ export default function Products() {
   const [statusFilter, setStatusFilter] = useState("Semua");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [viewProduct, setViewProduct] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [formCategory, setFormCategory] = useState("Bootcamp");
 
@@ -67,8 +69,8 @@ export default function Products() {
       title: "",
       description: "",
       explanation: "",
-      new_price: "",
       original_price: "",
+      discount_percent: "",
       session_count: 1,
       duration_minutes: 60,
       registration_link: "",
@@ -82,22 +84,19 @@ export default function Products() {
     title: "",
     description: "",
     explanation: "",
-    new_price: "",
     original_price: "",
+    discount_percent: "",
+    session_count: 1,
+    duration_minutes: 60,
     stock: "",
     is_active: true,
   });
 
   const [submitting, setSubmitting] = useState(false);
-  const [toast, setToast] = useState({
-    open: false,
-    type: "success",
-    title: "Berhasil",
-    message: "",
-  });
 
   const showToast = (type, title, message) => {
-    setToast({ open: true, type, title, message });
+    if (type === "error") toast.error(title, { description: message });
+    else toast.success(title, { description: message });
   };
 
   useEffect(() => {
@@ -141,7 +140,7 @@ export default function Products() {
         setLoadingProducts(true);
 
         const data = await api.get(
-          `/api/products/?page=${currentPage}&page_size=10`
+          `/api/products/?page=${currentPage}&page_size=10&include_inactive=true`
         );
 
         setProducts(data.products ?? []);
@@ -164,6 +163,50 @@ export default function Products() {
           currency: "IDR",
           maximumFractionDigits: 0,
         }).format(val);
+
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExportCsv() {
+    setExporting(true);
+    try {
+      const data = await api.get("/api/products/?all=true&include_inactive=true");
+      const allProducts = data.products ?? [];
+
+      const typeLabel = (t) =>
+        t === "MENTORING" ? "Mentoring" : t === "BOOTCAMP" ? "Bootcamp" : "Modul";
+
+      const header = [
+        "ID", "Judul", "Kategori", "Harga Asli", "Harga Setelah Diskon",
+        "Diskon (%)", "Status", "Terjual",
+      ];
+      const rows = allProducts.map((item) => [
+        `${item.type.slice(0, 2)}${String(item.id).slice(-4)}`,
+        item.title,
+        typeLabel(item.type),
+        item.original_price ?? "",
+        item.new_price ?? "",
+        item.discount_percent ?? 0,
+        item.is_active ? "Aktif" : "Nonaktif",
+        item.sold_count ?? 0,
+      ]);
+      const csv = [header, ...rows]
+        .map((row) =>
+          row.map((field) => `"${String(field ?? "").replace(/"/g, '""')}"`).join(",")
+        )
+        .join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "daftar-produk.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast("error", "Gagal Ekspor", "Terjadi kesalahan saat mengekspor data produk.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const chartData = loadingSummary
     ? []
@@ -212,24 +255,45 @@ export default function Products() {
   const renderCategorySpecificFields = (data, setData, category) => {
     if (category === "Mentoring") {
       return (
-        <div className="flex flex-col gap-2">
-          <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-            Jumlah Sesi
-          </p>
-          <input
-            type="number"
-            value={data.original_price}
-            onChange={(e) =>
-              setData((prev) => ({
-                ...prev,
-                original_price: e.target.value,
-              }))
-            }
-          />
-          <p className="text-[#94A3B8] text-[11px]">
-            Sesi pertama dipilih user pas checkout, sisanya dipilih sendiri dari
-            halaman Produk Saya setelah pembayaran dikonfirmasi.
-          </p>
+        <div className="flex gap-4 w-full">
+          <div className="flex flex-col gap-2 flex-1">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Jumlah Sesi
+            </p>
+            <input
+              type="number"
+              min="1"
+              value={data.session_count}
+              onChange={(e) =>
+                setData((prev) => ({
+                  ...prev,
+                  session_count: e.target.value,
+                }))
+              }
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+            />
+            <p className="text-[#94A3B8] text-[11px]">
+              Sesi pertama dipilih user pas checkout, sisanya dipilih sendiri dari
+              halaman Produk Saya setelah pembayaran dikonfirmasi.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 flex-1">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Durasi per Sesi (menit)
+            </p>
+            <input
+              type="number"
+              min="1"
+              value={data.duration_minutes}
+              onChange={(e) =>
+                setData((prev) => ({
+                  ...prev,
+                  duration_minutes: e.target.value,
+                }))
+              }
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+            />
+          </div>
         </div>
       );
     }
@@ -259,9 +323,13 @@ export default function Products() {
 
       const payload = {
         ...formData,
-        new_price: Number(formData.new_price),
+        is_active: true,
         original_price:
           formData.original_price === "" ? null : Number(formData.original_price),
+        discount_percent:
+          formData.discount_percent === "" ? null : Number(formData.discount_percent),
+        session_count: Number(formData.session_count) || 1,
+        duration_minutes: Number(formData.duration_minutes) || 60,
         stock: formData.stock === "" ? null : Number(formData.stock),
       };
 
@@ -274,7 +342,7 @@ export default function Products() {
       showToast("success", "Produk diterbitkan", successMessage);
       setIsAddOpen(false);
 
-      const data = await api.get(`/api/products/?page=${currentPage}&page_size=10`);
+      const data = await api.get(`/api/products/?page=${currentPage}&page_size=10&include_inactive=true`);
       setProducts(data.products ?? []);
       setPagination(data.pagination ?? null);
     } catch (err) {
@@ -302,11 +370,16 @@ export default function Products() {
 
       const payload = {
         ...editFormData,
-        new_price: Number(editFormData.new_price),
         original_price:
           editFormData.original_price === ""
             ? null
             : Number(editFormData.original_price),
+        discount_percent:
+          editFormData.discount_percent === ""
+            ? null
+            : Number(editFormData.discount_percent),
+        session_count: Number(editFormData.session_count) || 1,
+        duration_minutes: Number(editFormData.duration_minutes) || 60,
         stock:
           editFormData.stock === "" ? null : Number(editFormData.stock),
         is_active: editFormData.is_active,
@@ -326,7 +399,7 @@ export default function Products() {
       setIsEditOpen(false);
 
       const data = await api.get(
-        `/api/products/?page=${currentPage}&page_size=10`
+        `/api/products/?page=${currentPage}&page_size=10&include_inactive=true`
       );
       setProducts(data.products ?? []);
       setPagination(data.pagination ?? null);
@@ -488,14 +561,14 @@ export default function Products() {
             </p>
           </div>
           <a
-            href="/admin/products"
+            href="/admin/products/all"
             className="text-[#148F89] font-bold text-[13px] hover:underline"
           >
             Lihat Semua Produk
           </a>
         </div>
 
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="bg-white p-4 rounded-[12px] flex items-center justify-between gap-4 flex-wrap border border-[#E2E8F0] shadow-sm">
           <div className="flex items-center gap-4 flex-wrap">
             <div className="relative">
               <Search
@@ -531,9 +604,13 @@ export default function Products() {
               ))}
             </div>
           </div>
-          <button className="adm-h-42 flex items-center gap-2 px-4 bg-[#F1F5F9] text-[13px] font-medium rounded-[8px] hover:bg-[#E2E8F0] transition-colors text-[#475569]">
+          <button
+            onClick={handleExportCsv}
+            disabled={exporting}
+            className="adm-h-42 flex items-center gap-2 px-4 bg-[#F1F5F9] text-[13px] font-medium rounded-[8px] hover:bg-[#E2E8F0] transition-colors text-[#475569] disabled:opacity-60"
+          >
             <Download size={15} />
-            Ekspor .CSV
+            {exporting ? "Mengekspor..." : "Ekspor .CSV"}
           </button>
         </div>
 
@@ -588,7 +665,7 @@ export default function Products() {
                         )}
                       </td>
                       <td className="px-6 py-4 text-center text-[#334155] font-medium">
-                        {item.original_price && (
+                        {item.discount_percent > 0 && (
                           <span className="line-through text-[#94A3B8] mr-1.5">
                             {formatIDR(item.original_price)}
                           </span>
@@ -626,6 +703,10 @@ export default function Products() {
                         <div className="flex items-center justify-center gap-3">
                           <Eye
                             size={17}
+                            onClick={() => {
+                              setViewProduct(item);
+                              setIsViewOpen(true);
+                            }}
                             className="cursor-pointer text-[#94A3B8] hover:text-[#148F89] transition-colors"
                           />
                           <PenLine
@@ -644,8 +725,10 @@ export default function Products() {
                                 title: item.title ?? "",
                                 description: item.description ?? "",
                                 explanation: item.explanation ?? "",
-                                new_price: item.new_price ?? "",
                                 original_price: item.original_price ?? "",
+                                discount_percent: item.discount_percent ?? "",
+                                session_count: item.session_count ?? 1,
+                                duration_minutes: item.duration_minutes ?? 60,
                                 stock: item.stock ?? "",
                                 is_active: item.is_active,
                               });
@@ -743,6 +826,7 @@ export default function Products() {
                         title: e.target.value,
                     }))
                 }
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
 
@@ -768,6 +852,7 @@ export default function Products() {
                                     : "MODULE",
                         }));
                     }}
+                    className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
                 >
                 <option>Bootcamp</option>
                 <option>Mentoring</option>
@@ -792,6 +877,7 @@ export default function Products() {
                         description:e.target.value
                     }))
                 }
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
 
@@ -807,6 +893,8 @@ export default function Products() {
                         explanation:e.target.value
                     }))
                 }
+                rows={4}
+                className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3 outline-none focus:border-[#148F89] transition-all text-[#1E293B] resize-none"
             />
           </div>
 
@@ -839,21 +927,6 @@ export default function Products() {
                 </p>
                 <input
                   type="number"
-                  value={formData.new_price}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      new_price: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="flex flex-col gap-2 flex-1">
-                <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-                  Harga Asli (opsional)
-                </p>
-                <input
-                  type="number"
                   value={formData.original_price}
                   onChange={(e) =>
                     setFormData((prev) => ({
@@ -861,6 +934,25 @@ export default function Products() {
                       original_price: e.target.value,
                     }))
                   }
+                  className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89]"
+                />
+              </div>
+              <div className="flex flex-col gap-2 flex-1">
+                <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                  Diskon % (opsional)
+                </p>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={formData.discount_percent}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      discount_percent: e.target.value,
+                    }))
+                  }
+                  className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89]"
                 />
               </div>
             </div>
@@ -1006,11 +1098,11 @@ export default function Products() {
                 </p>
                 <input
                   type="number"
-                  value={editFormData.new_price}
+                  value={editFormData.original_price}
                   onChange={(e) =>
                     setEditFormData((prev) => ({
                       ...prev,
-                      new_price: e.target.value,
+                      original_price: e.target.value,
                     }))
                   }
                   className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
@@ -1018,15 +1110,17 @@ export default function Products() {
               </div>
               <div className="flex flex-col gap-2 flex-1">
                 <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-                  Harga Asli (opsional)
+                  Diskon % (opsional)
                 </p>
                 <input
                   type="number"
-                  value={editFormData.original_price}
+                  min="0"
+                  max="100"
+                  value={editFormData.discount_percent}
                   onChange={(e) =>
                     setEditFormData((prev) => ({
                       ...prev,
-                      original_price: e.target.value,
+                      discount_percent: e.target.value,
                     }))
                   }
                   className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
@@ -1078,14 +1172,205 @@ export default function Products() {
         </div>
       </div>
 
-      <Toast
-        open={toast.open}
-        type={toast.type}
-        title={toast.title}
-        message={toast.message}
-        onClose={() => setToast((prev) => ({ ...prev, open: false }))}
-        position="bottom-right"
-      />
+      {/* --- MODAL: Detail Produk (read-only, dipicu tombol Eye) --- */}
+      {isViewOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm"
+          onClick={() => setIsViewOpen(false)}
+        />
+      )}
+      <div
+        style={{ width: "560px", maxWidth: "100%" }}
+        className={`fixed top-0 right-0 h-screen bg-white shadow-2xl z-50 transition-transform duration-300 ease-in-out flex flex-col overflow-y-auto ${isViewOpen ? "translate-x-0" : "translate-x-full"}`}
+      >
+        <div className="w-full shrink-0 bg-[#F8FAFC] border-b border-[#E2E8F0] flex flex-col justify-center px-8 py-6 gap-1">
+          <div className="flex justify-between items-center">
+            <p className="text-[#1E293B] text-[19px] font-bold">Detail Produk</p>
+            <button
+              onClick={() => setIsViewOpen(false)}
+              className="p-2 hover:bg-[#E2E8F0] rounded-full transition-colors"
+            >
+              <X className="text-[#64748B]" size={20} />
+            </button>
+          </div>
+          <p className="text-[#64748B] text-[13px]">
+            {viewProduct?.title || "Produk terpilih"}
+          </p>
+        </div>
+
+        {viewProduct && (
+          <div className="px-8 py-6 flex flex-col gap-5">
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-flex px-3 py-1.5 text-[11px] rounded-[6px] font-semibold ${CATEGORY_BADGE[
+                  viewProduct.type === "MENTORING"
+                    ? "Mentoring"
+                    : viewProduct.type === "BOOTCAMP"
+                    ? "Bootcamp"
+                    : "Modul"
+                ]}`}
+              >
+                {viewProduct.type === "MENTORING"
+                  ? "Mentoring"
+                  : viewProduct.type === "BOOTCAMP"
+                  ? "Bootcamp"
+                  : "Modul"}
+              </span>
+              <span
+                className={`inline-flex px-3 py-1.5 text-[11px] rounded-full font-bold ${viewProduct.is_active ? "bg-[#DCFCE7] text-[#166534]" : "bg-[#FEE2E2] text-[#991B1B]"}`}
+              >
+                {viewProduct.is_active ? "AKTIF" : "NONAKTIF"}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Judul
+              </p>
+              <p className="text-[#1E293B] font-semibold text-[15px]">
+                {viewProduct.title}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Deskripsi Singkat
+              </p>
+              <p className="text-[#334155] text-[13.5px] leading-relaxed">
+                {viewProduct.description || "-"}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Deskripsi Lengkap
+              </p>
+              <p className="text-[#334155] text-[13.5px] leading-relaxed whitespace-pre-line">
+                {viewProduct.explanation || "-"}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] p-4">
+              <div className="flex flex-col gap-1">
+                <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                  Harga Asli
+                </span>
+                <span className="text-[#1E293B] font-semibold text-[13px]">
+                  {formatIDR(viewProduct.original_price)}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                  Harga Setelah Diskon
+                </span>
+                <span className="text-[#1E293B] font-semibold text-[13px]">
+                  {formatIDR(viewProduct.new_price)}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                  Diskon
+                </span>
+                <span className="text-[#1E293B] font-semibold text-[13px]">
+                  {viewProduct.discount_percent > 0 ? `${viewProduct.discount_percent}%` : "-"}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                  Terjual
+                </span>
+                <span className="text-[#1E293B] font-semibold text-[13px]">
+                  {viewProduct.sold_count ?? 0}
+                </span>
+              </div>
+              {viewProduct.type === "MENTORING" && (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                      Jumlah Sesi
+                    </span>
+                    <span className="text-[#1E293B] font-semibold text-[13px]">
+                      {viewProduct.session_count ?? 1}x sesi
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                      Durasi per Sesi
+                    </span>
+                    <span className="text-[#1E293B] font-semibold text-[13px]">
+                      {viewProduct.duration_minutes ?? 60} menit
+                    </span>
+                  </div>
+                </>
+              )}
+              {viewProduct.stock != null && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                    Stok
+                  </span>
+                  <span className="text-[#1E293B] font-semibold text-[13px]">
+                    {viewProduct.stock}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {viewProduct.highlights?.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                  Highlight
+                </p>
+                <ul className="flex flex-col gap-1.5">
+                  {viewProduct.highlights.map((h, idx) => (
+                    <li key={idx} className="text-[#334155] text-[13px] flex items-start gap-2">
+                      <span className="text-[#148F89]">&bull;</span>
+                      {h}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-auto p-6 bg-white border-t border-[#E2E8F0] flex gap-3">
+          <button
+            onClick={() => setIsViewOpen(false)}
+            className="flex-1 py-3 bg-white border border-[#E2E8F0] text-[#475569] font-bold rounded-[8px] hover:bg-[#F8FAFC] transition-colors"
+          >
+            Tutup
+          </button>
+          <button
+            onClick={() => {
+              setIsViewOpen(false);
+              setSelectedProduct(viewProduct);
+              setFormCategory(
+                viewProduct.type === "MENTORING"
+                  ? "Mentoring"
+                  : viewProduct.type === "BOOTCAMP"
+                  ? "Bootcamp"
+                  : "Modul"
+              );
+              setEditFormData({
+                type: viewProduct.type,
+                title: viewProduct.title ?? "",
+                description: viewProduct.description ?? "",
+                explanation: viewProduct.explanation ?? "",
+                original_price: viewProduct.original_price ?? "",
+                discount_percent: viewProduct.discount_percent ?? "",
+                session_count: viewProduct.session_count ?? 1,
+                duration_minutes: viewProduct.duration_minutes ?? 60,
+                stock: viewProduct.stock ?? "",
+                is_active: viewProduct.is_active,
+              });
+              setIsEditOpen(true);
+            }}
+            className="flex-1 py-3 bg-[#148F89] text-white font-bold rounded-[8px] hover:bg-[#117A75] transition-colors"
+          >
+            Edit Produk
+          </button>
+        </div>
+      </div>
     </DashboardLayout>
   );
 }

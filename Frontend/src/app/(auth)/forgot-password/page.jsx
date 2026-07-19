@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Mail, CheckCircle2 } from "lucide-react";
-import Toast from "@/component/Toast";
+import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 
 const autofillFix = `
@@ -25,17 +25,12 @@ export default function ForgotPassword() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [toast, setToast] = useState({
-    open: false,
-    type: "success",
-    title: "",
-    message: "",
-  });
 
   const isValid = email.trim() !== "";
 
   const showToast = (type, title, message) => {
-    setToast({ open: true, type, title, message });
+    if (type === "error") toast.error(title, { description: message });
+    else toast.success(title, { description: message });
   };
 
   const handleSubmit = async (e) => {
@@ -46,7 +41,6 @@ export default function ForgotPassword() {
     setIsSubmitting(true);
 
     try {
-      // TODO: konfirmasi path endpoint ini ke tim backend
       await api.post(
         "/api/accounts/forgot-password/",
         { email },
@@ -186,15 +180,6 @@ export default function ForgotPassword() {
           />
         </div>
       </div>
-
-      <Toast
-        open={toast.open}
-        type={toast.type}
-        title={toast.title}
-        message={toast.message}
-        onClose={() => setToast((prev) => ({ ...prev, open: false }))}
-        position="top-right"
-      />
     </div>
   );
 }

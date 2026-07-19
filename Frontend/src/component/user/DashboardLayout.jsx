@@ -4,16 +4,15 @@ import { useState } from "react";
 import { Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
 import Navbar from "@/component/Navbar";
+import { useAuthGuard } from "@/lib/useAuthGuard";
 
 export default function DashboardLayout({ title, children }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { profile, checked } = useAuthGuard(["STUDENT"]);
 
-  // TODO: ganti dengan data user dari session/auth context, bukan hardcode
-  const profile = {
-    profileName: "Prabroro Subriantoro",
-    email: "prabrorosub@gmail.com",
-    avatarSrc: "/images/pp.png",
-  };
+  if (!checked) {
+    return <div className="w-full min-h-screen bg-[#0F081C]" />;
+  }
 
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative">
@@ -32,9 +31,9 @@ export default function DashboardLayout({ title, children }) {
       <Navbar
         variant="solid"
         isLoggedIn
-        profileName={profile.profileName}
-        email={profile.email}
-        avatarSrc={profile.avatarSrc}
+        profileName={profile?.profile_name}
+        email={profile?.email}
+        avatarSrc={profile?.avatar_src}
         dashboardHref="/user/my-products"
       />
 

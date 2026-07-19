@@ -68,27 +68,33 @@ function formatDateTime(dateTimeStr) {
   );
 }
 
-const inTwoHours = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+function mapSession(raw) {
+  return {
+    id: raw.id,
+    order: raw.order,
+    title: raw.title,
+    mentor: raw.mentor,
+    mentorId: raw.mentor_id,
+    startTime: raw.start_time,
+    status: raw.status,
+    meetingLink: raw.meeting_link,
+    zoomLink: raw.zoom_link,
+    recordingUrl: raw.recording_url,
+  };
+}
 
-// Jadwal tersedia per mentor -- nanti ganti query ke mentor_availabilities
-// WHERE mentor_profile_id = X AND is_booked = false. Dipakai buat "Pilih
-// Jadwal" (sesi yang belum pernah dijadwalin) DAN "Ganti Jadwal" (sesi yang
-// udah dijadwalin tapi mau dipindah) -- dua-duanya modal yang sama.
-const MENTOR_AVAILABILITY = {
-  "alya-hamidah": [
-    { id: "AV1", date: "Kamis, 24 Juli 2026", time: "19:00 WIB" },
-    { id: "AV2", date: "Sabtu, 26 Juli 2026", time: "10:00 WIB" },
-  ],
-  "adena-laksita": [
-    { id: "AV3", date: "Selasa, 22 Juli 2026", time: "13:00 WIB" },
-    { id: "AV4", date: "Kamis, 24 Juli 2026", time: "16:00 WIB" },
-  ],
-};
-
-// --- MOCK DATA (nanti ganti query by id, join bootcamp_sessions/
-// mentoring_sessions). Sesi ke-1 tiap paket mentoring udah kepilih waktu
-// checkout, sesi berikutnya sengaja "waiting_schedule" -- itu yang mau
-// dipilih user sendiri belakangan dari halaman ini. ---
+function mapProductDetail(raw) {
+  return {
+    type: raw.type,
+    title: raw.title,
+    description: raw.description,
+    imageClass: "from-[#4A2CA1] to-[#17A9D4]",
+    sessions: raw.sessions?.map(mapSession),
+    fileUrl: raw.file_url,
+    resources: raw.resources,
+    chapters: raw.chapters,
+  };
+}
 
 export default function ProductDetail() {
 
@@ -109,7 +115,7 @@ export default function ProductDetail() {
             `/api/products/my-products/${params.id}/`
         );
 
-        setProduct(res);
+        setProduct(mapProductDetail(res));
     } finally {
         setLoading(false);
     }
@@ -129,6 +135,9 @@ export default function ProductDetail() {
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const [scheduleSubmitting, setScheduleSubmitting] = useState(false);
   const [scheduleSuccess, setScheduleSuccess] = useState(false);
+  const [availableSlots, setAvailableSlots] = useState([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState("");
   const [openSessionMenuKey, setOpenSessionMenuKey] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -231,6 +240,16 @@ export default function ProductDetail() {
     setScheduleModal({ session, sessionKey, isInitial });
     setSelectedSlotId("");
     setScheduleSuccess(false);
+    setAvailableSlots([]);
+    setSlotsError("");
+
+    if (session.mentorId) {
+      setSlotsLoading(true);
+      apiRequest(`/api/mentors/${session.mentorId}/availability/`, { auth: false })
+        .then((res) => setAvailableSlots(res?.availability || []))
+        .catch((err) => setSlotsError(err?.message || "Gagal memuat jadwal mentor."))
+        .finally(() => setSlotsLoading(false));
+    }
   };
   const closeScheduleModal = () => setScheduleModal(null);
 
@@ -244,12 +263,14 @@ export default function ProductDetail() {
         `/api/products/my-products/sessions/${scheduleModal.session.id}/schedule/`,
         {
           method: "POST",
-          body: JSON.stringify({
+          body: {
             session_type: "mentoring",
             availability_slot_id: selectedSlotId,
-          })
+          },
         }
       );
+
+      await fetchDetail();
 
       setScheduleSuccess(true);
     } finally {
@@ -275,9 +296,9 @@ export default function ProductDetail() {
         `/api/products/my-products/${params.id}/refund/`,
         {
           method: "POST",
-          body: JSON.stringify({
-            reason: refundReason
-          })
+          body: {
+            reason: refundReason,
+          },
         }
       );
 
@@ -286,10 +307,6 @@ export default function ProductDetail() {
       setRefundSubmitting(false);
     }
   };
-
-  const availableSlots = scheduleModal?.session?.mentorId
-    ? MENTOR_AVAILABILITY[scheduleModal.session.mentorId] || []
-    : [];
 
   // Area aksi per-sesi -- BEDA PERLAKUAN antara bootcamp & mentoring:
   //
@@ -700,7 +717,15 @@ export default function ProductDetail() {
                   <label className="text-[#E2E8F0] text-[13px] font-medium">
                     Slot tersedia — {scheduleModal.session?.mentor}
                   </label>
-                  {availableSlots.length === 0 ? (
+                  {slotsLoading ? (
+                    <p className="text-[#9CA3AF] text-[12px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
+                      Memuat jadwal mentor...
+                    </p>
+                  ) : slotsError ? (
+                    <p className="text-[#F87171] text-[12px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
+                      {slotsError}
+                    </p>
+                  ) : availableSlots.length === 0 ? (
                     <p className="text-[#9CA3AF] text-[12px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
                       Belum ada jadwal kosong dari mentor ini saat ini. Coba
                       lagi nanti atau hubungi tim kami.

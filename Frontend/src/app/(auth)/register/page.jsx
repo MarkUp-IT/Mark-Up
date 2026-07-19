@@ -1,11 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Eye, EyeOff } from "lucide-react";
-import Toast from "@/component/Toast";
+import { Eye, EyeOff, Check, X as XIcon, MailCheck } from "lucide-react";
+import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
+
+const PASSWORD_REQUIREMENTS = [
+  { label: "Minimal 8 karakter", test: (pw) => pw.length >= 8 },
+  { label: "Mengandung 1 huruf kapital", test: (pw) => /[A-Z]/.test(pw) },
+  { label: "Mengandung 1 simbol (!@#$%...)", test: (pw) => /[^A-Za-z0-9]/.test(pw) },
+];
 
 const autofillFix = `
   input:-webkit-autofill,
@@ -42,8 +47,6 @@ function Field({ label, type = "text", value, onChange, error, rightIcon }) {
 }
 
 export default function Register() {
-  const router = useRouter();
-
   // Catatan: field "Username" dihapus -- skema tabel `users` cuma punya
   // kolom `email` sebagai identitas unik buat login, nggak ada kolom
   // `username` sama sekali. Field di bawah ini disamakan sama kolom yang
@@ -60,22 +63,20 @@ export default function Register() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [toast, setToast] = useState({
-    open: false,
-    type: "success",
-    title: "",
-    message: "",
-  });
+  const [isRegistered, setIsRegistered] = useState(false);
+
+  const passwordMet = PASSWORD_REQUIREMENTS.every((r) => r.test(password));
 
   const isValid =
     namaLengkap.trim() !== "" &&
     email.trim() !== "" &&
-    password.trim() !== "" &&
-    confirm.trim() !== "" &&
+    passwordMet &&
+    confirm === password &&
     isChecked;
 
   const showToast = (type, title, message) => {
-    setToast({ open: true, type, title, message });
+    if (type === "error") toast.error(title, { description: message });
+    else toast.success(title, { description: message });
   };
 
   const handleSubmit = async (e) => {
@@ -96,15 +97,12 @@ export default function Register() {
 
       await api.post("/api/accounts/register/", payload, { auth: false });
 
+      setIsRegistered(true);
       showToast(
         "success",
         "Akun berhasil dibuat",
-        "Mengalihkan ke halaman login...",
+        "Cek email kamu untuk verifikasi akun.",
       );
-
-      window.setTimeout(() => {
-        router.push("/login");
-      }, 1600);
     } catch (err) {
       if (err instanceof ApiError && err.status === 400 && err.data?.errors) {
         const errors = err.data.errors;
@@ -152,6 +150,31 @@ export default function Register() {
         className="relative z-10 w-full min-h-screen flex items-center justify-center px-6 py-16"
         style={{ gap: "60px", flexWrap: "wrap" }}
       >
+        {isRegistered ? (
+          <div
+            style={{ width: "100%", maxWidth: "380px", flexShrink: 0 }}
+            className="flex flex-col gap-4"
+          >
+            <div className="w-[48px] h-[48px] rounded-full bg-[#B19EEF]/10 border border-[#B19EEF]/30 flex items-center justify-center">
+              <MailCheck className="w-[22px] h-[22px] text-[#B19EEF]" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <p className="font-bold text-[#B19EEF] text-[24px] font-poppins">
+                Cek Email Kamu
+              </p>
+              <p className="text-[13px] text-[#9CA3AF] leading-relaxed">
+                Kami sudah kirim link verifikasi ke <strong className="text-white">{email}</strong>.
+                Buka email itu dan klik link-nya buat mengaktifkan akun kamu sebelum login.
+              </p>
+            </div>
+            <Link
+              href="/login"
+              className="bg-[#B19EEF] flex items-center justify-center w-full h-[48px] rounded-[12px] text-black font-bold text-[14px] transition-colors mt-1"
+            >
+              Ke Halaman Login
+            </Link>
+          </div>
+        ) : (
         <form
           onSubmit={handleSubmit}
           style={{ width: "100%", maxWidth: "380px", flexShrink: 0 }}
@@ -232,6 +255,31 @@ export default function Register() {
             }
           />
 
+          {password.length > 0 && (
+            <ul className="flex flex-col gap-1 -mt-1.5">
+              {PASSWORD_REQUIREMENTS.map((req) => {
+                const met = req.test(password);
+                return (
+                  <li
+                    key={req.label}
+                    className={`flex items-center gap-1.5 text-[11.5px] transition-colors ${
+                      met ? "text-[#148F89]" : "text-[#6B7280]"
+                    }`}
+                  >
+                    {met ? <Check size={12} /> : <XIcon size={12} />}
+                    {req.label}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {confirm.length > 0 && confirm !== password && (
+            <p className="text-red-400 text-[12px] -mt-1.5">
+              Konfirmasi password tidak sama.
+            </p>
+          )}
+
           <label className="flex flex-row gap-2.5 items-start cursor-pointer">
             <input
               type="checkbox"
@@ -250,7 +298,7 @@ export default function Register() {
               </Link>{" "}
               serta{" "}
               <Link
-                href="/privacy-policy"
+                href="/terms-and-conditions#section-11"
                 target="_blank"
                 className="text-[#08C7E1] hover:underline"
               >
@@ -274,6 +322,7 @@ export default function Register() {
             </Link>
           </p>
         </form>
+        )}
 
         <div
           className="auth-illustration"
@@ -286,15 +335,6 @@ export default function Register() {
           />
         </div>
       </div>
-
-      <Toast
-        open={toast.open}
-        type={toast.type}
-        title={toast.title}
-        message={toast.message}
-        onClose={() => setToast((prev) => ({ ...prev, open: false }))}
-        position="top-right"
-      />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 import { motion, useReducedMotion } from "framer-motion";
 import { useState, useEffect } from "react";
+import { Users } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 
 // --- DATA MENTOR ---
@@ -162,7 +163,16 @@ export default function MentorPage() {
 
           {!loading && error && <p className="text-red-400 text-sm">{error}</p>}
 
-          {!loading && !error && (
+          {!loading && !error && mentors.length === 0 && (
+            <div className="flex flex-col items-center justify-center gap-3 text-center py-16 px-6 border border-dashed border-[#B19EEF]/20 rounded-md w-full">
+              <Users size={32} className="text-[#A19DAB]" />
+              <p className="text-[#A19DAB] text-sm max-w-[320px]">
+                Belum ada mentor yang bisa ditampilkan saat ini.
+              </p>
+            </div>
+          )}
+
+          {!loading && !error && mentors.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 md:gap-6 w-full">
               {mentors.map((mentor, index) => (
                 <motion.div

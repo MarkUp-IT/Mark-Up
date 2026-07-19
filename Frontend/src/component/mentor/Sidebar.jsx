@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { api, clearTokens } from "@/lib/api";
 import {
   GraduationCap,
   CalendarDays,
@@ -33,6 +34,18 @@ const menuList = [
 
 export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const pathname = usePathname() || "/mentor/active-classes";
+  const router = useRouter();
+
+  async function handleLogout() {
+    try {
+      await api.post("/api/accounts/logout/", {}, { auth: true });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      clearTokens();
+      router.push("/login");
+    }
+  }
 
   return (
     <div
@@ -97,7 +110,10 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
           user (border + tint bg + teks warna), cuma pakai merah karena ini aksi
           yang beda sifatnya */}
       <div className="px-6 pb-2">
-        <button className="w-full flex items-center justify-center gap-2 border border-[#E11D48]/50 bg-[#E11D48]/10 text-[#E11D48] font-bold py-3 rounded-[8px] hover:bg-[#E11D48] hover:text-white transition-colors text-[14px]">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 border border-[#E11D48]/50 bg-[#E11D48]/10 text-[#E11D48] font-bold py-3 rounded-[8px] hover:bg-[#E11D48] hover:text-white transition-colors text-[14px] cursor-pointer"
+        >
           <LogOut size={16} />
           Logout
         </button>

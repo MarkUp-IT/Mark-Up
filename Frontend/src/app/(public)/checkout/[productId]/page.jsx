@@ -450,9 +450,14 @@ export default function CheckoutDetailPage() {
                   style={{ maxHeight: `${MENTOR_LIST_MAX_HEIGHT}px` }}
                 >
                   {filteredMentors.length === 0 ? (
-                    <p className="text-[#6B7280] text-[12px] text-center py-8">
-                      Mentor &ldquo;{mentorSearch}&rdquo; nggak ketemu.
-                    </p>
+                    <div className="flex flex-col items-center gap-2 text-center py-10 px-4">
+                      <Search size={22} className="text-[#4B3B6B]" />
+                      <p className="text-[#6B7280] text-[12px]">
+                        {mentors.length === 0
+                          ? "Belum ada mentor yang tersedia untuk sesi ini. Coba lagi beberapa saat lagi ya."
+                          : `Mentor "${mentorSearch}" nggak ketemu.`}
+                      </p>
+                    </div>
                   ) : (
                     filteredMentors.map((mentor) => {
                       const isSelected = selectedMentorId === mentor.id;

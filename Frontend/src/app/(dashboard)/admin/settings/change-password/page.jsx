@@ -2,8 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Eye, EyeOff, Check } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Check, X as XIcon } from "lucide-react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
+import { apiRequest } from "@/lib/api";
+
+const PASSWORD_REQUIREMENTS = [
+  { label: "Minimal 8 karakter", test: (pw) => pw.length >= 8 },
+  { label: "Mengandung 1 huruf kapital", test: (pw) => /[A-Z]/.test(pw) },
+  { label: "Mengandung 1 simbol (!@#$%...)", test: (pw) => /[^A-Za-z0-9]/.test(pw) },
+];
 
 export default function AdminChangePassword() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -16,34 +23,36 @@ export default function AdminChangePassword() {
   const [success, setSuccess] = useState(false);
   const [formError, setFormError] = useState("");
 
+  const passwordMet = PASSWORD_REQUIREMENTS.every((r) => r.test(newPassword));
+
   const isValid =
     currentPassword.trim() !== "" &&
-    newPassword.trim() !== "" &&
-    confirmPassword.trim() !== "";
+    passwordMet &&
+    confirmPassword === newPassword;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isValid || isSubmitting) return;
 
-    if (newPassword !== confirmPassword) {
-      setFormError("Konfirmasi password baru nggak sama.");
-      return;
-    }
-    if (newPassword.length < 8) {
-      setFormError("Password baru minimal 8 karakter.");
-      return;
-    }
-
     setFormError("");
     setIsSubmitting(true);
-    // TODO: panggil API ganti password admin beneran
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      await apiRequest("/api/accounts/me/change-password/", {
+        method: "POST",
+        body: { current_password: currentPassword, new_password: newPassword },
+      });
       setSuccess(true);
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    }, 800);
+    } catch (err) {
+      const errors = err?.data?.errors;
+      const message =
+        errors?.current_password?.[0] || errors?.new_password?.[0] || err?.message || "Gagal mengubah password.";
+      setFormError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -145,7 +154,28 @@ export default function AdminChangePassword() {
                   {showNew ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
-              <p className="text-[#94A3B8] text-[11px]">Minimal 8 karakter.</p>
+              {newPassword.length > 0 ? (
+                <ul className="flex flex-col gap-1 mt-0.5">
+                  {PASSWORD_REQUIREMENTS.map((req) => {
+                    const met = req.test(newPassword);
+                    return (
+                      <li
+                        key={req.label}
+                        className={`flex items-center gap-1.5 text-[11px] transition-colors ${
+                          met ? "text-[#148F89]" : "text-[#94A3B8]"
+                        }`}
+                      >
+                        {met ? <Check size={12} /> : <XIcon size={12} />}
+                        {req.label}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-[#94A3B8] text-[11px]">
+                  Minimal 8 karakter, mengandung 1 huruf kapital, dan 1 simbol.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -169,6 +199,9 @@ export default function AdminChangePassword() {
                   {showConfirm ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
+              {confirmPassword.length > 0 && confirmPassword !== newPassword && (
+                <p className="text-[#DC2626] text-[11px]">Konfirmasi password tidak sama.</p>
+              )}
             </div>
 
             <button

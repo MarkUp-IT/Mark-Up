@@ -1,55 +1,47 @@
 "use client";
 
 import { Eye, X, Mail } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
+import { apiRequest } from "@/lib/api";
 
 const STATUS_META = {
   new: { label: "BARU", className: "bg-[#DBEAFE] text-[#1D4ED8]" },
   read: { label: "DIBACA", className: "bg-[#F1F5F9] text-[#475569]" },
 };
 
+function formatDate(dateStr) {
+  if (!dateStr) return "-";
+  return new Date(dateStr).toLocaleString("id-ID", {
+    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
 export default function ContactMessages() {
   const heightFix = `.adm-h-42 { height: 42px; }`;
 
-  // --- MOCK DATA (nanti ganti query contact_messages) ---
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      name: "Bunga Larasati",
-      email: "bunga.larasati@gmail.com",
-      subject: "Tanya soal jadwal mentoring",
-      message:
-        "Halo min, saya udah beli paket mentoring 3 sesi tapi kok sesi ke-2 belum bisa dipilih jadwalnya ya? Mohon infonya.",
-      createdAt: "5 Jul 2026, 16:02",
-      status: "new",
-    },
-    {
-      id: 2,
-      name: "Rizky Aditya",
-      email: "rizky.a@gmail.com",
-      subject: "Bukti transfer nggak keupload",
-      message:
-        "Saya udah transfer tapi pas mau upload bukti error terus, gimana ya solusinya min?",
-      createdAt: "4 Jul 2026, 10:45",
-      status: "new",
-    },
-    {
-      id: 3,
-      name: "Dewi Anggraini",
-      email: "dewi.anggraini@gmail.com",
-      subject: "Kerjasama komunitas kampus",
-      message:
-        "Halo tim MARK-UP, saya dari BEM salah satu kampus di Surabaya, mau ngajak kerjasama buat sosialisasi platform ke mahasiswa. Bisa dijadwalkan diskusi?",
-      createdAt: "1 Jul 2026, 09:30",
-      status: "read",
-    },
-  ]);
-
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedMsg, setSelectedMsg] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const fetchMessages = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiRequest("/api/accounts/contact-messages/");
+      setMessages(res?.messages || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMessages();
+  }, [fetchMessages]);
 
   useEffect(() => {
     document.body.style.overflow = isModalOpen ? "hidden" : "auto";
@@ -58,13 +50,16 @@ export default function ContactMessages() {
     };
   }, [isModalOpen]);
 
-  const openDetail = (msg) => {
+  const openDetail = async (msg) => {
     setSelectedMsg(msg);
     setIsModalOpen(true);
     if (msg.status === "new") {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === msg.id ? { ...m, status: "read" } : m)),
-      );
+      try {
+        await apiRequest(`/api/accounts/contact-messages/${msg.id}/`);
+        setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, status: "read" } : m)));
+      } catch (err) {
+        console.error(err);
+      }
     }
   };
 
@@ -85,26 +80,14 @@ export default function ContactMessages() {
 
       <div className="grid grid-cols-3 gap-5">
         <StatCard label="Total Pesan" value={messages.length} unit="pesan" />
-        <StatCard
-          label="Belum Dibaca"
-          value={newCount}
-          unit="pesan"
-          variant="warning"
-        />
-        <StatCard
-          label="Sudah Dibaca"
-          value={messages.length - newCount}
-          unit="pesan"
-          variant="success"
-        />
+        <StatCard label="Belum Dibaca" value={newCount} unit="pesan" variant="warning" />
+        <StatCard label="Sudah Dibaca" value={messages.length - newCount} unit="pesan" variant="success" />
       </div>
 
       <div className="flex flex-col gap-4">
-        <h2 className="text-[16px] font-semibold text-[#0F172A]">
-          Daftar Pesan
-        </h2>
+        <h2 className="text-[16px] font-semibold text-[#0F172A]">Daftar Pesan</h2>
 
-        {messages.length === 0 ? (
+        {!loading && messages.length === 0 ? (
           <EmptyState message="Belum ada pesan masuk." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm bg-white">
@@ -112,67 +95,29 @@ export default function ContactMessages() {
               <table className="w-full text-[13px] text-left">
                 <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                   <tr>
-                    <th
-                      className="px-6 py-3.5 font-bold text-[#64748B] text-[11px] tracking-wider uppercase"
-                      style={{ width: "220px" }}
-                    >
-                      PENGIRIM
-                    </th>
-                    <th className="px-6 py-3.5 font-bold text-[#64748B] text-[11px] tracking-wider uppercase">
-                      SUBJEK & PESAN
-                    </th>
-                    <th
-                      className="px-6 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider uppercase"
-                      style={{ width: "130px" }}
-                    >
-                      TANGGAL
-                    </th>
-                    <th
-                      className="px-6 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider uppercase"
-                      style={{ width: "100px" }}
-                    >
-                      STATUS
-                    </th>
-                    <th
-                      className="px-6 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider uppercase"
-                      style={{ width: "80px" }}
-                    >
-                      AKSI
-                    </th>
+                    <th className="px-6 py-3.5 font-bold text-[#64748B] text-[11px] tracking-wider uppercase" style={{ width: "220px" }}>PENGIRIM</th>
+                    <th className="px-6 py-3.5 font-bold text-[#64748B] text-[11px] tracking-wider uppercase">SUBJEK & PESAN</th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider uppercase" style={{ width: "130px" }}>TANGGAL</th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider uppercase" style={{ width: "100px" }}>STATUS</th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider uppercase" style={{ width: "80px" }}>AKSI</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0]">
                   {messages.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="hover:bg-[#F8FAFC] transition-colors"
-                    >
+                    <tr key={item.id} className="hover:bg-[#F8FAFC] transition-colors">
                       <td className="px-6 py-5 align-top">
-                        <p className="font-bold text-[#1E293B] text-[13.5px]">
-                          {item.name}
-                        </p>
-                        <p className="text-[#94A3B8] text-[12px]">
-                          {item.email}
-                        </p>
+                        <p className="font-bold text-[#1E293B] text-[13.5px]">{item.name}</p>
+                        <p className="text-[#94A3B8] text-[12px]">{item.email}</p>
                       </td>
-                      <td
-                        className="px-6 py-5 align-top"
-                        style={{ maxWidth: "420px" }}
-                      >
-                        <p className="font-semibold text-[#1E293B] mb-1">
-                          {item.subject}
-                        </p>
-                        <p className="text-[#64748B] text-[12.5px] leading-relaxed line-clamp-2">
-                          {item.message}
-                        </p>
+                      <td className="px-6 py-5 align-top" style={{ maxWidth: "420px" }}>
+                        <p className="font-semibold text-[#1E293B] mb-1">{item.subject}</p>
+                        <p className="text-[#64748B] text-[12.5px] leading-relaxed line-clamp-2">{item.message}</p>
                       </td>
                       <td className="px-6 py-5 align-top text-center text-[#1E293B] font-semibold whitespace-nowrap">
-                        {item.createdAt}
+                        {formatDate(item.created_at)}
                       </td>
                       <td className="px-6 py-5 align-top text-center">
-                        <span
-                          className={`inline-flex px-3 py-1 text-[10px] rounded-full font-bold ${STATUS_META[item.status].className}`}
-                        >
+                        <span className={`inline-flex px-3 py-1 text-[10px] rounded-full font-bold ${STATUS_META[item.status].className}`}>
                           {STATUS_META[item.status].label}
                         </span>
                       </td>
@@ -195,54 +140,30 @@ export default function ContactMessages() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setIsModalOpen(false)}
-          />
-          <div
-            style={{ width: "480px", maxWidth: "100%", maxHeight: "85vh" }}
-            className="relative bg-white overflow-y-auto rounded-[12px] shadow-2xl z-10"
-          >
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
+          <div style={{ width: "480px", maxWidth: "100%", maxHeight: "85vh" }} className="relative bg-white overflow-y-auto rounded-[12px] shadow-2xl z-10">
             <div className="px-6 py-5 border-b border-[#E2E8F0] flex justify-between items-center">
               <div>
-                <p className="text-[#1E293B] font-bold text-[17px]">
-                  {selectedMsg?.subject}
-                </p>
-                <p className="text-[#64748B] text-[12px] mt-0.5">
-                  {selectedMsg?.createdAt}
-                </p>
+                <p className="text-[#1E293B] font-bold text-[17px]">{selectedMsg?.subject}</p>
+                <p className="text-[#64748B] text-[12px] mt-0.5">{formatDate(selectedMsg?.created_at)}</p>
               </div>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-2 text-[#94A3B8] hover:text-[#0F172A] hover:bg-[#F1F5F9] rounded-full transition-colors"
-              >
+              <button onClick={() => setIsModalOpen(false)} className="p-2 text-[#94A3B8] hover:text-[#0F172A] hover:bg-[#F1F5F9] rounded-full transition-colors">
                 <X size={18} />
               </button>
             </div>
 
             <div className="px-6 py-6 flex flex-col gap-5">
               <div className="flex items-center gap-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] p-4">
-                <div
-                  style={{ width: "40px", height: "40px" }}
-                  className="rounded-full bg-[#148F89]/10 flex items-center justify-center shrink-0"
-                >
-                  <span className="text-[#148F89] font-bold text-[15px]">
-                    {selectedMsg?.name?.[0]}
-                  </span>
+                <div style={{ width: "40px", height: "40px" }} className="rounded-full bg-[#148F89]/10 flex items-center justify-center shrink-0">
+                  <span className="text-[#148F89] font-bold text-[15px]">{selectedMsg?.name?.[0]}</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[#1E293B] font-semibold text-[13px]">
-                    {selectedMsg?.name}
-                  </span>
-                  <span className="text-[#64748B] text-[12px]">
-                    {selectedMsg?.email}
-                  </span>
+                  <span className="text-[#1E293B] font-semibold text-[13px]">{selectedMsg?.name}</span>
+                  <span className="text-[#64748B] text-[12px]">{selectedMsg?.email}</span>
                 </div>
               </div>
 
-              <p className="text-[#334155] text-[13.5px] leading-relaxed">
-                {selectedMsg?.message}
-              </p>
+              <p className="text-[#334155] text-[13.5px] leading-relaxed">{selectedMsg?.message}</p>
             </div>
 
             <div className="px-6 py-5 bg-[#F8FAFC] border-t border-[#E2E8F0] flex justify-end gap-3">

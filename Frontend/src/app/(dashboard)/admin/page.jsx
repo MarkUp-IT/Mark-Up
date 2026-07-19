@@ -13,6 +13,7 @@ import {
 import { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
+import EmptyState from "@/component/admin/EmptyState";
 import { api, ApiError } from "@/lib/api";
 
 const PERIOD_FILTERS = [
@@ -57,52 +58,25 @@ export default function AdminDashboard() {
   const [revenue, setRevenue] = useState(null);
   const [counts, setCounts] = useState(null);
   const [userSummary, setUserSummary] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const logs = [
-    {
-      id: "#A001",
-      username: "Nicco C. P.",
-      role: "CIO",
-      action: "Menambah Produk #B0001",
-      entity: "Produk/Bootcamp",
-      timestamp: "24 Okt 2026 · 14:22",
-      status: "PUBLISHED",
-    },
-    {
-      id: "#U011",
-      username: "Faisal A.",
-      role: "Associate IT",
-      action: "Mengubah Produk #ME003",
-      entity: "Produk/Mentoring",
-      timestamp: "24 Okt 2026 · 11:05",
-      status: "SCHEDULED",
-    },
-    {
-      id: "#A101",
-      username: "Muhammad A.",
-      role: "Associate IT",
-      action: "Menambah Lomba #W001",
-      entity: "Lomba/UI-UX",
-      timestamp: "23 Okt 2026 · 09:25",
-      status: "PUBLISHED",
-    },
-    {
-      id: "#R121",
-      username: "Affan F. D.",
-      role: "Associate IT",
-      action: "Menghapus Lomba #H005",
-      entity: "Lomba/Hackathon",
-      timestamp: "23 Okt 2026 · 04:28",
-      status: "REMOVED",
-    },
-  ];
+  const getActionBadgeStyle = (action) => {
+    switch (action) {
+      case "CREATE": return "bg-[#DCFCE7] text-[#166534]";
+      case "UPDATE": return "bg-[#DBEAFE] text-[#1D4ED8]";
+      case "DELETE": return "bg-[#FEE2E2] text-[#991B1B]";
+      default: return "bg-[#F1F5F9] text-[#475569]";
+    }
+  };
 
-  const statusMeta = {
-    PUBLISHED: "bg-[#DCFCE7] text-[#166534]",
-    SCHEDULED: "bg-[#DBEAFE] text-[#1D4ED8]",
-    REMOVED: "bg-[#FEE2E2] text-[#991B1B]",
+  const formatLogDate = (dateStr) => {
+    if (!dateStr) return "-";
+    return new Date(dateStr).toLocaleString("id-ID", {
+      day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+    });
   };
 
   const fetchDashboard = useCallback(async (period) => {
@@ -145,9 +119,25 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  const fetchLogs = useCallback(async () => {
+    setLogsLoading(true);
+    try {
+      const res = await api.get("/api/accounts/audit-logs/");
+      setLogs((res?.logs || []).slice(0, 5));
+    } catch (err) {
+      console.error("Audit Logs API Error:", err);
+    } finally {
+      setLogsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchDashboard(activePeriod);
   }, [activePeriod, fetchDashboard]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
 
   return (
     <DashboardLayout title="Dashboard">
@@ -180,7 +170,10 @@ export default function AdminDashboard() {
               </button>
             ))}
           </div>
-          <button className="adm-h-42 flex items-center gap-2 px-5 rounded-[8px] bg-[#148F89] text-white text-[13px] font-semibold hover:bg-[#117A75] transition-colors shrink-0">
+          <button
+            onClick={() => window.print()}
+            className="adm-h-42 flex items-center gap-2 px-5 rounded-[8px] bg-[#148F89] text-white text-[13px] font-semibold hover:bg-[#117A75] transition-colors shrink-0"
+          >
             <Download size={15} />
             Ekspor PDF
           </button>
@@ -291,72 +284,62 @@ export default function AdminDashboard() {
           </a>
         </div>
 
-        <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-[13px] text-left">
-              <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
-                <tr>
-                  <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
-                    ID LOG
-                  </th>
-                  <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">
-                    ADMIN
-                  </th>
-                  <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
-                    AKSI
-                  </th>
-                  <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
-                    TARGET
-                  </th>
-                  <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
-                    WAKTU
-                  </th>
-                  <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
-                    STATUS
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E2E8F0] bg-white">
-                {logs.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="hover:bg-[#F8FAFC] transition-colors"
-                  >
-                    <td className="px-6 py-4 text-center text-[#64748B] font-medium">
-                      {item.id}
-                    </td>
-                    <td className="px-6 py-4 text-left">
-                      <p className="text-[#1E293B] font-semibold">
-                        {item.username}
-                      </p>
-                      <p className="text-[#94A3B8] text-[12px] mt-0.5">
-                        {item.role}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4 text-center text-[#1E293B] font-medium">
-                      {item.action}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="inline-flex px-3 py-1 text-[11px] rounded-[6px] font-semibold bg-[#F1F5F9] text-[#475569]">
-                        {item.entity}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center text-[#64748B] font-medium whitespace-nowrap">
-                      {item.timestamp}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span
-                        className={`inline-flex px-3 py-1 text-[11px] rounded-full font-bold ${statusMeta[item.status]}`}
-                      >
-                        {item.status}
-                      </span>
-                    </td>
+        {!logsLoading && logs.length === 0 ? (
+          <EmptyState message="Belum ada aktivitas administratif yang tercatat." />
+        ) : (
+          <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px] text-left">
+                <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                  <tr>
+                    <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">
+                      ADMIN
+                    </th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
+                      AKSI
+                    </th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
+                      TABEL
+                    </th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
+                      WAKTU
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-[#E2E8F0] bg-white">
+                  {logs.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="hover:bg-[#F8FAFC] transition-colors"
+                    >
+                      <td className="px-6 py-4 text-left">
+                        <p className="text-[#1E293B] font-semibold">
+                          {item.admin_name}
+                        </p>
+                        <p className="text-[#94A3B8] text-[12px] mt-0.5">
+                          {item.admin_email}
+                        </p>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span
+                          className={`inline-flex px-3 py-1 text-[11px] rounded-full font-bold ${getActionBadgeStyle(item.action)}`}
+                        >
+                          {item.action}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center text-[#1E293B] font-medium">
+                        {item.table}
+                      </td>
+                      <td className="px-6 py-4 text-center text-[#64748B] font-medium whitespace-nowrap">
+                        {formatLogDate(item.created_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </DashboardLayout>
   );

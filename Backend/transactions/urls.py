@@ -6,8 +6,15 @@ from .views import (
     get_transactions,
     get_user_purchased_product_detail,
     get_user_purchased_products,
-    get_product_revenue_summary,
-    checkout_product
+    checkout_product,
+    verify_transaction,
+    get_my_transactions,
+    get_referral_codes,
+    add_referral_code,
+    update_referral_code,
+    get_payouts,
+    mark_payout_paid,
+    get_my_payouts,
 )
 
 urlpatterns = [
@@ -15,7 +22,14 @@ urlpatterns = [
     path("checkout/", checkout_product, name="checkout_product"),
     path("summary/revenue/", get_revenue_summary, name="api_transactions_revenue_summary"),
     path("summary/purchases/", get_product_purchase_counts, name="api_transactions_purchase_counts"),
-    path("summary/revenue/", get_product_revenue_summary, name="api_product_revenue_summary"),
+    path("me/transactions/", get_my_transactions, name="api_my_transactions"),
     path("me/products/", get_user_purchased_products, name="api_user_purchased_products"),
     path("me/products/<uuid:product_id>/", get_user_purchased_product_detail, name="api_user_purchased_product_detail"),
+    path("me/payouts/", get_my_payouts, name="api_my_payouts"),
+    path("referral-codes/", get_referral_codes, name="api_referral_codes_list"),
+    path("referral-codes/add/", add_referral_code, name="api_referral_codes_add"),
+    path("referral-codes/<uuid:referral_code_id>/", update_referral_code, name="api_referral_codes_update"),
+    path("payouts/", get_payouts, name="api_payouts_list"),
+    path("payouts/<uuid:payout_id>/mark-paid/", mark_payout_paid, name="api_payouts_mark_paid"),
+    path("<str:transaction_id>/verify/", verify_transaction, name="api_transaction_verify"),
 ]
