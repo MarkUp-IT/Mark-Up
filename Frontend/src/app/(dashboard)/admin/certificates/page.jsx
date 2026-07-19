@@ -13,6 +13,8 @@ import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
+import { toast } from "sonner";
+import { fieldBorderClass as fieldBorder } from "@/lib/formErrors";
 
 const TYPE_BADGE = {
   participant: "bg-[#DBEAFE] text-[#1D4ED8] border border-[#BFDBFE]",
@@ -128,14 +130,21 @@ export default function Certificates() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setErrors(data?.errors || { detail: data?.detail || "Gagal menerbitkan sertifikat." });
+        const nextErrors = data?.errors || { detail: data?.detail || "Gagal menerbitkan sertifikat." };
+        setErrors(nextErrors);
+        toast.error("Gagal Menerbitkan Sertifikat", {
+          description: Object.values(nextErrors).flat().join(" "),
+        });
         return;
       }
 
       setIsAddOpen(false);
       fetchCertificates();
+      toast.success("Sertifikat Diterbitkan", { description: `Nomor ${number.trim()} berhasil diterbitkan.` });
     } catch (err) {
-      setErrors({ detail: err?.message || "Gagal menerbitkan sertifikat." });
+      const message = err?.message || "Gagal menerbitkan sertifikat.";
+      setErrors({ detail: message });
+      toast.error("Gagal Menerbitkan Sertifikat", { description: message });
     } finally {
       setSaving(false);
     }
@@ -326,9 +335,12 @@ export default function Certificates() {
             <input
               type="text"
               value={number}
-              onChange={(e) => setNumber(e.target.value)}
+              onChange={(e) => {
+                setNumber(e.target.value);
+                setErrors((prev) => (prev.number ? { ...prev, number: undefined } : prev));
+              }}
               placeholder="Contoh: MKUP/BC001/2026/0044"
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B] font-mono"
+              className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] font-mono ${fieldBorder(errors, "number")}`}
             />
             {errors.number && <p className="text-[#DC2626] text-[11px]">{errors.number[0]}</p>}
           </div>

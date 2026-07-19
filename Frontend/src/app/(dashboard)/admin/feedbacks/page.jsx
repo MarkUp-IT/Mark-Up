@@ -6,6 +6,8 @@ import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { toast } from "sonner";
+import { extractErrorMessage } from "@/lib/formErrors";
 
 function StarRating({ rating }) {
   return (
@@ -52,8 +54,11 @@ export default function Feedbacks() {
     try {
       await apiRequest(`/api/products/reviews/${id}/toggle/`, { method: "PATCH" });
       fetchReviews();
+      toast.success("Status Ulasan Diperbarui");
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal Mengubah Status Ulasan", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     }
   };
 

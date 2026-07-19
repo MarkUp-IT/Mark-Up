@@ -24,8 +24,10 @@ import { useState, useEffect } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
+import CurrencyInput from "@/component/admin/CurrencyInput";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
+import { extractErrorMessage, extractFieldErrors, fieldBorderClass as fieldBorder } from "@/lib/formErrors";
 
 const CATEGORY_FILTERS = ["Semua", "Mentoring", "Bootcamp", "Modul"];
 const STATUS_FILTERS = ["Semua", "Aktif", "Nonaktif"];
@@ -53,6 +55,8 @@ export default function Products() {
   const [viewProduct, setViewProduct] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [formCategory, setFormCategory] = useState("Bootcamp");
+  const [addFieldErrors, setAddFieldErrors] = useState({});
+  const [editFieldErrors, setEditFieldErrors] = useState({});
 
   const [purchaseSummary, setPurchaseSummary] = useState(null);
   const [productSummary, setProductSummary] = useState(null);
@@ -320,6 +324,7 @@ export default function Products() {
   const handlePublish = async () => {
     try {
       setSubmitting(true);
+      setAddFieldErrors({});
 
       const payload = {
         ...formData,
@@ -347,16 +352,12 @@ export default function Products() {
       setPagination(data.pagination ?? null);
     } catch (err) {
       console.error(err);
-
-      if (err instanceof ApiError) {
-        showToast("error", "Gagal menerbitkan produk", err.message);
-      } else {
-        showToast(
-          "error",
-          "Gagal menerbitkan produk",
-          "Terjadi kesalahan. Coba lagi."
-        );
-      }
+      setAddFieldErrors(extractFieldErrors(err));
+      showToast(
+        "error",
+        "Gagal menerbitkan produk",
+        extractErrorMessage(err, "Terjadi kesalahan. Coba lagi.")
+      );
     } finally {
       setSubmitting(false);
     }
@@ -367,6 +368,7 @@ export default function Products() {
 
     try {
       setSubmitting(true);
+      setEditFieldErrors({});
 
       const payload = {
         ...editFormData,
@@ -405,16 +407,12 @@ export default function Products() {
       setPagination(data.pagination ?? null);
     } catch (err) {
       console.error(err);
-
-      if (err instanceof ApiError) {
-        showToast("error", "Gagal memperbarui produk", err.message);
-      } else {
-        showToast(
-          "error",
-          "Gagal memperbarui produk",
-          "Terjadi kesalahan. Coba lagi."
-        );
-      }
+      setEditFieldErrors(extractFieldErrors(err));
+      showToast(
+        "error",
+        "Gagal memperbarui produk",
+        extractErrorMessage(err, "Terjadi kesalahan. Coba lagi.")
+      );
     } finally {
       setSubmitting(false);
     }
@@ -820,14 +818,18 @@ export default function Products() {
             </p>
             <input
                 value={formData.title}
-                onChange={(e) =>
+                onChange={(e) => {
                     setFormData((prev) => ({
                         ...prev,
                         title: e.target.value,
-                    }))
-                }
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                    }));
+                    setAddFieldErrors((prev) => (prev.title ? { ...prev, title: undefined } : prev));
+                }}
+                className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(addFieldErrors, "title")}`}
             />
+            {addFieldErrors.title && (
+              <p className="text-red-500 text-[11px]">{addFieldErrors.title}</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -871,14 +873,18 @@ export default function Products() {
             </p>
             <input
                 value={formData.description}
-                onChange={(e)=>
+                onChange={(e) => {
                     setFormData(prev=>({
                         ...prev,
                         description:e.target.value
-                    }))
-                }
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                    }));
+                    setAddFieldErrors((prev) => (prev.description ? { ...prev, description: undefined } : prev));
+                }}
+                className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(addFieldErrors, "description")}`}
             />
+            {addFieldErrors.description && (
+              <p className="text-red-500 text-[11px]">{addFieldErrors.description}</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -887,15 +893,19 @@ export default function Products() {
             </p>
             <textarea
                 value={formData.explanation}
-                onChange={(e)=>
+                onChange={(e) => {
                     setFormData(prev=>({
                         ...prev,
                         explanation:e.target.value
-                    }))
-                }
+                    }));
+                    setAddFieldErrors((prev) => (prev.explanation ? { ...prev, explanation: undefined } : prev));
+                }}
                 rows={4}
-                className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3 outline-none focus:border-[#148F89] transition-all text-[#1E293B] resize-none"
+                className={`w-full bg-[#F8FAFC] border rounded-[8px] px-4 py-3 outline-none transition-all text-[#1E293B] resize-none ${fieldBorder(addFieldErrors, "explanation")}`}
             />
+            {addFieldErrors.explanation && (
+              <p className="text-red-500 text-[11px]">{addFieldErrors.explanation}</p>
+            )}
           </div>
 
           {renderCategorySpecificFields(formData, setFormData, formCategory)}
@@ -925,17 +935,21 @@ export default function Products() {
                 <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
                   Harga (Rp)
                 </p>
-                <input
-                  type="number"
+                <CurrencyInput
+                  name="original_price"
                   value={formData.original_price}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setFormData((prev) => ({
                       ...prev,
                       original_price: e.target.value,
-                    }))
-                  }
-                  className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89]"
+                    }));
+                    setAddFieldErrors((prev) => (prev.original_price ? { ...prev, original_price: undefined } : prev));
+                  }}
+                  className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] pr-4 outline-none transition-all ${fieldBorder(addFieldErrors, "original_price")}`}
                 />
+                {addFieldErrors.original_price && (
+                  <p className="text-red-500 text-[11px]">{addFieldErrors.original_price}</p>
+                )}
               </div>
               <div className="flex flex-col gap-2 flex-1">
                 <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
@@ -1009,11 +1023,15 @@ export default function Products() {
             <input
               type="text"
               value={editFormData.title}
-              onChange={(e) =>
-                setEditFormData((prev) => ({ ...prev, title: e.target.value }))
-              }
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              onChange={(e) => {
+                setEditFormData((prev) => ({ ...prev, title: e.target.value }));
+                setEditFieldErrors((prev) => (prev.title ? { ...prev, title: undefined } : prev));
+              }}
+              className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(editFieldErrors, "title")}`}
             />
+            {editFieldErrors.title && (
+              <p className="text-red-500 text-[11px]">{editFieldErrors.title}</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -1046,14 +1064,18 @@ export default function Products() {
             </p>
             <input
               value={editFormData.description}
-              onChange={(e) =>
+              onChange={(e) => {
                 setEditFormData((prev) => ({
                   ...prev,
                   description: e.target.value,
-                }))
-              }
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                }));
+                setEditFieldErrors((prev) => (prev.description ? { ...prev, description: undefined } : prev));
+              }}
+              className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(editFieldErrors, "description")}`}
             />
+            {editFieldErrors.description && (
+              <p className="text-red-500 text-[11px]">{editFieldErrors.description}</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -1062,14 +1084,18 @@ export default function Products() {
             </p>
             <textarea
               value={editFormData.explanation}
-              onChange={(e) =>
+              onChange={(e) => {
                 setEditFormData((prev) => ({
                   ...prev,
                   explanation: e.target.value,
-                }))
-              }
-              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                }));
+                setEditFieldErrors((prev) => (prev.explanation ? { ...prev, explanation: undefined } : prev));
+              }}
+              className={`w-full bg-[#F8FAFC] border rounded-[8px] px-4 py-3 outline-none transition-all text-[#1E293B] ${fieldBorder(editFieldErrors, "explanation")}`}
             />
+            {editFieldErrors.explanation && (
+              <p className="text-red-500 text-[11px]">{editFieldErrors.explanation}</p>
+            )}
           </div>
 
           {renderCategorySpecificFields(editFormData, setEditFormData, formCategory)}
@@ -1096,17 +1122,21 @@ export default function Products() {
                 <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
                   Harga (Rp)
                 </p>
-                <input
-                  type="number"
+                <CurrencyInput
+                  name="original_price"
                   value={editFormData.original_price}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setEditFormData((prev) => ({
                       ...prev,
                       original_price: e.target.value,
-                    }))
-                  }
-                  className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                    }));
+                    setEditFieldErrors((prev) => (prev.original_price ? { ...prev, original_price: undefined } : prev));
+                  }}
+                  className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] pr-4 outline-none transition-all text-[#1E293B] ${fieldBorder(editFieldErrors, "original_price")}`}
                 />
+                {editFieldErrors.original_price && (
+                  <p className="text-red-500 text-[11px]">{editFieldErrors.original_price}</p>
+                )}
               </div>
               <div className="flex flex-col gap-2 flex-1">
                 <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">

@@ -3,7 +3,6 @@
 import {
   Plus,
   Download,
-  ChevronDown,
   X,
   ImageIcon,
   PenLine,
@@ -14,8 +13,11 @@ import { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
+import CategoryDropdown from "@/component/admin/CategoryDropdown";
+import CurrencyInput from "@/component/admin/CurrencyInput";
 import { toast } from "sonner";
-import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
+import { extractErrorMessage, extractFieldErrors, fieldBorderClass as fieldBorder } from "@/lib/formErrors";
 
 const STATUS_FILTERS = ["Semua", "Aktif", "Kedaluwarsa"];
 
@@ -60,16 +62,6 @@ function toDateInputValue(iso) {
   return iso.slice(0, 10);
 }
 
-function extractErrorMessage(err, fallback) {
-  if (err instanceof ApiError) {
-    if (err.data?.errors) {
-      return Object.values(err.data.errors).flat().join(" ");
-    }
-    return err.message || fallback;
-  }
-  return fallback;
-}
-
 export default function Competitions() {
   const heightFix = `.adm-h-42 { height: 42px; } .adm-h-48 { height: 48px; }`;
 
@@ -94,10 +86,12 @@ export default function Competitions() {
   const [addForm, setAddForm] = useState(EMPTY_FORM);
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [addError, setAddError] = useState(null);
+  const [addFieldErrors, setAddFieldErrors] = useState({});
 
   const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState(null);
+  const [editFieldErrors, setEditFieldErrors] = useState({});
 
   const fetchCompetitions = useCallback(async () => {
     setLoading(true);
@@ -224,17 +218,20 @@ export default function Competitions() {
   function handleAddChange(e) {
     const { name, value } = e.target;
     setAddForm((prev) => ({ ...prev, [name]: value }));
+    setAddFieldErrors((prev) => (prev[name] ? { ...prev, [name]: undefined } : prev));
   }
 
   function handleEditChange(e) {
     const { name, value } = e.target;
     setEditForm((prev) => ({ ...prev, [name]: value }));
+    setEditFieldErrors((prev) => (prev[name] ? { ...prev, [name]: undefined } : prev));
   }
 
   async function handleAddSubmit(e) {
     e.preventDefault();
     setAddSubmitting(true);
     setAddError(null);
+    setAddFieldErrors({});
 
     try {
       const data = await api.post(
@@ -269,6 +266,7 @@ export default function Competitions() {
         `"${addForm.title}" berhasil dipublikasikan.`
       );
     } catch (err) {
+      setAddFieldErrors(extractFieldErrors(err));
       showToast(
         "error",
         "Gagal Menambahkan Lomba",
@@ -286,6 +284,7 @@ export default function Competitions() {
 
     setEditSubmitting(true);
     setEditError(null);
+    setEditFieldErrors({});
 
     try {
       const data = await api.patch(
@@ -316,6 +315,7 @@ export default function Competitions() {
         `"${editForm.title}" berhasil diperbarui.`
       );
     } catch (err) {
+      setEditFieldErrors(extractFieldErrors(err));
       showToast(
         "error",
         "Gagal Memperbarui Lomba",
@@ -615,8 +615,11 @@ export default function Competitions() {
               onChange={handleAddChange}
               required
               placeholder="Masukkan judul lomba..."
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(addFieldErrors, "title")}`}
             />
+            {addFieldErrors.title && (
+              <p className="text-red-500 text-[11px]">{addFieldErrors.title}</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -630,37 +633,27 @@ export default function Competitions() {
               onChange={handleAddChange}
               required
               placeholder="Masukkan penyelenggara..."
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(addFieldErrors, "organizer")}`}
             />
+            {addFieldErrors.organizer && (
+              <p className="text-red-500 text-[11px]">{addFieldErrors.organizer}</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
               Kategori
             </p>
-            <div className="relative w-full">
-              <select
-                name="category"
-                value={addForm.category}
-                onChange={handleAddChange}
-                required
-                disabled={categories.length === 0}
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B] disabled:opacity-60"
-              >
-                {categories.length === 0 && (
-                  <option value="">Memuat kategori...</option>
-                )}
-                {categories.map((c) => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={18}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
-              />
-            </div>
+            <CategoryDropdown
+              categories={categories}
+              value={addForm.category}
+              onChange={handleAddChange}
+              onCategoriesChanged={fetchCategories}
+              hasError={!!addFieldErrors.category}
+            />
+            {addFieldErrors.category && (
+              <p className="text-red-500 text-[11px]">{addFieldErrors.category}</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -700,8 +693,11 @@ export default function Competitions() {
                 value={addForm.deadline}
                 onChange={handleAddChange}
                 required
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(addFieldErrors, "deadline")}`}
               />
+              {addFieldErrors.deadline && (
+                <p className="text-red-500 text-[11px]">{addFieldErrors.deadline}</p>
+              )}
             </div>
           </div>
 
@@ -724,26 +720,24 @@ export default function Competitions() {
               <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
                 Biaya Pendaftaran (Rp)
               </p>
-              <input
-                type="number"
+              <CurrencyInput
                 name="registration_fee"
                 value={addForm.registration_fee}
                 onChange={handleAddChange}
                 placeholder="0"
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] pr-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
               />
             </div>
             <div className="flex flex-col gap-2 flex-1">
               <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
                 Total Hadiah / Prizepool (Rp)
               </p>
-              <input
-                type="number"
+              <CurrencyInput
                 name="prizepool"
                 value={addForm.prizepool}
                 onChange={handleAddChange}
                 placeholder="Kalau ada"
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] pr-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
               />
             </div>
           </div>
@@ -826,8 +820,11 @@ export default function Competitions() {
               value={editForm.title}
               onChange={handleEditChange}
               required
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(editFieldErrors, "title")}`}
             />
+            {editFieldErrors.title && (
+              <p className="text-red-500 text-[11px]">{editFieldErrors.title}</p>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
@@ -839,36 +836,26 @@ export default function Competitions() {
               value={editForm.organizer}
               onChange={handleEditChange}
               required
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(editFieldErrors, "organizer")}`}
             />
+            {editFieldErrors.organizer && (
+              <p className="text-red-500 text-[11px]">{editFieldErrors.organizer}</p>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
               Kategori
             </p>
-            <div className="relative w-full">
-              <select
-                name="category"
-                value={editForm.category}
-                onChange={handleEditChange}
-                required
-                disabled={categories.length === 0}
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B] disabled:opacity-60"
-              >
-                {categories.length === 0 && (
-                  <option value="">Memuat kategori...</option>
-                )}
-                {categories.map((c) => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={18}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
-              />
-            </div>
+            <CategoryDropdown
+              categories={categories}
+              value={editForm.category}
+              onChange={handleEditChange}
+              onCategoriesChanged={fetchCategories}
+              hasError={!!editFieldErrors.category}
+            />
+            {editFieldErrors.category && (
+              <p className="text-red-500 text-[11px]">{editFieldErrors.category}</p>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
@@ -892,8 +879,11 @@ export default function Competitions() {
               value={editForm.deadline}
               onChange={handleEditChange}
               required
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(editFieldErrors, "deadline")}`}
             />
+            {editFieldErrors.deadline && (
+              <p className="text-red-500 text-[11px]">{editFieldErrors.deadline}</p>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">

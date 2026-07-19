@@ -7,6 +7,8 @@ import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { toast } from "sonner";
+import { extractErrorMessage } from "@/lib/formErrors";
 
 function formatDate(dateStr) {
   if (!dateStr) return "-";
@@ -52,8 +54,11 @@ export default function ModuleOrders() {
         },
       });
       fetchModules();
+      toast.success(item.is_active ? "Modul Disembunyikan" : "Modul Ditampilkan");
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal Mengubah Status Modul", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     }
   };
 

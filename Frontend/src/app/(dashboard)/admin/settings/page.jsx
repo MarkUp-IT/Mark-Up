@@ -5,6 +5,8 @@ import { Camera, Lock } from "lucide-react";
 import Link from "next/link";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
+import { toast } from "sonner";
+import { extractErrorMessage } from "@/lib/formErrors";
 
 export default function AdminSettings() {
   const [fullName, setFullName] = useState("");
@@ -37,8 +39,11 @@ export default function AdminSettings() {
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
+      toast.success("Profil Diperbarui");
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal Memperbarui Profil", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -57,9 +62,14 @@ export default function AdminSettings() {
         body: formData,
       });
       const data = await res.json().catch(() => null);
-      if (res.ok) setProfileImage(data.profile_image);
+      if (res.ok) {
+        setProfileImage(data.profile_image);
+        toast.success("Foto Profil Diperbarui");
+      } else {
+        toast.error("Gagal Mengunggah Foto", { description: data?.detail || "Terjadi kesalahan." });
+      }
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal Mengunggah Foto", { description: err?.message || "Terjadi kesalahan." });
     } finally {
       setIsUploadingPhoto(false);
     }

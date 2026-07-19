@@ -3,6 +3,8 @@ from django.urls import path
 from .views import (
     add_competition,
     get_categories,
+    add_category,
+    update_category,
     get_competition_summary,
     get_competitions,
     update_competition,
@@ -15,6 +17,8 @@ from .views import (
 urlpatterns = [
     path("", get_competitions, name="api_competition_list"),
     path("categories/", get_categories, name="api_competition_categories"),
+    path("categories/add/", add_category, name="api_competition_category_add"),
+    path("categories/<uuid:category_id>/", update_category, name="api_competition_category_update"),
     path("summary/", get_competition_summary, name="api_products_summary"),
     path("add/", add_competition, name="api_competition_add"),
     path("bootcamp-batches/", get_bootcamp_batches, name="api_bootcamp_batches_list"),

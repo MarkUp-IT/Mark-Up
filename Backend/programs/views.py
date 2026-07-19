@@ -57,6 +57,70 @@ def get_categories(request):
     return JsonResponse({"categories": data}, status=200)
 
 
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def add_category(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    name = (request_data.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"errors": {"name": ["Nama kategori diperlukan."]}}, status=400)
+
+    if CompetitionCategory.objects.filter(name__iexact=name).exists():
+        return JsonResponse({"errors": {"name": ["Kategori dengan nama ini sudah ada."]}}, status=400)
+
+    category = CompetitionCategory.objects.create(name=name)
+
+    return JsonResponse(
+        {
+            "detail": "Kategori berhasil ditambahkan.",
+            "category": {"id": str(category.id), "name": category.name},
+        },
+        status=201,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_category(request, category_id):
+    if request.method not in ["PUT", "PATCH"]:
+        return HttpResponseNotAllowed(["PUT", "PATCH"])
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    try:
+        category = CompetitionCategory.objects.get(id=category_id)
+    except CompetitionCategory.DoesNotExist:
+        return JsonResponse({"detail": "Kategori tidak ditemukan."}, status=404)
+
+    name = (request_data.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"errors": {"name": ["Nama kategori diperlukan."]}}, status=400)
+
+    if CompetitionCategory.objects.filter(name__iexact=name).exclude(id=category.id).exists():
+        return JsonResponse({"errors": {"name": ["Kategori dengan nama ini sudah ada."]}}, status=400)
+
+    category.name = name
+    category.save(update_fields=["name"])
+
+    return JsonResponse(
+        {
+            "detail": "Kategori berhasil diperbarui.",
+            "category": {"id": str(category.id), "name": category.name},
+        },
+        status=200,
+    )
+
+
 def get_competitions(request):
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])

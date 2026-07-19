@@ -14,7 +14,10 @@ import { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
+import CurrencyInput from "@/component/admin/CurrencyInput";
 import { apiRequest } from "@/lib/api";
+import { toast } from "sonner";
+import { extractErrorMessage, extractFieldErrors, fieldBorderClass as fieldBorder } from "@/lib/formErrors";
 
 const heightFix = `.adm-h-42 { height: 42px; } .adm-h-48 { height: 48px; }`;
 
@@ -180,6 +183,7 @@ export default function ReferralCodes() {
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState(emptyForm);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const fetchCodes = useCallback(async () => {
     try {
@@ -240,12 +244,15 @@ export default function ReferralCodes() {
       });
       fetchCodes();
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal Mengubah Status", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     }
   };
 
   const openAdd = () => {
     setForm(emptyForm);
+    setFieldErrors({});
     setIsAddOpen(true);
   };
 
@@ -261,12 +268,14 @@ export default function ReferralCodes() {
       selectedIds: item.product_ids,
       search: "",
     });
+    setFieldErrors({});
     setIsEditOpen(true);
   };
 
   const handleCreate = async () => {
     if (!form.code.trim() || !form.discountValue || !form.quota) return;
     setSaving(true);
+    setFieldErrors({});
     try {
       await apiRequest("/api/transactions/referral-codes/add/", {
         method: "POST",
@@ -282,8 +291,12 @@ export default function ReferralCodes() {
       });
       setIsAddOpen(false);
       fetchCodes();
+      toast.success("Kode Referral Dibuat", { description: `"${form.code.trim().toUpperCase()}" siap dipakai.` });
     } catch (err) {
-      console.error(err);
+      setFieldErrors(extractFieldErrors(err));
+      toast.error("Gagal Membuat Kode Referral", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     } finally {
       setSaving(false);
     }
@@ -292,6 +305,7 @@ export default function ReferralCodes() {
   const handleSaveEdit = async () => {
     if (!editingCode) return;
     setSaving(true);
+    setFieldErrors({});
     try {
       await apiRequest(`/api/transactions/referral-codes/${editingCode.id}/`, {
         method: "PATCH",
@@ -308,8 +322,12 @@ export default function ReferralCodes() {
       setIsEditOpen(false);
       setEditingCode(null);
       fetchCodes();
+      toast.success("Perubahan Disimpan", { description: `Kode "${form.code.trim().toUpperCase()}" berhasil diperbarui.` });
     } catch (err) {
-      console.error(err);
+      setFieldErrors(extractFieldErrors(err));
+      toast.error("Gagal Memperbarui Kode Referral", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     } finally {
       setSaving(false);
     }
@@ -437,10 +455,14 @@ export default function ReferralCodes() {
             <input
               type="text"
               value={form.code}
-              onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, code: e.target.value }));
+                setFieldErrors((prev) => (prev.code ? { ...prev, code: undefined } : prev));
+              }}
               placeholder="Contoh: LAUNCH2026"
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B] font-mono uppercase"
+              className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] font-mono uppercase ${fieldBorder(fieldErrors, "code")}`}
             />
+            {fieldErrors.code && <p className="text-red-500 text-[11px]">{fieldErrors.code}</p>}
           </div>
 
           <div className="flex gap-4 w-full">
@@ -460,24 +482,32 @@ export default function ReferralCodes() {
             </div>
             <div className="flex flex-col gap-2 flex-1">
               <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Nilai Diskon</p>
-              <input
-                type="number"
-                value={form.discountValue}
-                onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
-                placeholder="0"
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
-              />
+              {form.discountType === "fixed" ? (
+                <CurrencyInput
+                  value={form.discountValue}
+                  onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
+                  placeholder="0"
+                  className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] pr-4 outline-none transition-all text-[#1E293B] ${fieldBorder(fieldErrors, "discount_value")}`}
+                />
+              ) : (
+                <input
+                  type="number"
+                  value={form.discountValue}
+                  onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
+                  placeholder="0"
+                  className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(fieldErrors, "discount_value")}`}
+                />
+              )}
             </div>
           </div>
 
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Maks. Potongan (opsional)</p>
-            <input
-              type="number"
+            <CurrencyInput
               value={form.maxDiscount}
               onChange={(e) => setForm((f) => ({ ...f, maxDiscount: e.target.value }))}
               placeholder="Cuma berlaku buat tipe persentase"
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] pr-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
 
@@ -486,10 +516,14 @@ export default function ReferralCodes() {
             <input
               type="number"
               value={form.quota}
-              onChange={(e) => setForm((f) => ({ ...f, quota: e.target.value }))}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, quota: e.target.value }));
+                setFieldErrors((prev) => (prev.quota ? { ...prev, quota: undefined } : prev));
+              }}
               placeholder="Berapa kali kode ini boleh dipakai"
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(fieldErrors, "quota")}`}
             />
+            {fieldErrors.quota && <p className="text-red-500 text-[11px]">{fieldErrors.quota}</p>}
           </div>
 
           <ScopeSelector
@@ -550,9 +584,13 @@ export default function ReferralCodes() {
             <input
               type="text"
               value={form.code}
-              onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B] font-mono uppercase"
+              onChange={(e) => {
+                setForm((f) => ({ ...f, code: e.target.value }));
+                setFieldErrors((prev) => (prev.code ? { ...prev, code: undefined } : prev));
+              }}
+              className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] font-mono uppercase ${fieldBorder(fieldErrors, "code")}`}
             />
+            {fieldErrors.code && <p className="text-red-500 text-[11px]">{fieldErrors.code}</p>}
           </div>
 
           <div className="flex gap-4 w-full">
@@ -572,23 +610,30 @@ export default function ReferralCodes() {
             </div>
             <div className="flex flex-col gap-2 flex-1">
               <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Nilai Diskon</p>
-              <input
-                type="number"
-                value={form.discountValue}
-                onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
-                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
-              />
+              {form.discountType === "fixed" ? (
+                <CurrencyInput
+                  value={form.discountValue}
+                  onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
+                  className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] pr-4 outline-none transition-all text-[#1E293B] ${fieldBorder(fieldErrors, "discount_value")}`}
+                />
+              ) : (
+                <input
+                  type="number"
+                  value={form.discountValue}
+                  onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
+                  className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(fieldErrors, "discount_value")}`}
+                />
+              )}
             </div>
           </div>
 
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Maks. Potongan (opsional)</p>
-            <input
-              type="number"
+            <CurrencyInput
               value={form.maxDiscount}
               onChange={(e) => setForm((f) => ({ ...f, maxDiscount: e.target.value }))}
               placeholder="Cuma berlaku buat tipe persentase"
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] pr-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
 
@@ -597,9 +642,13 @@ export default function ReferralCodes() {
             <input
               type="number"
               value={form.quota}
-              onChange={(e) => setForm((f) => ({ ...f, quota: e.target.value }))}
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              onChange={(e) => {
+                setForm((f) => ({ ...f, quota: e.target.value }));
+                setFieldErrors((prev) => (prev.quota ? { ...prev, quota: undefined } : prev));
+              }}
+              className={`w-full adm-h-48 bg-[#F8FAFC] border rounded-[8px] px-4 outline-none transition-all text-[#1E293B] ${fieldBorder(fieldErrors, "quota")}`}
             />
+            {fieldErrors.quota && <p className="text-red-500 text-[11px]">{fieldErrors.quota}</p>}
             {editingCode && Number(form.quota) < editingCode.used_count && (
               <p className="text-[#DC2626] text-[11px]">
                 Kuota nggak boleh kurang dari {editingCode.used_count} (jumlah yang udah kepake).
