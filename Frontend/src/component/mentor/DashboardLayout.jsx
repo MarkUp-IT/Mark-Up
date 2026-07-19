@@ -1,7 +1,16 @@
+"use client";
+
 import Sidebar from "./Sidebar";
 import Header from "./Header";
+import { useAuthGuard } from "@/lib/useAuthGuard";
 
 export default function DashboardLayout({ title, children }) {
+  const { profile, checked } = useAuthGuard(["MENTOR"]);
+
+  if (!checked) {
+    return <div style={{ backgroundColor: "#0F081C" }} className="w-full min-h-screen" />;
+  }
+
   return (
     <div
       style={{ backgroundColor: "#0F081C" }}
@@ -27,7 +36,12 @@ export default function DashboardLayout({ title, children }) {
         style={{ marginLeft: "288px" }}
         className="flex flex-col min-h-screen"
       >
-        <Header title={title} />
+        <Header
+          title={title}
+          profileName={profile?.profile_name}
+          email={profile?.email}
+          avatarSrc={profile?.avatar_src}
+        />
 
         <main className="flex-1 py-8 px-8">
           <div

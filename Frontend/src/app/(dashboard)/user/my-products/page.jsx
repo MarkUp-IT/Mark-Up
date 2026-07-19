@@ -179,10 +179,10 @@ export default function MyProducts() {
           `/api/products/my-products/${ratingProduct.id}/rate/`,
           {
               method: "POST",
-              body: JSON.stringify({
+              body: {
                   rating: ratingValue,
                   review_text: ratingText,
-              }),
+              },
           }
       );
 
@@ -304,7 +304,7 @@ export default function MyProducts() {
               <EmptyState
                 message="Kamu belum punya produk bootcamp."
                 ctaLabel="Jelajahi Produk"
-                ctaHref="/produk"
+                ctaHref="/products"
               />
             )
           ) : (
@@ -354,7 +354,7 @@ export default function MyProducts() {
               <EmptyState
                 message="Kamu belum punya sesi mentoring."
                 ctaLabel="Jelajahi Produk"
-                ctaHref="/produk"
+                ctaHref="/products"
               />
             )
           ) : (
@@ -399,7 +399,7 @@ export default function MyProducts() {
             <EmptyState
               message="Kamu belum punya modul."
               ctaLabel="Jelajahi Produk"
-              ctaHref="/produk"
+              ctaHref="/products"
             />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

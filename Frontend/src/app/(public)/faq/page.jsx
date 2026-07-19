@@ -30,7 +30,7 @@ const faqData = {
     },
     {
       q: "Apakah pembayaran di Mark-Up bisa dicicil?",
-      a: "Saat ini seluruh pembayaran di Mark-Up dilakukan secara penuh (lunas) melalui payment gateway iPaymu. Sistem cicilan belum tersedia, tapi bisa jadi akan kami hadirkan untuk program Bootcamp bernilai besar di masa mendatang.",
+      a: "Saat ini seluruh pembayaran di Mark-Up dilakukan secara penuh (lunas) lewat transfer bank manual. Sistem cicilan belum tersedia, tapi bisa jadi akan kami hadirkan untuk program Bootcamp bernilai besar di masa mendatang.",
     },
     {
       q: "Bisakah saya melakukan refund jika batal mengikuti kelas?",
@@ -112,7 +112,7 @@ const faqData = {
     },
     {
       q: "Bagaimana cara menghapus akun saya?",
-      a: 'Masuk ke Pengaturan Akun, lalu buka bagian "Zona Berbahaya" di bagian paling bawah. Perlu diingat, penghapusan akun bersifat permanen dan akan menghilangkan seluruh riwayat produk, sertifikat, dan transaksimu.',
+      a: 'Masuk ke Pengaturan Akun, lalu buka bagian "Zona Berbahaya" di bagian paling bawah. Akunmu akan dinonaktifkan dan nggak bisa dipakai login lagi, tapi riwayat produk, sertifikat, dan transaksimu tetap tersimpan sebagai catatan.',
     },
   ],
 };
@@ -309,7 +309,7 @@ export default function FAQPage() {
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-3 mt-2">
             <a
-              href="https://wa.me/6281234567890"
+              href="https://wa.me/62895414588925"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold text-sm py-3 px-6 rounded-full transition-colors"
@@ -318,7 +318,7 @@ export default function FAQPage() {
               Hubungi Support
             </a>
             <a
-              href="mailto:support@markup.id"
+              href="mailto:markup.ofc@gmail.com"
               className="flex items-center gap-2 border border-white/20 text-white font-bold text-sm py-3 px-6 rounded-full hover:bg-white/10 transition-colors"
             >
               <Mail size={16} />

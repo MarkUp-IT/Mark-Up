@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ChevronLeft,
@@ -10,112 +10,95 @@ import {
   Check,
 } from "lucide-react";
 import DashboardLayout from "@/component/mentor/DashboardLayout";
+import { apiRequest } from "@/lib/api";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#148F89] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0F081C]";
 
 const allTimeSlots = [
-  "07:00",
-  "08:00",
-  "09:00",
-  "10:00",
-  "11:00",
-  "12:00",
-  "13:00",
-  "14:00",
-  "15:00",
-  "16:00",
-  "17:00",
-  "18:00",
-  "19:00",
-  "20:00",
-  "21:00",
+  "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00",
+  "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00",
 ];
 
 const daysOfWeek = ["MIN", "SEN", "SEL", "RAB", "KAM", "JUM", "SAB"];
+const monthLabels = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
 
-// Juni 2026: 31 Mei jatuh di hari Minggu, jadi 1 Juni di kolom Senin --
-// dipetain ke Date asli beneran biar mode "Pilih Rentang" bisa dihitung
-// presisi terhadap tanggal kalender ini, bukan cuma teks statis.
-function cellToRealDate(item) {
-  if (item.isCurrentMonth) return new Date(2026, 5, parseInt(item.date, 10));
-  return parseInt(item.date, 10) > 20
-    ? new Date(2026, 4, parseInt(item.date, 10))
-    : new Date(2026, 6, parseInt(item.date, 10));
+function pad2(n) {
+  return String(n).padStart(2, "0");
 }
 
-// --- MOCK DATA: slot sekarang objek { time, status, menteeName }, bukan
-// cuma array string -- status "booked" dikunci, nggak bisa dimatiin mentor
-// sendiri (itu udah ada mentee yang janjian di jam itu).
-const initialCalendarData = [
-  { date: "31", isCurrentMonth: false, slots: [] },
-  { date: "1", isCurrentMonth: true, slots: [] },
-  {
-    date: "2",
-    isCurrentMonth: true,
-    slots: [
-      { time: "09:00", status: "available" },
-      { time: "10:00", status: "available" },
-      { time: "13:00", status: "booked", menteeName: "Fathir Ramadhan" },
-      { time: "14:00", status: "available" },
-    ],
-  },
-  { date: "3", isCurrentMonth: true, slots: [] },
-  { date: "4", isCurrentMonth: true, slots: [] },
-  { date: "5", isCurrentMonth: true, slots: [] },
-  {
-    date: "6",
-    isCurrentMonth: true,
-    slots: [
-      { time: "09:00", status: "available" },
-      { time: "18:00", status: "booked", menteeName: "Sarah Jenkins" },
-    ],
-  },
-  {
-    date: "7",
-    isCurrentMonth: true,
-    slots: [
-      { time: "09:00", status: "available" },
-      { time: "20:00", status: "available" },
-    ],
-  },
-  { date: "8", isCurrentMonth: true, slots: [] },
-  { date: "9", isCurrentMonth: true, slots: [] },
-  { date: "10", isCurrentMonth: true, slots: [] },
-  { date: "11", isCurrentMonth: true, slots: [] },
-  { date: "12", isCurrentMonth: true, slots: [] },
-  { date: "13", isCurrentMonth: true, slots: [] },
-  { date: "14", isCurrentMonth: true, slots: [] },
-  { date: "15", isCurrentMonth: true, slots: [] },
-  { date: "16", isCurrentMonth: true, slots: [] },
-  { date: "17", isCurrentMonth: true, slots: [] },
-  { date: "18", isCurrentMonth: true, slots: [] },
-  {
-    date: "19",
-    isCurrentMonth: true,
-    isToday: true,
-    slots: [
-      { time: "09:00", status: "available" },
-      { time: "13:00", status: "available" },
-      { time: "18:00", status: "available" },
-    ],
-  },
-  { date: "20", isCurrentMonth: true, slots: [] },
-  { date: "21", isCurrentMonth: true, slots: [] },
-  { date: "22", isCurrentMonth: true, slots: [] },
-  { date: "23", isCurrentMonth: true, slots: [] },
-  { date: "24", isCurrentMonth: true, slots: [] },
-  { date: "25", isCurrentMonth: true, slots: [] },
-  { date: "26", isCurrentMonth: true, slots: [] },
-  { date: "27", isCurrentMonth: true, slots: [] },
-  { date: "28", isCurrentMonth: true, slots: [] },
-  { date: "29", isCurrentMonth: true, slots: [] },
-  { date: "30", isCurrentMonth: true, slots: [] },
-  { date: "1", isCurrentMonth: false, slots: [] },
-  { date: "2", isCurrentMonth: false, slots: [] },
-  { date: "3", isCurrentMonth: false, slots: [] },
-  { date: "4", isCurrentMonth: false, slots: [] },
-];
+// Ekstrak tanggal & jam dalam zona WIB dari ISO string, terlepas dari zona
+// waktu browser yang buka halaman ini.
+function toJakartaParts(isoString) {
+  const d = new Date(isoString);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const map = {};
+  parts.forEach((p) => {
+    map[p.type] = p.value;
+  });
+  const hour = map.hour === "24" ? "00" : map.hour;
+  return {
+    dateStr: `${map.year}-${map.month}-${map.day}`,
+    time: `${hour}:${map.minute}`,
+  };
+}
+
+function nextHour(time) {
+  const [h] = time.split(":").map(Number);
+  return `${pad2((h + 1) % 24)}:00`;
+}
+
+function buildMonthGrid(year, month) {
+  const firstOfMonth = new Date(year, month, 1);
+  const startOffset = firstOfMonth.getDay(); // 0 = Minggu
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+  const todayStr = toJakartaParts(new Date().toISOString()).dateStr;
+
+  const cells = [];
+  for (let i = 0; i < startOffset; i++) {
+    const date = daysInPrevMonth - startOffset + i + 1;
+    const d = new Date(year, month - 1, date);
+    cells.push({
+      date,
+      isCurrentMonth: false,
+      dateStr: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(date)}`,
+    });
+  }
+  for (let date = 1; date <= daysInMonth; date++) {
+    const dateStr = `${year}-${pad2(month + 1)}-${pad2(date)}`;
+    cells.push({
+      date,
+      isCurrentMonth: true,
+      isToday: dateStr === todayStr,
+      dateStr,
+    });
+  }
+  let nextDate = 1;
+  while (cells.length % 7 !== 0 || cells.length < 42) {
+    const d = new Date(year, month + 1, nextDate);
+    cells.push({
+      date: nextDate,
+      isCurrentMonth: false,
+      dateStr: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(nextDate)}`,
+    });
+    nextDate++;
+    if (cells.length >= 42) break;
+  }
+  return cells;
+}
 
 export default function MentoringSchedule() {
   const darkModeFix = `
@@ -125,11 +108,17 @@ export default function MentoringSchedule() {
     .ms-accent { background-color: #148F89; }
   `;
 
-  const [calendarData, setCalendarData] = useState(initialCalendarData);
+  const today = new Date();
+  const [cursor, setCursor] = useState({
+    year: today.getFullYear(),
+    month: today.getMonth(),
+  });
+  const [slots, setSlots] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  // modalMode: null (tertutup) | "single" (1 tanggal) | "range" (banyak tanggal)
   const [modalMode, setModalMode] = useState(null);
-  const [activeCellIndex, setActiveCellIndex] = useState(null);
+  const [activeDateStr, setActiveDateStr] = useState(null);
   const [selectedTimeSlots, setSelectedTimeSlots] = useState([]);
   const [rangeStart, setRangeStart] = useState("");
   const [rangeEnd, setRangeEnd] = useState("");
@@ -143,6 +132,47 @@ export default function MentoringSchedule() {
     viewport: { once: true },
   };
 
+  const fetchAvailability = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiRequest("/api/mentors/me/availability/");
+      setSlots(res?.availability || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAvailability();
+  }, [fetchAvailability]);
+
+  const slotsByDate = useMemo(() => {
+    const map = {};
+    for (const slot of slots) {
+      const { dateStr, time } = toJakartaParts(slot.start_time);
+      if (!map[dateStr]) map[dateStr] = [];
+      map[dateStr].push({
+        id: slot.id,
+        time,
+        status: slot.is_booked ? "booked" : "available",
+        menteeName: slot.mentee_name,
+      });
+    }
+    Object.values(map).forEach((arr) => arr.sort((a, b) => a.time.localeCompare(b.time)));
+    return map;
+  }, [slots]);
+
+  const calendarData = useMemo(
+    () =>
+      buildMonthGrid(cursor.year, cursor.month).map((cell) => ({
+        ...cell,
+        slots: slotsByDate[cell.dateStr] || [],
+      })),
+    [cursor, slotsByDate],
+  );
+
   useEffect(() => {
     document.body.style.overflow = modalMode ? "hidden" : "auto";
     return () => {
@@ -152,18 +182,28 @@ export default function MentoringSchedule() {
 
   const closeModal = () => {
     setModalMode(null);
-    setActiveCellIndex(null);
+    setActiveDateStr(null);
     setSelectedTimeSlots([]);
   };
 
-  // Buka modal buat SATU tanggal -- slot yang udah "available" di tanggal
-  // itu langsung ke-preselect (sebelumnya selalu nampilin 6 jam hardcode
-  // yang sama nggak peduli tanggal mana yang diklik).
-  const openSingleDateModal = (item, index) => {
-    if (!item.isCurrentMonth) return;
-    setActiveCellIndex(index);
+  const goPrevMonth = () => {
+    setCursor((c) => {
+      const m = c.month - 1;
+      return m < 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: m };
+    });
+  };
+  const goNextMonth = () => {
+    setCursor((c) => {
+      const m = c.month + 1;
+      return m > 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: m };
+    });
+  };
+
+  const openSingleDateModal = (cell) => {
+    if (!cell.isCurrentMonth) return;
+    setActiveDateStr(cell.dateStr);
     setSelectedTimeSlots(
-      item.slots.filter((s) => s.status === "available").map((s) => s.time),
+      cell.slots.filter((s) => s.status === "available").map((s) => s.time),
     );
     setModalMode("single");
   };
@@ -175,70 +215,85 @@ export default function MentoringSchedule() {
     setModalMode("range");
   };
 
-  // Jam yang statusnya "booked" di tanggal aktif -- ini yang dikunci,
-  // mentor nggak bisa matiin slot yang udah ada mentee-nya.
-  const bookedSlotsForActiveCell =
-    activeCellIndex !== null
-      ? calendarData[activeCellIndex].slots.filter((s) => s.status === "booked")
-      : [];
-  const bookedTimes = bookedSlotsForActiveCell.map((s) => s.time);
+  const activeCell = calendarData.find((c) => c.dateStr === activeDateStr) || null;
+  const bookedTimes = (activeCell?.slots || [])
+    .filter((s) => s.status === "booked")
+    .map((s) => s.time);
 
   const toggleTimeSlot = (time) => {
-    if (bookedTimes.includes(time)) return; // terkunci, nggak bisa diapa-apain
+    if (modalMode === "single" && bookedTimes.includes(time)) return;
     setSelectedTimeSlots((prev) =>
       prev.includes(time) ? prev.filter((t) => t !== time) : [...prev, time],
     );
   };
 
-  const handleApplySingle = () => {
-    setCalendarData((prev) =>
-      prev.map((item, idx) => {
-        if (idx !== activeCellIndex) return item;
-        const booked = item.slots.filter((s) => s.status === "booked");
-        const newAvailable = selectedTimeSlots.map((time) => ({
-          time,
-          status: "available",
-        }));
-        return {
-          ...item,
-          slots: [...booked, ...newAvailable].sort((a, b) =>
-            a.time.localeCompare(b.time),
-          ),
-        };
-      }),
-    );
-    closeModal();
+  async function addSlot(dateStr, time) {
+    await apiRequest("/api/mentors/availability/add/", {
+      method: "POST",
+      body: {
+        start_date: dateStr,
+        end_date: dateStr,
+        start_time: time,
+        end_time: nextHour(time),
+      },
+    });
+  }
+
+  async function removeSlot(id) {
+    await apiRequest(`/api/mentors/me/availability/${id}/`, { method: "DELETE" });
+  }
+
+  const handleApplySingle = async () => {
+    if (!activeCell) return;
+    setSaving(true);
+    try {
+      const existingAvailable = activeCell.slots.filter((s) => s.status === "available");
+      const existingTimes = existingAvailable.map((s) => s.time);
+
+      const toAdd = selectedTimeSlots.filter((t) => !existingTimes.includes(t));
+      const toRemove = existingAvailable.filter((s) => !selectedTimeSlots.includes(s.time));
+
+      await Promise.all([
+        ...toAdd.map((time) => addSlot(activeDateStr, time)),
+        ...toRemove.map((s) => removeSlot(s.id)),
+      ]);
+
+      await fetchAvailability();
+      closeModal();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleApplyRange = () => {
+  const handleApplyRange = async () => {
     if (!rangeStart || !rangeEnd || selectedTimeSlots.length === 0) return;
-    const start = new Date(rangeStart);
-    const end = new Date(rangeEnd);
+    setSaving(true);
+    try {
+      const start = new Date(`${rangeStart}T00:00:00`);
+      const end = new Date(`${rangeEnd}T00:00:00`);
+      const calls = [];
 
-    setCalendarData((prev) =>
-      prev.map((item) => {
-        if (!item.isCurrentMonth) return item;
-        const cellDate = cellToRealDate(item);
-        if (cellDate < start || cellDate > end) return item;
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+        const existingTimes = (slotsByDate[dateStr] || []).map((s) => s.time);
+        for (const time of selectedTimeSlots) {
+          if (!existingTimes.includes(time)) {
+            calls.push(addSlot(dateStr, time));
+          }
+        }
+      }
 
-        const existingTimes = item.slots.map((s) => s.time);
-        const additions = selectedTimeSlots
-          .filter((t) => !existingTimes.includes(t))
-          .map((time) => ({ time, status: "available" }));
-
-        return {
-          ...item,
-          slots: [...item.slots, ...additions].sort((a, b) =>
-            a.time.localeCompare(b.time),
-          ),
-        };
-      }),
-    );
-    closeModal();
+      await Promise.all(calls);
+      await fetchAvailability();
+      closeModal();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
   };
-
-  const activeCell =
-    activeCellIndex !== null ? calendarData[activeCellIndex] : null;
 
   return (
     <DashboardLayout title="Jadwal Mentoring">
@@ -259,7 +314,7 @@ export default function MentoringSchedule() {
       >
         <div className="flex flex-col gap-1">
           <h2 className="font-bold text-[20px] sm:text-[24px] text-white">
-            Juni 2026
+            {monthLabels[cursor.month]} {cursor.year}
           </h2>
           <p className="text-[#9CA3AF] text-[13px] italic">
             *Klik tanggal buat atur jam di hari itu, atau pakai &quot;Pilih
@@ -269,12 +324,14 @@ export default function MentoringSchedule() {
         <div className="flex items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-2">
             <button
+              onClick={goPrevMonth}
               aria-label="Bulan sebelumnya"
               className={`w-[36px] h-[36px] rounded-[8px] ms-panel border border-[#2D2342] flex items-center justify-center text-[#9CA3AF] hover:text-white hover:bg-[#2D1B4E] transition-colors ${focusRing}`}
             >
               <ChevronLeft size={20} />
             </button>
             <button
+              onClick={goNextMonth}
               aria-label="Bulan berikutnya"
               className={`w-[36px] h-[36px] rounded-[8px] ms-panel border border-[#2D2342] flex items-center justify-center text-[#9CA3AF] hover:text-white hover:bg-[#2D1B4E] transition-colors ${focusRing}`}
             >
@@ -290,7 +347,6 @@ export default function MentoringSchedule() {
         </div>
       </motion.div>
 
-      {/* Legenda -- biar dua warna badge (available vs booked) kebaca jelas */}
       <div className="flex items-center gap-5 text-[12px] text-[#9CA3AF]">
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full bg-[#148F89]/20 border border-[#148F89]/50" />
@@ -325,7 +381,7 @@ export default function MentoringSchedule() {
               return (
                 <button
                   key={index}
-                  onClick={() => openSingleDateModal(item, index)}
+                  onClick={() => openSingleDateModal(item)}
                   disabled={!item.isCurrentMonth}
                   style={{ minHeight: "140px" }}
                   className={`p-3 flex flex-col gap-2 text-left transition-colors ${
@@ -354,7 +410,11 @@ export default function MentoringSchedule() {
                       slot.status === "booked" ? (
                         <span
                           key={slotIndex}
-                          title={`Dibooking ${slot.menteeName}`}
+                          title={
+                            slot.menteeName
+                              ? `Dibooking ${slot.menteeName}`
+                              : "Sudah dibooking"
+                          }
                           className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold bg-[#D1D83E]/10 text-[#D1D83E] border border-[#D1D83E]/30"
                         >
                           <Lock size={9} />
@@ -377,7 +437,10 @@ export default function MentoringSchedule() {
         </div>
       </div>
 
-      {/* --- MODAL: single/range --- */}
+      {loading && (
+        <p className="text-[#6B7280] text-[13px] text-center">Memuat jadwal...</p>
+      )}
+
       {modalMode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
           <div
@@ -403,8 +466,6 @@ export default function MentoringSchedule() {
                       <input
                         type="date"
                         value={rangeStart}
-                        min="2026-06-01"
-                        max="2026-06-30"
                         onChange={(e) => setRangeStart(e.target.value)}
                         style={{ height: "46px" }}
                         className={`w-full ms-inset border border-[#2D2342] rounded-[8px] px-3.5 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
@@ -417,8 +478,7 @@ export default function MentoringSchedule() {
                       <input
                         type="date"
                         value={rangeEnd}
-                        min={rangeStart || "2026-06-01"}
-                        max="2026-06-30"
+                        min={rangeStart || undefined}
                         onChange={(e) => setRangeEnd(e.target.value)}
                         style={{ height: "46px" }}
                         className={`w-full ms-inset border border-[#2D2342] rounded-[8px] px-3.5 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
@@ -442,7 +502,7 @@ export default function MentoringSchedule() {
                         Tanggal
                       </span>
                       <span className="text-[#E2E8F0] font-bold text-[14px]">
-                        {activeCell?.date} Juni 2026
+                        {activeDateStr}
                       </span>
                     </div>
                     <CalendarIcon
@@ -507,15 +567,14 @@ export default function MentoringSchedule() {
                     modalMode === "range" ? handleApplyRange : handleApplySingle
                   }
                   disabled={
-                    modalMode === "range"
-                      ? !rangeStart ||
-                        !rangeEnd ||
-                        selectedTimeSlots.length === 0
-                      : false
+                    saving ||
+                    (modalMode === "range"
+                      ? !rangeStart || !rangeEnd || selectedTimeSlots.length === 0
+                      : false)
                   }
                   className={`px-6 py-2.5 ms-accent text-white font-bold text-[13px] rounded-[8px] hover:bg-[#117A75] transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${focusRing}`}
                 >
-                  Terapkan
+                  {saving ? "Menyimpan..." : "Terapkan"}
                 </button>
               </div>
             </div>

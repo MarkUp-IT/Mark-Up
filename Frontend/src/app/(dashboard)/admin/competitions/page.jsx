@@ -14,7 +14,7 @@ import { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
-import Toast from "@/component/Toast";
+import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 
 const STATUS_FILTERS = ["Semua", "Aktif", "Kedaluwarsa"];
@@ -135,20 +135,9 @@ export default function Competitions() {
     }
   }, []);
 
-  const [toast, setToast] =useState({
-    open: false,
-    type: "success",
-    title: "",
-    message: "",
-  });
-
   function showToast(type, title, message) {
-    setToast({
-      open: true,
-      type,
-      title,
-      message,
-    });
+    if (type === "error") toast.error(title, { description: message });
+    else toast.success(title, { description: message });
   }
 
   useEffect(() => {
@@ -937,18 +926,6 @@ export default function Competitions() {
           </button>
         </div>
       </form>
-      <Toast
-        open={toast.open}
-        type={toast.type}
-        title={toast.title}
-        message={toast.message}
-        onClose={() =>
-          setToast((prev) => ({
-            ...prev,
-            open: false,
-          }))
-        }
-      />
     </DashboardLayout>
   );
 }

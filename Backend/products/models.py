@@ -166,6 +166,7 @@ class Review(BaseModel):
         blank=True,
         null=True,
     )
+    is_hidden = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -189,6 +190,7 @@ class UserLibrary(models.Model):
         related_name="user_libraries",
     )
     purchased_at = models.DateTimeField(auto_now_add=True)
+    is_revoked = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "User Library"
@@ -316,6 +318,7 @@ class RefundRequest(models.Model):
         default=RefundStatus.PENDING,
     )
     admin_fee_percent = models.PositiveIntegerField(default=10)
+    admin_notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(blank=True, null=True)
 
@@ -327,4 +330,35 @@ class RefundRequest(models.Model):
     def __str__(self) -> str:
         return f"RefundRequest {self.id} ({self.status})"
 
-    
+
+class CertificateType(models.TextChoices):
+    PARTICIPANT = "participant", "Participant"
+    INSTRUCTOR = "instructor", "Instructor"
+
+
+class Certificate(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    number = models.CharField(max_length=100, unique=True)
+    type = models.CharField(max_length=20, choices=CertificateType.choices)
+    recipient = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="certificates",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="certificates",
+    )
+    file = models.FileField(upload_to="certificates/%Y/%m/")
+    issued_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Certificate"
+        verbose_name_plural = "Certificates"
+        ordering = ["-issued_at"]
+
+    def __str__(self) -> str:
+        return self.number

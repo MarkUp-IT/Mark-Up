@@ -10,6 +10,8 @@ from .utils import get_request_data
 from .forms import MentoringProductForm, ModuleProductForm, BootcampProductForm
 from .models import (
     BootcampSession,
+    Certificate,
+    CertificateType,
     MentoringSession,
     Product,
     ProductType,
@@ -18,7 +20,8 @@ from .models import (
     UserLibrary,
 )
 from accounts.decorators import jwt_required, role_required
-from accounts.models import UserRole
+from accounts.models import User, UserRole, AuditAction
+from accounts.utils import log_audit
 from django.db.models import Q
 from mentors.models import MentorAvailability
 from django.views.decorators.csrf import csrf_exempt
@@ -142,7 +145,7 @@ def _serialize_product_item(p):
         item.update({
             "title": detail.title,
             "description": detail.description,
-            "full_description": detail.explanation,
+            "explanation": detail.explanation,
             "image_url": detail.image_url,
             "original_price": str(detail.original_price) if detail.original_price is not None else None,
             "new_price": str(detail.new_price) if detail.new_price is not None else None,
@@ -203,7 +206,7 @@ def _serialize_bootcamp_session(session):
         "order": session.order,
         "title": session.title,
         "mentor": mentor.user.fullname if mentor else None,
-        "mentor_id": mentor.user.username if mentor else None,
+        "mentor_id": str(mentor.id) if mentor else None,
         "start_time": session.start_time.isoformat() if session.start_time else None,
         "status": session.status,
         "meeting_link": session.meeting_link,
@@ -217,7 +220,7 @@ def _serialize_mentoring_session(session):
         "id": str(session.id),
         "order": session.order,
         "mentor": mentor.user.fullname,
-        "mentor_id": mentor.user.username,
+        "mentor_id": str(mentor.id),
         "start_time": session.start_time.isoformat() if session.start_time else None,
         "status": session.status,
         "zoom_link": session.zoom_link,
@@ -232,7 +235,7 @@ def _get_user_library(request, product_id):
             "product__mentoring_detail",
             "product__module_detail",
             "product__bootcamp_detail",
-        ).get(user=request.user, product_id=product_id)
+        ).get(user=request.user, product_id=product_id, is_revoked=False)
     except UserLibrary.DoesNotExist:
         return None
 
@@ -261,7 +264,7 @@ def get_my_products(request):
 
     filter_value = (request.GET.get("filter") or "semua").lower()
     user_libraries = list(
-        UserLibrary.objects.filter(user=request.user)
+        UserLibrary.objects.filter(user=request.user, is_revoked=False)
         .select_related(
             "product",
             "product__mentoring_detail",
@@ -417,6 +420,11 @@ def rate_my_product(request, product_id):
         review_text=review_text,
     )
 
+    from mentors.utils import get_mentors_for_product, recompute_mentor_rating
+
+    for mentor in get_mentors_for_product(product.id):
+        recompute_mentor_rating(mentor)
+
     return JsonResponse(
         {
             "id": str(review.id),
@@ -567,6 +575,11 @@ def add_product(request):
     detail.product = product
     detail.save()
 
+    log_audit(
+        request, AuditAction.CREATE, "products", object_id=product.id,
+        new_data=_format_product_response(product, detail),
+    )
+
     return JsonResponse(
         {
             "detail": "Penambahan produk berhasil.",
@@ -581,16 +594,26 @@ def get_products(request):
         return HttpResponseNotAllowed(["GET"])
 
     fetch_all = request.GET.get("all") == "true"
+    # Storefront publik cuma boleh liat produk aktif; admin (list manajemen
+    # produk) butuh liat SEMUA produk termasuk yang di-nonaktifkan, jadi bisa
+    # dikelola/diaktifkan lagi -- tanpa flag ini produk nonaktif hilang total
+    # dari tabel admin begitu di-nonaktifkan.
+    include_inactive = request.GET.get("include_inactive") == "true"
 
-    products = Product.objects.filter(
-		Q(mentoring_detail__is_active=True) |
-		Q(module_detail__is_active=True) |
-		Q(bootcamp_detail__is_active=True)
-	).select_related(
+    base_qs = Product.objects.select_related(
 		"mentoring_detail", "module_detail", "bootcamp_detail"
 	).prefetch_related(
 		"mentoring_detail__highlights"
 	).order_by("-created_at")
+
+    if fetch_all or include_inactive:
+        products = base_qs
+    else:
+        products = base_qs.filter(
+            Q(mentoring_detail__is_active=True) |
+            Q(module_detail__is_active=True) |
+            Q(bootcamp_detail__is_active=True)
+        )
 
     if fetch_all:
         page_obj = None
@@ -649,6 +672,112 @@ def get_product(request, product_id):
         return JsonResponse({"detail": "Produk tidak ditemukan."}, status=404)
 
     return JsonResponse(_serialize_product_item(product), status=200)
+
+def _serialize_refund_request(refund):
+    user_library = refund.user_library
+    detail = _get_product_detail(user_library.product)
+    return {
+        "id": str(refund.id),
+        "user_name": user_library.user.fullname,
+        "product_title": detail.title if detail else None,
+        "reason": refund.reason,
+        "status": refund.status,
+        "admin_fee_percent": refund.admin_fee_percent,
+        "admin_notes": refund.admin_notes,
+        "created_at": refund.created_at.isoformat(),
+        "resolved_at": refund.resolved_at.isoformat() if refund.resolved_at else None,
+    }
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_refund_requests(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    refunds = RefundRequest.objects.select_related(
+        "user_library__user",
+        "user_library__product__mentoring_detail",
+        "user_library__product__module_detail",
+        "user_library__product__bootcamp_detail",
+    ).order_by("-created_at")
+
+    status_filter = request.GET.get("status")
+    if status_filter:
+        refunds = refunds.filter(status=status_filter)
+
+    return JsonResponse(
+        {"refund_requests": [_serialize_refund_request(r) for r in refunds]},
+        status=200,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_refund_request(request, refund_id):
+    if request.method not in ["PATCH", "PUT"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT"])
+
+    try:
+        refund = RefundRequest.objects.select_related("user_library__user", "user_library__product").get(id=refund_id)
+    except RefundRequest.DoesNotExist:
+        return JsonResponse({"detail": "Pengajuan refund tidak ditemukan."}, status=404)
+
+    if refund.status != RefundRequest.RefundStatus.PENDING:
+        return JsonResponse({"detail": "Pengajuan ini sudah diproses sebelumnya."}, status=400)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    decision = request_data.get("decision")
+    if decision not in ("approved", "rejected"):
+        return JsonResponse({"detail": "decision harus 'approved' atau 'rejected'."}, status=400)
+
+    old_status = refund.status
+    refund.status = decision
+    refund.admin_notes = request_data.get("admin_notes", "")
+    refund.resolved_at = timezone.now()
+
+    if decision == "approved":
+        from transactions.models import Transaction, TransactionItem, PaymentStatus as TxPaymentStatus
+
+        user_library = refund.user_library
+        user_library.is_revoked = True
+        user_library.save()
+
+        # Bebasin lagi slot mentor yang masih terjadwal biar bisa dibooking user lain.
+        for session in user_library.mentoring_sessions.filter(status="scheduled", availability_slot__isnull=False):
+            session.availability_slot.is_booked = False
+            session.availability_slot.save()
+
+        # Cari transaksi PAID yang paling cocok (user+produk) buat ditandai REFUNDED.
+        # products.UserLibrary belum nyimpen link balik langsung ke Transaction,
+        # jadi ini best-effort match berdasarkan user+produk+status PAID terbaru.
+        matching_item = (
+            TransactionItem.objects.filter(
+                transaction__user=user_library.user,
+                product=user_library.product,
+                transaction__payment_status=TxPaymentStatus.PAID,
+            )
+            .select_related("transaction")
+            .order_by("-transaction__created_at")
+            .first()
+        )
+        if matching_item:
+            matching_item.transaction.payment_status = TxPaymentStatus.REFUNDED
+            matching_item.transaction.save()
+
+    refund.save()
+
+    log_audit(
+        request, AuditAction.UPDATE, "refund_requests", object_id=refund.id,
+        old_data={"status": old_status}, new_data={"status": refund.status},
+    )
+
+    return JsonResponse(_serialize_refund_request(refund), status=200)
+
 
 @jwt_required
 @role_required(UserRole.ADMIN)
@@ -723,7 +852,13 @@ def update_product(request, product_id):
 			errors["non_field_errors"] = list(non_field)
 		return JsonResponse({"errors": errors}, status=400)
 
+	old_data = _format_product_response(product, detail)
 	detail = detail_form.save()
+
+	log_audit(
+		request, AuditAction.UPDATE, "products", object_id=product.id,
+		old_data=old_data, new_data=_format_product_response(product, detail),
+	)
 
 	return JsonResponse(
 		{
@@ -732,3 +867,294 @@ def update_product(request, product_id):
 		},
 		status=200,
 	)
+
+
+@csrf_exempt
+def product_detail_view(request, product_id):
+	# get_product & update_product sebelumnya nabrak di satu path yang sama
+	# (`<uuid:product_id>/` didaftarin 2x di urls.py) -- karena Django resolve
+	# URL pattern secara berurutan tanpa peduli method, request PATCH/PUT ke
+	# situ selalu ke-tangkep get_product duluan dan update_product jadi dead
+	# code. Satu dispatcher ini gantiin keduanya di urls.py.
+	if request.method == "GET":
+		return get_product(request, product_id)
+	return update_product(request, product_id)
+
+
+def _serialize_certificate(cert):
+    detail = _get_product_detail(cert.product) if cert.product_id else None
+    return {
+        "id": str(cert.id),
+        "number": cert.number,
+        "type": cert.type,
+        "recipient_id": str(cert.recipient_id),
+        "recipient_name": cert.recipient.fullname,
+        "product_id": str(cert.product_id) if cert.product_id else None,
+        "product_title": detail.title if detail else None,
+        "file_url": cert.file.url if cert.file else None,
+        "issued_at": cert.issued_at.isoformat(),
+    }
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_certificates(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    certs = Certificate.objects.select_related(
+        "recipient", "product__mentoring_detail", "product__module_detail", "product__bootcamp_detail"
+    ).order_by("-issued_at")
+
+    search = request.GET.get("search")
+    if search:
+        certs = certs.filter(
+            Q(number__icontains=search) | Q(recipient__fullname__icontains=search)
+        )
+
+    return JsonResponse(
+        {"certificates": [_serialize_certificate(c) for c in certs]}, status=200
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def issue_certificate(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    request_data = request.POST if request.content_type.startswith("multipart") else get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid payload."}, status=400)
+
+    number = request_data.get("number")
+    cert_type = request_data.get("type")
+    recipient_id = request_data.get("recipient_id")
+    product_id = request_data.get("product_id")
+    file = request.FILES.get("file")
+
+    errors = {}
+    if not number:
+        errors["number"] = ["Nomor sertifikat wajib diisi."]
+    elif Certificate.objects.filter(number=number).exists():
+        errors["number"] = ["Nomor sertifikat sudah dipakai."]
+    if cert_type not in CertificateType.values:
+        errors["type"] = ["Tipe sertifikat tidak valid."]
+    if not recipient_id:
+        errors["recipient_id"] = ["Penerima wajib dipilih."]
+    if not file:
+        errors["file"] = ["File PDF wajib diunggah."]
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    try:
+        recipient = User.objects.get(id=recipient_id)
+    except User.DoesNotExist:
+        return JsonResponse({"errors": {"recipient_id": ["Penerima tidak ditemukan."]}}, status=404)
+
+    product = None
+    if product_id:
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            return JsonResponse({"errors": {"product_id": ["Produk tidak ditemukan."]}}, status=404)
+
+    cert = Certificate.objects.create(
+        number=number, type=cert_type, recipient=recipient, product=product, file=file,
+    )
+
+    log_audit(
+        request, AuditAction.CREATE, "certificates", object_id=cert.id,
+        new_data={"number": cert.number, "type": cert.type, "recipient": recipient.fullname},
+    )
+
+    return JsonResponse(
+        {"detail": "Sertifikat berhasil diterbitkan.", "certificate": _serialize_certificate(cert)},
+        status=201,
+    )
+
+
+@jwt_required
+def get_my_certificates(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    certs = Certificate.objects.filter(recipient=request.user).select_related(
+        "product__mentoring_detail", "product__module_detail", "product__bootcamp_detail"
+    ).order_by("-issued_at")
+
+    return JsonResponse(
+        {"certificates": [_serialize_certificate(c) for c in certs]}, status=200
+    )
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_mentoring_orders(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    libraries = (
+        UserLibrary.objects.filter(product__type=ProductType.MENTORING)
+        .select_related("user", "product__mentoring_detail")
+        .prefetch_related("mentoring_sessions__mentor__user")
+        .order_by("-purchased_at")
+    )
+
+    data = []
+    for library in libraries:
+        sessions = list(library.mentoring_sessions.all())
+        if not sessions:
+            continue
+        detail = library.product.mentoring_detail
+        first_mentor = sessions[0].mentor
+        data.append({
+            "user_library_id": str(library.id),
+            "user_name": library.user.fullname,
+            "product_title": detail.title if detail else None,
+            "mentor_name": first_mentor.user.fullname if first_mentor else None,
+            "total_sessions": len(sessions),
+            "completed_sessions": sum(1 for s in sessions if s.status == "completed"),
+            "scheduled_sessions": sum(1 for s in sessions if s.status == "scheduled"),
+            "unscheduled_sessions": sum(1 for s in sessions if s.status == "waiting_schedule"),
+            "pending_links": sum(1 for s in sessions if s.status == "scheduled" and not s.zoom_link),
+        })
+
+    return JsonResponse({"packages": data}, status=200)
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_mentoring_order_detail(request, user_library_id):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    try:
+        library = UserLibrary.objects.select_related(
+            "user", "product__mentoring_detail"
+        ).get(id=user_library_id, product__type=ProductType.MENTORING)
+    except UserLibrary.DoesNotExist:
+        return JsonResponse({"detail": "Paket mentoring tidak ditemukan."}, status=404)
+
+    sessions = library.mentoring_sessions.select_related("mentor__user").order_by("order")
+    detail = library.product.mentoring_detail
+
+    return JsonResponse(
+        {
+            "user_name": library.user.fullname,
+            "user_email": library.user.email,
+            "product_title": detail.title if detail else None,
+            "sessions": [
+                {
+                    "id": str(s.id),
+                    "order": s.order,
+                    "status": s.status,
+                    "mentor_name": s.mentor.user.fullname if s.mentor else None,
+                    "start_time": s.start_time.isoformat() if s.start_time else None,
+                    "zoom_link": s.zoom_link,
+                    "recording_url": s.recording_url,
+                }
+                for s in sessions
+            ],
+        },
+        status=200,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_mentoring_order_session(request, session_id):
+    if request.method not in ["PATCH", "PUT"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT"])
+
+    try:
+        session = MentoringSession.objects.select_related(
+            "mentor", "mentoring", "user_library"
+        ).get(id=session_id)
+    except MentoringSession.DoesNotExist:
+        return JsonResponse({"detail": "Sesi tidak ditemukan."}, status=404)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    if "zoom_link" in request_data:
+        session.zoom_link = request_data["zoom_link"]
+
+    if request_data.get("status") == "completed" and session.status != "completed":
+        session.status = MentoringSession.SessionStatus.COMPLETED
+
+        from transactions.models import MentorPayout, PayoutSourceType
+
+        if session.mentor_id and not hasattr(session, "payout"):
+            gross = session.mentoring.new_price or session.mentoring.original_price or 0
+            session_count = session.mentoring.session_count or 1
+            MentorPayout.objects.create(
+                mentor_profile=session.mentor,
+                source_type=PayoutSourceType.MENTORING,
+                mentoring_session=session,
+                gross_amount=(gross / session_count),
+            )
+
+    session.save()
+
+    log_audit(request, AuditAction.UPDATE, "mentoring_sessions", object_id=session.id)
+
+    return JsonResponse({"detail": "Sesi berhasil diperbarui."}, status=200)
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_all_reviews(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    reviews = Review.objects.select_related(
+        "user", "product__mentoring_detail", "product__module_detail", "product__bootcamp_detail"
+    ).order_by("-created_at")
+
+    data = []
+    for r in reviews:
+        detail = _get_product_detail(r.product)
+        data.append({
+            "id": str(r.id),
+            "reviewer_name": r.user.fullname,
+            "reviewer_email": r.user.email,
+            "product_title": detail.title if detail else None,
+            "rating": float(r.rating),
+            "review_text": r.review_text,
+            "is_hidden": r.is_hidden,
+            "created_at": r.created_at.isoformat(),
+        })
+
+    return JsonResponse({"reviews": data}, status=200)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def toggle_review_visibility(request, review_id):
+    if request.method not in ["PATCH", "PUT"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT"])
+
+    try:
+        review = Review.objects.get(id=review_id)
+    except Review.DoesNotExist:
+        return JsonResponse({"detail": "Ulasan tidak ditemukan."}, status=404)
+
+    review.is_hidden = not review.is_hidden
+    review.save()
+
+    from mentors.utils import get_mentors_for_product, recompute_mentor_rating
+
+    for mentor in get_mentors_for_product(review.product_id):
+        recompute_mentor_rating(mentor)
+
+    log_audit(
+        request, AuditAction.UPDATE, "reviews", object_id=review.id,
+        new_data={"is_hidden": review.is_hidden},
+    )
+
+    return JsonResponse({"detail": "Status ulasan berhasil diperbarui.", "is_hidden": review.is_hidden}, status=200)

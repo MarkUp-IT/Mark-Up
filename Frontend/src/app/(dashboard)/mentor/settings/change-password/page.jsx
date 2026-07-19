@@ -12,6 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import DashboardLayout from "@/component/mentor/DashboardLayout";
+import { apiRequest } from "@/lib/api";
 
 function PasswordField({
   label,
@@ -67,19 +68,15 @@ export default function MentorChangePassword() {
 
   const requirements = [
     { label: "Minimal 8 karakter", test: (pw) => pw.length >= 8 },
-    { label: "Mengandung huruf besar", test: (pw) => /[A-Z]/.test(pw) },
-    { label: "Mengandung angka", test: (pw) => /[0-9]/.test(pw) },
-    {
-      label: "Berbeda dari kata sandi saat ini",
-      test: (pw) => pw.length > 0 && pw !== currentPassword,
-    },
+    { label: "Mengandung 1 huruf kapital", test: (pw) => /[A-Z]/.test(pw) },
+    { label: "Mengandung 1 simbol (!@#$%...)", test: (pw) => /[^A-Za-z0-9]/.test(pw) },
   ];
 
   const metCount = requirements.filter((r) => r.test(newPassword)).length;
   const strengthMeta =
     metCount <= 1
       ? { label: "Lemah", color: "#EF4444" }
-      : metCount <= 3
+      : metCount === 2
         ? { label: "Sedang", color: "#F59E0B" }
         : { label: "Kuat", color: "#148F89" };
 
@@ -92,17 +89,25 @@ export default function MentorChangePassword() {
     passwordsMatch &&
     !isSubmitting;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!canSubmit) return;
     setError("");
     setIsSubmitting(true);
-    // TODO: panggil API ganti password beneran -- verifikasi currentPassword
-    // di backend, jangan cuma di client kayak sekarang
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      await apiRequest("/api/accounts/me/change-password/", {
+        method: "POST",
+        body: { current_password: currentPassword, new_password: newPassword },
+      });
       setIsSuccess(true);
-    }, 900);
+    } catch (err) {
+      const errors = err?.data?.errors;
+      setError(
+        errors?.current_password?.[0] || errors?.new_password?.[0] || err?.message || "Gagal mengubah kata sandi.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (isSuccess) {
@@ -184,7 +189,7 @@ export default function MentorChangePassword() {
               {/* Strength meter */}
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-1.5 rounded-full bg-[#0F081C] overflow-hidden flex gap-0.5">
-                  {[0, 1, 2, 3].map((i) => (
+                  {[0, 1, 2].map((i) => (
                     <div
                       key={i}
                       className="flex-1 rounded-full transition-colors"

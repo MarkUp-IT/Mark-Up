@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
+import { api, clearTokens } from "@/lib/api";
 import {
   LayoutDashboard,
   Package,
@@ -72,9 +73,21 @@ function NavItem({ item, isActive }) {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
 
   const isActivePath = (url) =>
     url === "/admin" ? pathname === "/admin" : pathname?.startsWith(url);
+
+  async function handleLogout() {
+    try {
+      await api.post("/api/accounts/logout/", {}, { auth: true });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      clearTokens();
+      router.push("/login");
+    }
+  }
 
   return (
     <aside
@@ -153,7 +166,10 @@ export default function Sidebar() {
           item={{ name: "Pengaturan", url: "/admin/settings", icon: Settings }}
           isActive={isActivePath("/admin/settings")}
         />
-        <button className="w-full flex items-center gap-3 px-4 py-2.5 rounded-[8px] text-[13px] font-medium text-[#DC2626] hover:bg-[#FEE2E2] transition-colors">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-[8px] text-[13px] font-medium text-[#DC2626] hover:bg-[#FEE2E2] transition-colors cursor-pointer"
+        >
           <LogOut size={17} />
           Keluar
         </button>

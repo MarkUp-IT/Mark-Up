@@ -1,12 +1,15 @@
 from django.http import JsonResponse, HttpResponseNotAllowed
 from .utils import get_request_data
 from .forms import CompetitionForm
-from .models import Competition, CompetitionCategory
+from .models import Competition, CompetitionCategory, BootcampSession, BootcampSessionMentor
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from accounts.decorators import jwt_required, role_required
-from accounts.models import UserRole
+from accounts.models import UserRole, AuditAction
+from accounts.utils import log_audit
 from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
+from mentors.models import MentorProfile
 
 @csrf_exempt
 @jwt_required
@@ -163,3 +166,162 @@ def update_competition(request, competition_id):
 		},
 		status=200,
 	)
+
+
+def _serialize_bootcamp_session_template(session):
+    assignment = session.session_mentors.select_related("mentor_profile__user").first()
+    return {
+        "id": str(session.id),
+        "title": session.title,
+        "description": session.description or "",
+        "start_time": session.start_time.isoformat(),
+        "end_time": session.end_time.isoformat(),
+        "meeting_link": session.meeting_link or "",
+        "mentor_id": str(assignment.mentor_profile_id) if assignment else None,
+        "mentor_name": assignment.mentor_profile.user.fullname if assignment else None,
+    }
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_bootcamp_batches(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    from products.models import BootcampProduct
+
+    batches = BootcampProduct.objects.select_related("product").prefetch_related(
+        "sessions__session_mentors"
+    )
+
+    data = []
+    for batch in batches:
+        sessions = list(batch.sessions.all())
+        peserta = batch.product.user_libraries.count()
+        unassigned = sum(1 for s in sessions if not s.session_mentors.exists())
+        pending_link = sum(1 for s in sessions if not s.meeting_link)
+        data.append({
+            "id": str(batch.product_id),
+            "title": batch.title,
+            "peserta": peserta,
+            "sesi": len(sessions),
+            "unassigned": unassigned,
+            "pending": pending_link,
+        })
+
+    return JsonResponse({"batches": data}, status=200)
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_bootcamp_batch_detail(request, product_id):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    from products.models import BootcampProduct
+
+    try:
+        batch = BootcampProduct.objects.select_related("product").get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Batch bootcamp tidak ditemukan."}, status=404)
+
+    sessions = batch.sessions.prefetch_related(
+        "session_mentors__mentor_profile__user"
+    ).order_by("start_time")
+
+    return JsonResponse(
+        {
+            "title": batch.title,
+            "sessions": [_serialize_bootcamp_session_template(s) for s in sessions],
+        },
+        status=200,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def add_bootcamp_session_template(request, product_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    title = request_data.get("title")
+    start_time = parse_datetime(request_data.get("start_time") or "")
+    end_time = parse_datetime(request_data.get("end_time") or "")
+
+    if not title or not start_time or not end_time:
+        return JsonResponse(
+            {"errors": {"detail": ["title, start_time, dan end_time wajib diisi (ISO datetime)."]}},
+            status=400,
+        )
+
+    session = BootcampSession.objects.create(
+        bootcamp_id=product_id,
+        title=title,
+        description=request_data.get("description", ""),
+        start_time=start_time,
+        end_time=end_time,
+        meeting_link=request_data.get("meeting_link", ""),
+    )
+
+    log_audit(request, AuditAction.CREATE, "bootcamp_sessions", object_id=session.id)
+
+    return JsonResponse(
+        {"detail": "Sesi berhasil ditambahkan.", "session": _serialize_bootcamp_session_template(session)},
+        status=201,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_bootcamp_session_template(request, session_id):
+    if request.method not in ["PATCH", "PUT", "DELETE"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT", "DELETE"])
+
+    try:
+        session = BootcampSession.objects.get(id=session_id)
+    except BootcampSession.DoesNotExist:
+        return JsonResponse({"detail": "Sesi tidak ditemukan."}, status=404)
+
+    if request.method == "DELETE":
+        session.delete()
+        log_audit(request, AuditAction.DELETE, "bootcamp_sessions", object_id=session_id)
+        return JsonResponse({"detail": "Sesi berhasil dihapus."}, status=200)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    if "title" in request_data:
+        session.title = request_data["title"]
+    if "description" in request_data:
+        session.description = request_data["description"]
+    if "meeting_link" in request_data:
+        session.meeting_link = request_data["meeting_link"]
+    if request_data.get("start_time"):
+        session.start_time = parse_datetime(request_data["start_time"])
+    if request_data.get("end_time"):
+        session.end_time = parse_datetime(request_data["end_time"])
+    session.save()
+
+    if "mentor_id" in request_data:
+        session.session_mentors.all().delete()
+        mentor_id = request_data.get("mentor_id")
+        if mentor_id:
+            try:
+                mentor_profile = MentorProfile.objects.get(id=mentor_id)
+            except MentorProfile.DoesNotExist:
+                return JsonResponse({"errors": {"mentor_id": ["Mentor tidak ditemukan."]}}, status=404)
+            BootcampSessionMentor.objects.create(bootcamp_session=session, mentor_profile=mentor_profile)
+
+    log_audit(request, AuditAction.UPDATE, "bootcamp_sessions", object_id=session.id)
+
+    return JsonResponse(
+        {"detail": "Sesi berhasil diperbarui.", "session": _serialize_bootcamp_session_template(session)},
+        status=200,
+    )

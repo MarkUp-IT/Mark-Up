@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
-import Toast from "@/component/Toast";
+import { toast } from "sonner";
 import { api, ApiError, setTokens } from "@/lib/api";
 
 // Paksa background input autofill browser tetap gelap -- browser (Chrome dkk)
@@ -53,18 +53,16 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
 
   const [formError, setFormError] = useState("");
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resendSubmitting, setResendSubmitting] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [toast, setToast] = useState({
-    open: false,
-    type: "success",
-    title: "",
-    message: "",
-  });
 
   const isValid = email.trim() !== "" && password.trim() !== "";
 
   const showToast = (type, title, message) => {
-    setToast({ open: true, type, title, message });
+    if (type === "error") toast.error(title, { description: message });
+    else toast.success(title, { description: message });
   };
 
   const handleSubmit = async (e) => {
@@ -72,6 +70,8 @@ export default function Login() {
     if (!isValid || isSubmitting) return;
 
     setFormError("");
+    setNeedsVerification(false);
+    setResendSent(false);
     setIsSubmitting(true);
 
     try {
@@ -111,7 +111,11 @@ export default function Login() {
         }
       }, 1600);
     } catch (err) {
-      if (err instanceof ApiError) {
+      if (err instanceof ApiError && err.data?.code === "email_not_verified") {
+        setNeedsVerification(true);
+        setFormError(err.message);
+        showToast("error", "Email belum diverifikasi", err.message);
+      } else if (err instanceof ApiError) {
         setFormError(err.message);
         showToast("error", "Login gagal", err.message);
       } else {
@@ -120,6 +124,23 @@ export default function Login() {
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email.trim() || resendSubmitting) return;
+    setResendSubmitting(true);
+    try {
+      await api.post(
+        "/api/accounts/resend-verification/",
+        { email: email.trim() },
+        { auth: false },
+      );
+    } catch {
+      // generic response di backend, nggak perlu dibedain sukses/gagal di sini
+    } finally {
+      setResendSubmitting(false);
+      setResendSent(true);
     }
   };
 
@@ -165,6 +186,23 @@ export default function Login() {
           </div>
 
           {formError && <p className="text-red-400 text-[13px]">{formError}</p>}
+
+          {needsVerification && (
+            resendSent ? (
+              <p className="text-[#148F89] text-[12.5px]">
+                Kalau email itu terdaftar dan belum diverifikasi, link baru sudah dikirim.
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resendSubmitting}
+                className="text-[#08C7E1] text-[12.5px] hover:underline w-fit disabled:opacity-60"
+              >
+                {resendSubmitting ? "Mengirim..." : "Kirim ulang email verifikasi"}
+              </button>
+            )
+          )}
 
           <Field
             label="Email"
@@ -228,14 +266,6 @@ export default function Login() {
         </div>
       </div>
 
-      <Toast
-        open={toast.open}
-        type={toast.type}
-        title={toast.title}
-        message={toast.message}
-        onClose={() => setToast((prev) => ({ ...prev, open: false }))}
-        position="top-right"
-      />
     </div>
   );
   }

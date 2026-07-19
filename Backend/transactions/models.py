@@ -1,5 +1,6 @@
 from __future__ import annotations
 import uuid
+from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -117,43 +118,130 @@ class TransactionItem(models.Model):
         return f"{self.transaction_id} - {self.product}"
 
 
-class UserLibrary(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="libraries",
-    )
-    transaction_item = models.OneToOneField(
-        TransactionItem,
-        on_delete=models.CASCADE,
-        related_name="library_access",
-    )
-    
-    active_date = models.DateTimeField(blank=True, null=True)
-    expire_date = models.DateTimeField(blank=True, null=True)
+class DiscountType(models.TextChoices):
+    PERCENTAGE = "percentage", "Percentage"
+    FIXED = "fixed", "Fixed"
 
-    @property
-    def product(self):
-        return self.transaction_item.product
+
+class ReferralCode(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(max_length=50, unique=True)
+    discount_type = models.CharField(
+        max_length=20, choices=DiscountType.choices, default=DiscountType.PERCENTAGE
+    )
+    discount_value = models.DecimalField(max_digits=12, decimal_places=2)
+    max_discount = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    quota = models.PositiveIntegerField()
+    used_count = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    applies_to_all = models.BooleanField(default=True)
+    products = models.ManyToManyField(
+        Product, blank=True, related_name="referral_codes"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_valid_for_product(self, product, user=None):
+        if not self.is_active:
+            return False
+        if self.used_count >= self.quota:
+            return False
+        if user is not None and self.usages.filter(user=user).exists():
+            return False
+        if self.applies_to_all:
+            return True
+        return self.products.filter(id=product.id).exists()
+
+    def compute_discount(self, price):
+        price = Decimal(str(price))
+        if self.discount_type == DiscountType.PERCENTAGE:
+            amount = (price * self.discount_value) / Decimal("100")
+            if self.max_discount is not None:
+                amount = min(amount, self.max_discount)
+        else:
+            amount = self.discount_value
+        return min(amount, price).quantize(Decimal("0.01"))
 
     class Meta:
-        verbose_name = "User Library"
-        verbose_name_plural = "User Libraries"
-        indexes = [
-            models.Index(fields=["user"]),
-            models.Index(fields=["active_date"]),
-            models.Index(fields=["expire_date"]),
-        ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user", "transaction_item"],
-                name="unique_user_product_transaction_item",
-            )
-        ]
-        ordering = ["-active_date"]
+        verbose_name = "Referral Code"
+        verbose_name_plural = "Referral Codes"
+        ordering = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"{self.user} -> {self.product}"
+        return self.code
 
 
+class ReferralCodeUsage(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    referral_code = models.ForeignKey(
+        ReferralCode, on_delete=models.CASCADE, related_name="usages"
+    )
+    transaction = models.OneToOneField(
+        Transaction, on_delete=models.CASCADE, related_name="referral_usage"
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="referral_code_usages"
+    )
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Referral Code Usage"
+        verbose_name_plural = "Referral Code Usages"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.referral_code} -> {self.transaction_id}"
+
+
+class PayoutSourceType(models.TextChoices):
+    MENTORING = "mentoring", "Mentoring"
+    BOOTCAMP = "bootcamp", "Bootcamp"
+
+
+class PayoutStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    PAID = "paid", "Paid"
+
+
+class MentorPayout(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    mentor_profile = models.ForeignKey(
+        "mentors.MentorProfile", on_delete=models.CASCADE, related_name="payouts"
+    )
+    source_type = models.CharField(max_length=20, choices=PayoutSourceType.choices)
+    mentoring_session = models.OneToOneField(
+        "products.MentoringSession",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="payout",
+    )
+    bootcamp_session = models.OneToOneField(
+        "products.BootcampSession",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="payout",
+    )
+    gross_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    fee_percent = models.PositiveIntegerField(default=20)
+    status = models.CharField(
+        max_length=20, choices=PayoutStatus.choices, default=PayoutStatus.PENDING
+    )
+    paid_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def net_amount(self):
+        fee = (self.gross_amount * self.fee_percent) / Decimal("100")
+        return self.gross_amount - fee
+
+    class Meta:
+        verbose_name = "Mentor Payout"
+        verbose_name_plural = "Mentor Payouts"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.mentor_profile} - {self.gross_amount}"

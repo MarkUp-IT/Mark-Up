@@ -6,6 +6,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Mail, Phone, MapPin, Send, ExternalLink } from "lucide-react";
 import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
+import { apiRequest } from "@/lib/api";
 
 const ALAMAT =
   "Jl. Sutorejo Prima Indah Utara VII, No. 20, Kelurahan Dukuh Sutorejo, Kec. Mulyorejo, Kota Surabaya, Provinsi Jawa Timur";
@@ -20,6 +21,7 @@ export default function ContactPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
 
   const sectionReveal = {
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
@@ -37,17 +39,25 @@ export default function ContactPage() {
     formData.subject.trim() &&
     formData.message.trim();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isFormValid || isSubmitting) return;
     setIsSubmitting(true);
-    // TODO: kirim ke API/layanan email beneran (mis. Resend, endpoint sendiri)
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setSubmitError(null);
+    try {
+      await apiRequest("/api/accounts/contact/", {
+        method: "POST",
+        auth: false,
+        body: formData,
+      });
       setIsSuccess(true);
       setFormData({ name: "", email: "", subject: "", message: "" });
       setTimeout(() => setIsSuccess(false), 4000);
-    }, 900);
+    } catch (err) {
+      setSubmitError(err?.message || "Gagal mengirim pesan. Coba lagi.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -267,6 +277,16 @@ export default function ContactPage() {
                       className="text-[#08C7E1] text-sm font-medium"
                     >
                       Pesan terkirim, terima kasih!
+                    </motion.span>
+                  )}
+                  {submitError && (
+                    <motion.span
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="text-red-400 text-sm font-medium"
+                    >
+                      {submitError}
                     </motion.span>
                   )}
                 </AnimatePresence>

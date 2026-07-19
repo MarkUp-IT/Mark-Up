@@ -1,18 +1,19 @@
 "use client";
 
 import {
-  Search,
-  ChevronDown,
   Eye,
   X,
   Check,
   Ban,
   AlertCircle,
+  Loader2,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
+import { toast } from "sonner";
+import { api, ApiError } from "@/lib/api";
 
 const STATUS_META = {
   pending: {
@@ -23,50 +24,65 @@ const STATUS_META = {
   rejected: { label: "DITOLAK", className: "bg-[#FEE2E2] text-[#991B1B]" },
 };
 
+function formatIDR(val) {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(Number(val) || 0);
+}
+
+function formatDateTime(iso) {
+  if (!iso) return "-";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "-";
+  return `${date.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}, ${date.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function extractErrorMessage(err, fallback) {
+  if (err instanceof ApiError) {
+    if (err.data?.errors) {
+      return Object.values(err.data.errors).flat().join(" ");
+    }
+    return err.message || fallback;
+  }
+  return fallback;
+}
+
 export default function RefundRequests() {
   const heightFix = `.adm-h-42 { height: 42px; }`;
 
-  // --- MOCK DATA (nanti ganti query refund_requests JOIN transactions +
-  // users + products) ---
-  const [requests, setRequests] = useState([
-    {
-      id: "RF-0012",
-      userName: "Fathir Ramadhan",
-      productTitle: "1-on-1 Career Mentoring",
-      transactionId: "TRX-20260628-004",
-      amount: 110000,
-      reason:
-        "Jadwal yang tersedia dari mentor nggak ada yang cocok sama waktu luang saya, jadi mending di-refund aja dulu.",
-      status: "pending",
-      createdAt: "5 Jul 2026, 09:12",
-    },
-    {
-      id: "RF-0011",
-      userName: "Sarah Jenkins",
-      productTitle: "Winner Class Dan Module (Debate)",
-      transactionId: "TRX-20260625-002",
-      amount: 299000,
-      reason:
-        "Ternyata jadwal lombanya keburu, udah nggak butuh materinya lagi.",
-      status: "approved",
-      createdAt: "1 Jul 2026, 14:40",
-    },
-    {
-      id: "RF-0010",
-      userName: "Affan Fathir D.",
-      productTitle: "Bundling PowerPack (Newbie Friendly)",
-      transactionId: "TRX-MT-002",
-      amount: 300000,
-      reason: "Coba-coba ajuin doang, ternyata masih mau lanjut ikutnya.",
-      status: "rejected",
-      createdAt: "28 Jun 2026, 11:05",
-    },
-  ]);
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
   const [statusFilter, setStatusFilter] = useState("pending");
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [adminNotes, setAdminNotes] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [deciding, setDeciding] = useState(false);
+
+  function showToast(type, title, message) {
+    if (type === "error") toast.error(title, { description: message });
+    else toast.success(title, { description: message });
+  }
+
+  const fetchRequests = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await api.get("/api/products/refund-requests/");
+      setRequests(data?.refund_requests || []);
+    } catch (err) {
+      setLoadError(extractErrorMessage(err, "Gagal memuat data pengajuan refund."));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
 
   useEffect(() => {
     document.body.style.overflow = isModalOpen ? "hidden" : "auto";
@@ -75,38 +91,49 @@ export default function RefundRequests() {
     };
   }, [isModalOpen]);
 
-  const formatIDR = (val) =>
-    new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      maximumFractionDigits: 0,
-    }).format(val);
-
   const openDetail = (req) => {
     setSelectedRequest(req);
-    setAdminNotes(req.adminNotes || "");
+    setAdminNotes(req.admin_notes || "");
     setIsModalOpen(true);
   };
 
-  const handleDecision = (decision) => {
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.id === selectedRequest.id
-          ? { ...r, status: decision, adminNotes }
-          : r,
-      ),
-    );
-    setIsModalOpen(false);
-  };
+  async function handleDecision(decision) {
+    if (!selectedRequest) return;
+    setDeciding(true);
+    try {
+      await api.patch(`/api/products/refund-requests/${selectedRequest.id}/`, {
+        decision,
+        admin_notes: adminNotes,
+      });
+      setIsModalOpen(false);
+      await fetchRequests();
+      showToast(
+        "success",
+        decision === "approved" ? "Refund Disetujui" : "Refund Ditolak",
+        decision === "approved"
+          ? "Akses produk user sudah dicabut & transaksi ditandai refund."
+          : "Pengajuan refund berhasil ditolak."
+      );
+    } catch (err) {
+      showToast(
+        "error",
+        "Gagal Memproses Pengajuan",
+        extractErrorMessage(err, "Terjadi kesalahan.")
+      );
+    } finally {
+      setDeciding(false);
+    }
+  }
 
-  const filtered =
-    statusFilter === "Semua"
-      ? requests
-      : requests.filter((r) => r.status === statusFilter);
+  const filtered = useMemo(
+    () =>
+      statusFilter === "Semua"
+        ? requests
+        : requests.filter((r) => r.status === statusFilter),
+    [requests, statusFilter]
+  );
   const pendingCount = requests.filter((r) => r.status === "pending").length;
-  const approvedThisMonth = requests.filter(
-    (r) => r.status === "approved",
-  ).length;
+  const approvedCount = requests.filter((r) => r.status === "approved").length;
 
   return (
     <DashboardLayout title="Pengajuan Refund">
@@ -132,8 +159,8 @@ export default function RefundRequests() {
           variant="warning"
         />
         <StatCard
-          label="Disetujui Bulan Ini"
-          value={approvedThisMonth}
+          label="Disetujui"
+          value={approvedCount}
           unit="pengajuan"
           variant="success"
         />
@@ -167,7 +194,22 @@ export default function RefundRequests() {
           </div>
         </div>
 
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-16 text-[#64748B] text-[13px]">
+            <Loader2 size={16} className="animate-spin" />
+            Memuat data pengajuan refund...
+          </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center gap-3 py-16 text-[13px]">
+            <p className="text-[#991B1B]">{loadError}</p>
+            <button
+              onClick={fetchRequests}
+              className="px-4 py-2 bg-[#F1F5F9] rounded-[8px] text-[#475569] font-medium hover:bg-[#E2E8F0] transition-colors"
+            >
+              Coba lagi
+            </button>
+          </div>
+        ) : filtered.length === 0 ? (
           <EmptyState message="Nggak ada pengajuan refund di kategori ini." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
@@ -176,13 +218,7 @@ export default function RefundRequests() {
                 <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                   <tr>
                     <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">
-                      ID
-                    </th>
-                    <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">
                       USER & PRODUK
-                    </th>
-                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
-                      NOMINAL
                     </th>
                     <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
                       DIAJUKAN
@@ -201,28 +237,22 @@ export default function RefundRequests() {
                       key={item.id}
                       className="hover:bg-[#F8FAFC] transition-colors"
                     >
-                      <td className="px-6 py-4 text-[#64748B] font-medium">
-                        {item.id}
-                      </td>
                       <td className="px-6 py-4">
                         <p className="text-[#1E293B] font-semibold">
-                          {item.userName}
+                          {item.user_name}
                         </p>
                         <p className="text-[#64748B] text-[12px] mt-0.5">
-                          {item.productTitle}
+                          {item.product_title || "-"}
                         </p>
                       </td>
-                      <td className="px-6 py-4 text-center text-[#1E293B] font-bold">
-                        {formatIDR(item.amount)}
-                      </td>
                       <td className="px-6 py-4 text-center text-[#64748B] font-medium whitespace-nowrap">
-                        {item.createdAt}
+                        {formatDateTime(item.created_at)}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span
-                          className={`inline-flex px-3 py-1.5 text-[10px] rounded-full font-bold whitespace-nowrap ${STATUS_META[item.status].className}`}
+                          className={`inline-flex px-3 py-1.5 text-[10px] rounded-full font-bold whitespace-nowrap ${STATUS_META[item.status]?.className || "bg-[#F1F5F9] text-[#475569]"}`}
                         >
-                          {STATUS_META[item.status].label}
+                          {STATUS_META[item.status]?.label || item.status}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
@@ -258,7 +288,7 @@ export default function RefundRequests() {
                   Detail Pengajuan
                 </p>
                 <p className="text-[#64748B] text-[12px] mt-0.5">
-                  {selectedRequest?.id}
+                  {selectedRequest?.user_name}
                 </p>
               </div>
               <button
@@ -271,9 +301,9 @@ export default function RefundRequests() {
 
             <div className="px-6 py-6 flex flex-col gap-5">
               <span
-                className={`w-full py-2.5 rounded-[8px] flex justify-center items-center font-bold text-[12px] tracking-wider ${STATUS_META[selectedRequest?.status]?.className}`}
+                className={`w-full py-2.5 rounded-[8px] flex justify-center items-center font-bold text-[12px] tracking-wider ${STATUS_META[selectedRequest?.status]?.className || "bg-[#F1F5F9] text-[#475569]"}`}
               >
-                {STATUS_META[selectedRequest?.status]?.label}
+                {STATUS_META[selectedRequest?.status]?.label || selectedRequest?.status}
               </span>
 
               <div className="grid grid-cols-2 gap-y-4 gap-x-4 text-[13px]">
@@ -282,15 +312,15 @@ export default function RefundRequests() {
                     User
                   </span>
                   <span className="text-[#1E293B] font-medium">
-                    {selectedRequest?.userName}
+                    {selectedRequest?.user_name}
                   </span>
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
-                    ID Transaksi
+                    Diajukan
                   </span>
                   <span className="text-[#1E293B] font-medium">
-                    {selectedRequest?.transactionId}
+                    {formatDateTime(selectedRequest?.created_at)}
                   </span>
                 </div>
                 <div className="flex flex-col gap-1 col-span-2">
@@ -298,18 +328,9 @@ export default function RefundRequests() {
                     Produk
                   </span>
                   <span className="text-[#1E293B] font-medium">
-                    {selectedRequest?.productTitle}
+                    {selectedRequest?.product_title || "-"}
                   </span>
                 </div>
-              </div>
-
-              <div className="bg-[#F8FAFC] border border-[#E2E8F0] p-4 rounded-[8px] flex justify-between items-center">
-                <span className="text-[#475569] font-bold text-[13px]">
-                  Nominal Diajukan
-                </span>
-                <span className="text-[#0F172A] font-bold text-[19px]">
-                  {selectedRequest && formatIDR(selectedRequest.amount)}
-                </span>
               </div>
 
               <div className="flex flex-col gap-2">
@@ -325,8 +346,8 @@ export default function RefundRequests() {
                 <>
                   <p className="flex items-start gap-2 text-[#92400E] text-[11px] bg-[#FEF3C7] border border-[#FDE68A] rounded-[8px] px-3.5 py-2.5 leading-relaxed">
                     <AlertCircle size={13} className="shrink-0 mt-0.5" />
-                    Dana yang disetujui otomatis dipotong biaya administrasi 10%
-                    sesuai Refund Policy.
+                    Menyetujui refund akan langsung mencabut akses produk user
+                    dan menandai transaksi terkait sebagai REFUNDED.
                   </p>
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[#334155] text-[13px] font-medium">
@@ -342,20 +363,33 @@ export default function RefundRequests() {
                   </div>
                 </>
               )}
+
+              {selectedRequest?.status !== "pending" && selectedRequest?.admin_notes && (
+                <div className="flex flex-col gap-2">
+                  <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                    Catatan Admin
+                  </span>
+                  <p className="text-[#334155] text-[13px] leading-relaxed bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3">
+                    {selectedRequest.admin_notes}
+                  </p>
+                </div>
+              )}
             </div>
 
             {selectedRequest?.status === "pending" ? (
               <div className="px-6 py-5 bg-[#F8FAFC] border-t border-[#E2E8F0] flex gap-3">
                 <button
+                  disabled={deciding}
                   onClick={() => handleDecision("rejected")}
-                  className="flex-1 py-2.5 bg-white border border-[#FCA5A5] text-[#DC2626] font-bold text-[13px] rounded-[8px] hover:bg-[#FEE2E2] transition-colors flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2.5 bg-white border border-[#FCA5A5] text-[#DC2626] font-bold text-[13px] rounded-[8px] hover:bg-[#FEE2E2] transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60"
                 >
                   <Ban size={14} />
                   Tolak
                 </button>
                 <button
+                  disabled={deciding}
                   onClick={() => handleDecision("approved")}
-                  className="flex-1 py-2.5 bg-[#148F89] text-white font-bold text-[13px] rounded-[8px] hover:bg-[#117A75] transition-colors flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2.5 bg-[#148F89] text-white font-bold text-[13px] rounded-[8px] hover:bg-[#117A75] transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60"
                 >
                   <Check size={14} />
                   Setujui Refund

@@ -2,7 +2,32 @@ from __future__ import annotations
 from datetime import datetime
 
 from django import forms
-from .models import MentorAvailability
+from django.utils import timezone
+from .models import MentorAvailability, MentorProfile, MentorExperience
+
+
+class MentorProfileForm(forms.ModelForm):
+    class Meta:
+        model = MentorProfile
+        fields = [
+            "headline",
+            "bio",
+            "bank_name",
+            "bank_account",
+            "bank_account_holder",
+            "linkedin_url",
+            "instagram_url",
+        ]
+
+
+class MentorExperienceForm(forms.ModelForm):
+    class Meta:
+        model = MentorExperience
+        fields = ["title", "description", "start_date", "end_date"]
+        widgets = {
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "end_date": forms.DateInput(attrs={"type": "date"}),
+        }
 
 
 class MentorAvailabilityForm(forms.ModelForm):
@@ -41,6 +66,15 @@ class MentorAvailabilityForm(forms.ModelForm):
             initial.setdefault("end_time", instance.end_time.time())
         super().__init__(*args, **kwargs)
 
+    def _post_clean(self):
+        # Sengaja di-skip: base ModelForm._post_clean() manggil
+        # instance.full_clean(), dan karena field form "start_time"/"end_time"
+        # (jam doang) namanya sama persis kayak field model "start_time"/
+        # "end_time" (DateTimeField), Django nganggep itu field model yang
+        # belum keisi -> selalu keluar error "cannot be null" padahal
+        # nilainya baru digabung jadi datetime lengkap di save() di bawah.
+        pass
+
     def clean(self):
         cleaned_data = super().clean()
         start_date = cleaned_data.get("start_date")
@@ -51,8 +85,8 @@ class MentorAvailabilityForm(forms.ModelForm):
         if not all([start_date, end_date, start_time, end_time]):
             return cleaned_data
 
-        start_datetime = datetime.combine(start_date, start_time)
-        end_datetime = datetime.combine(end_date, end_time)
+        start_datetime = timezone.make_aware(datetime.combine(start_date, start_time))
+        end_datetime = timezone.make_aware(datetime.combine(end_date, end_time))
 
         if end_datetime <= start_datetime:
             raise forms.ValidationError(

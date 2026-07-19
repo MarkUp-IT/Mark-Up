@@ -1,14 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Award, Download, Eye, Search } from "lucide-react";
 import DashboardLayout from "@/component/mentor/DashboardLayout";
 import EmptyState from "@/component/mentor/EmptyState";
+import { apiRequest } from "@/lib/api";
+
+function formatDate(dateStr) {
+  if (!dateStr) return "-";
+  return new Date(dateStr).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+}
 
 export default function MentorCertificates() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [certificates, setCertificates] = useState([]);
+  const [loading, setLoading] = useState(true);
   const shouldReduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    apiRequest("/api/products/certificates/me/")
+      .then((res) => setCertificates((res?.certificates || []).filter((c) => c.type === "instructor")))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   const sectionReveal = {
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
@@ -27,33 +42,14 @@ export default function MentorCertificates() {
     viewport: { once: true },
   });
 
-  // --- MOCK DATA (nanti ganti dengan query ke tabel certificates milik mentor,
-  // join ke product_bootcamp yang sudah selesai diajarkan) ---
-  const certificates = [
-    {
-      id: "CERT-M-001",
-      productTitle: "UI/UX Design Sprint Batch 3",
-      certificateNumber: "MU-INSTR/2026/05/00012",
-      issuedAt: "20 Mei 2026",
-      fileUrl: "https://example.com/certs/instr-2026-05-00012.pdf",
-    },
-    {
-      id: "CERT-M-002",
-      productTitle: "Public Speaking & Pitching Bootcamp",
-      certificateNumber: "MU-INSTR/2026/03/00007",
-      issuedAt: "8 Maret 2026",
-      fileUrl: "https://example.com/certs/instr-2026-03-00007.pdf",
-    },
-  ];
-
   const hasAnyCertificate = certificates.length > 0;
 
   const filteredCertificates = certificates.filter((cert) => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return true;
     return (
-      cert.productTitle.toLowerCase().includes(query) ||
-      cert.certificateNumber.toLowerCase().includes(query)
+      (cert.product_title || "").toLowerCase().includes(query) ||
+      cert.number.toLowerCase().includes(query)
     );
   });
 
@@ -115,17 +111,17 @@ export default function MentorCertificates() {
 
               <div className="bg-[#170F26] p-5 flex flex-col gap-3 flex-1">
                 <h4 className="font-bold text-[15px] text-white leading-snug line-clamp-2 min-h-[40px]">
-                  {cert.productTitle}
+                  {cert.product_title || "Sertifikat"}
                 </h4>
 
                 <div className="flex flex-col gap-0.5 text-[12px] text-[#9CA3AF]">
-                  <p>No. Sertifikat: {cert.certificateNumber}</p>
-                  <p>Diterbitkan: {cert.issuedAt}</p>
+                  <p>No. Sertifikat: {cert.number}</p>
+                  <p>Diterbitkan: {formatDate(cert.issued_at)}</p>
                 </div>
 
                 <div className="flex items-center gap-3 mt-2">
                   <a
-                    href={cert.fileUrl}
+                    href={cert.file_url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 px-4 py-2 rounded-[8px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors"
@@ -134,7 +130,7 @@ export default function MentorCertificates() {
                     Lihat
                   </a>
                   <a
-                    href={cert.fileUrl}
+                    href={cert.file_url}
                     download
                     className="flex items-center gap-1.5 px-4 py-2 rounded-[8px] border border-[#2D2342] text-[#E2E8F0] text-[12px] font-semibold hover:border-[#148F89]/50 hover:text-white transition-colors"
                   >

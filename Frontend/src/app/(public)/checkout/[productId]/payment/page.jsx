@@ -18,7 +18,7 @@ import {
 import Navbar from "@/component/Navbar";
 import { getAccessToken, API_BASE } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
-import Toast from "@/component/Toast";
+import { toast } from "sonner";
 
 const NAVBAR_CLEARANCE = 150;
 const CONTENT_WIDTH = 640;
@@ -94,13 +94,6 @@ export default function CheckoutPaymentPage() {
   const [secondsLeft, setSecondsLeft] = useState(RESERVATION_SECONDS);
   const [isExpired, setIsExpired] = useState(false);
 
-  const [toast, setToast] = useState({
-    open: false,
-    type: "success",
-    title: "",
-    message: "",
-  });
-
   const [isLeavingAfterSuccess, setIsLeavingAfterSuccess] = useState(false);
 
   useEffect(() => {
@@ -165,11 +158,8 @@ export default function CheckoutPaymentPage() {
           throw new Error(data?.detail || "Gagal mengonfirmasi pembayaran.");
         }
 
-        setToast({
-          open: true,
-          type: "success",
-          title: "Pembayaran Berhasil",
-          message: "Pembayaran berhasil dikonfirmasi. Mengalihkan ke halaman transaksi...",
+        toast.success("Pembayaran Berhasil", {
+          description: "Pembayaran berhasil dikonfirmasi. Mengalihkan ke halaman transaksi...",
         });
 
         setIsLeavingAfterSuccess(true);
@@ -181,11 +171,8 @@ export default function CheckoutPaymentPage() {
       } catch (err) {
         setSubmitError(err.message || "Gagal mengonfirmasi pembayaran.");
 
-        setToast({
-          open: true,
-          type: "error",
-          title: "Checkout Gagal",
-          message: err.message || "Gagal mengonfirmasi pembayaran.",
+        toast.error("Checkout Gagal", {
+          description: err.message || "Gagal mengonfirmasi pembayaran.",
         });
       }finally {
         setIsSubmitting(false);
@@ -468,18 +455,6 @@ export default function CheckoutPaymentPage() {
           </div>
         </main>
       </div>
-      <Toast
-        open={toast.open}
-        type={toast.type}
-        title={toast.title}
-        message={toast.message}
-        onClose={() =>
-          setToast((prev) => ({
-            ...prev,
-            open: false,
-          }))
-        }
-      />
     </div>
   );
 }

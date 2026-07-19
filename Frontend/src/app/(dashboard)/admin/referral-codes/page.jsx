@@ -10,40 +10,27 @@ import {
   Search,
   Minus,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
+import { apiRequest } from "@/lib/api";
 
 const heightFix = `.adm-h-42 { height: 42px; } .adm-h-48 { height: 48px; }`;
 
-// --- MOCK DATA katalog produk, dikelompokkan per kategori -- nanti ganti
-// query gabungan product_bootcamp + product_mentoring + product_modul ---
-const PRODUCT_CATALOG = {
-  Bootcamp: [
-    { id: "BC-001", title: "Winner Class Dan Module (Debate)" },
-    { id: "BC-002", title: "Frontend Engineering Sprint" },
-    { id: "BC-003", title: "Public Speaking Bootcamp" },
-  ],
-  Mentoring: [
-    { id: "MT-001", title: "1-on-1 Career Mentoring" },
-    { id: "MT-002", title: "Bundling PowerPack (Newbie Friendly)" },
-    { id: "MT-003", title: "Interview Preparation Session" },
-  ],
-  Modul: [
-    { id: "MD-001", title: "Masterclass Business Case Competition (BCC)" },
-  ],
-};
+const TYPE_LABEL = { BOOTCAMP: "Bootcamp", MENTORING: "Mentoring", MODULE: "Modul" };
 
-const ALL_PRODUCTS = Object.values(PRODUCT_CATALOG).flat();
-
-function productTitleById(id) {
-  return ALL_PRODUCTS.find((p) => p.id === id)?.title || id;
+function groupCatalog(products) {
+  const grouped = { Bootcamp: [], Mentoring: [], Modul: [] };
+  for (const p of products) {
+    const label = TYPE_LABEL[p.type];
+    if (label) grouped[label].push({ id: p.id, title: p.title });
+  }
+  return grouped;
 }
 
-// Dipakai bareng di drawer Tambah & Edit -- satu sumber kebenaran buat UI
-// pemilihan produk, biar dua form itu nggak punya 2 versi logic yang beda.
 function ScopeSelector({
+  catalog,
   scopeMode,
   setScopeMode,
   selectedIds,
@@ -58,7 +45,7 @@ function ScopeSelector({
   };
 
   const categoryState = (category) => {
-    const ids = PRODUCT_CATALOG[category].map((p) => p.id);
+    const ids = catalog[category].map((p) => p.id);
     const selectedCount = ids.filter((id) => selectedIds.includes(id)).length;
     if (selectedCount === 0) return "none";
     if (selectedCount === ids.length) return "all";
@@ -66,7 +53,7 @@ function ScopeSelector({
   };
 
   const toggleCategory = (category) => {
-    const ids = PRODUCT_CATALOG[category].map((p) => p.id);
+    const ids = catalog[category].map((p) => p.id);
     const state = categoryState(category);
     if (state === "all") {
       setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
@@ -77,9 +64,7 @@ function ScopeSelector({
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-        Berlaku Untuk
-      </p>
+      <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Berlaku Untuk</p>
 
       <div className="adm-h-42 bg-[#F1F5F9] px-1.5 rounded-[8px] flex items-center gap-1">
         <button
@@ -105,10 +90,7 @@ function ScopeSelector({
       ) : (
         <div className="flex flex-col gap-2.5">
           <div className="relative">
-            <Search
-              size={15}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
-            />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
             <input
               type="text"
               value={search}
@@ -122,7 +104,7 @@ function ScopeSelector({
             style={{ maxHeight: "260px" }}
             className="overflow-y-auto flex flex-col gap-3 border border-[#E2E8F0] rounded-[8px] p-3 bg-[#F8FAFC]"
           >
-            {Object.entries(PRODUCT_CATALOG).map(([category, products]) => {
+            {Object.entries(catalog).map(([category, products]) => {
               const filtered = products.filter((p) =>
                 p.title.toLowerCase().includes(search.toLowerCase()),
               );
@@ -131,48 +113,31 @@ function ScopeSelector({
 
               return (
                 <div key={category} className="flex flex-col gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => toggleCategory(category)}
-                    className="flex items-center gap-2 text-left"
-                  >
+                  <button type="button" onClick={() => toggleCategory(category)} className="flex items-center gap-2 text-left">
                     <span
                       style={{ width: "17px", height: "17px" }}
                       className={`shrink-0 rounded-[4px] border flex items-center justify-center transition-colors ${
-                        state === "none"
-                          ? "border-[#CBD5E1] bg-white"
-                          : "border-[#148F89] bg-[#148F89]"
+                        state === "none" ? "border-[#CBD5E1] bg-white" : "border-[#148F89] bg-[#148F89]"
                       }`}
                     >
-                      {state === "all" && (
-                        <Check size={12} className="text-white" />
-                      )}
-                      {state === "partial" && (
-                        <Minus size={11} className="text-white" />
-                      )}
+                      {state === "all" && <Check size={12} className="text-white" />}
+                      {state === "partial" && <Minus size={11} className="text-white" />}
                     </span>
-                    <span className="text-[#1E293B] font-bold text-[12.5px]">
-                      {category}
-                    </span>
+                    <span className="text-[#1E293B] font-bold text-[12.5px]">{category}</span>
                   </button>
 
                   <div className="flex flex-col gap-1 pl-6">
                     {filtered.map((product) => {
                       const isChecked = selectedIds.includes(product.id);
                       return (
-                        <label
-                          key={product.id}
-                          className="flex items-center gap-2 cursor-pointer py-0.5"
-                        >
+                        <label key={product.id} className="flex items-center gap-2 cursor-pointer py-0.5">
                           <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => toggleProduct(product.id)}
                             className="w-[15px] h-[15px] rounded border-[#CBD5E1] text-[#148F89] focus:ring-[#148F89] cursor-pointer"
                           />
-                          <span className="text-[#334155] text-[12.5px]">
-                            {product.title}
-                          </span>
+                          <span className="text-[#334155] text-[12.5px]">{product.title}</span>
                         </label>
                       );
                     })}
@@ -183,9 +148,7 @@ function ScopeSelector({
           </div>
 
           <p className="text-[#94A3B8] text-[11px]">
-            {selectedIds.length === 0
-              ? "Belum ada produk dipilih."
-              : `${selectedIds.length} produk dipilih.`}
+            {selectedIds.length === 0 ? "Belum ada produk dipilih." : `${selectedIds.length} produk dipilih.`}
           </p>
         </div>
       )}
@@ -193,59 +156,56 @@ function ScopeSelector({
   );
 }
 
+const emptyForm = {
+  code: "",
+  discountType: "percentage",
+  discountValue: "",
+  maxDiscount: "",
+  quota: "",
+  scopeMode: "all",
+  selectedIds: [],
+  search: "",
+};
+
 export default function ReferralCodes() {
-  const [codes, setCodes] = useState([
-    {
-      id: "1",
-      code: "LAUNCH2026",
-      discountType: "percentage",
-      discountValue: 20,
-      maxDiscount: 50000,
-      quota: 100,
-      used: 34,
-      isActive: true,
-      scopeMode: "all",
-      productIds: [],
-    },
-    {
-      id: "2",
-      code: "MENTORING10",
-      discountType: "fixed",
-      discountValue: 10000,
-      maxDiscount: null,
-      quota: 50,
-      used: 50,
-      isActive: true,
-      scopeMode: "specific",
-      productIds: ["MT-001", "MT-002", "MT-003"],
-    },
-    {
-      id: "3",
-      code: "COMEBACKBC001",
-      discountType: "percentage",
-      discountValue: 15,
-      maxDiscount: 30000,
-      quota: 20,
-      used: 12,
-      isActive: false,
-      scopeMode: "specific",
-      productIds: ["BC-001"],
-    },
-  ]);
+  const [codes, setCodes] = useState([]);
+  const [catalog, setCatalog] = useState({ Bootcamp: [], Mentoring: [], Modul: [] });
+  const [productTitleMap, setProductTitleMap] = useState({});
+  const [loading, setLoading] = useState(true);
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingCode, setEditingCode] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  const [formCode, setFormCode] = useState("");
-  const [formDiscountType, setFormDiscountType] = useState("percentage");
-  const [formDiscountValue, setFormDiscountValue] = useState("");
-  const [formMaxDiscount, setFormMaxDiscount] = useState("");
-  const [formQuota, setFormQuota] = useState("");
-  const [formScopeMode, setFormScopeMode] = useState("all");
-  const [formSelectedIds, setFormSelectedIds] = useState([]);
-  const [formSearch, setFormSearch] = useState("");
+  const [form, setForm] = useState(emptyForm);
+
+  const fetchCodes = useCallback(async () => {
+    try {
+      const res = await apiRequest("/api/transactions/referral-codes/");
+      setCodes(res?.referral_codes || []);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      apiRequest("/api/products/?all=true", { auth: false }),
+      fetchCodes(),
+    ])
+      .then(([productsRes]) => {
+        const products = productsRes?.products || [];
+        setCatalog(groupCatalog(products));
+        const map = {};
+        products.forEach((p) => { map[p.id] = p.title; });
+        setProductTitleMap(map);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [fetchCodes]);
 
   useEffect(() => {
     document.body.style.overflow = isAddOpen || isEditOpen ? "hidden" : "auto";
@@ -255,22 +215,15 @@ export default function ReferralCodes() {
   }, [isAddOpen, isEditOpen]);
 
   const formatIDR = (val) =>
-    new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      maximumFractionDigits: 0,
-    }).format(val);
+    new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(val);
 
   const formatDiscount = (item) =>
-    item.discountType === "percentage"
-      ? `${item.discountValue}%`
-      : formatIDR(item.discountValue);
+    item.discount_type === "percentage" ? `${item.discount_value}%` : formatIDR(item.discount_value);
 
   const scopeLabel = (item) => {
-    if (item.scopeMode === "all") return "Semua Produk";
-    if (item.productIds.length === 1)
-      return productTitleById(item.productIds[0]);
-    return `${item.productIds.length} Produk Terpilih`;
+    if (item.applies_to_all) return "Semua Produk";
+    if (item.product_ids.length === 1) return productTitleMap[item.product_ids[0]] || item.product_ids[0];
+    return `${item.product_ids.length} Produk Terpilih`;
   };
 
   const copyCode = (item) => {
@@ -279,85 +232,91 @@ export default function ReferralCodes() {
     setTimeout(() => setCopiedId(null), 1500);
   };
 
-  const toggleActive = (id) => {
-    setCodes((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, isActive: !c.isActive } : c)),
-    );
-  };
-
-  const resetForm = () => {
-    setFormCode("");
-    setFormDiscountType("percentage");
-    setFormDiscountValue("");
-    setFormMaxDiscount("");
-    setFormQuota("");
-    setFormScopeMode("all");
-    setFormSelectedIds([]);
-    setFormSearch("");
+  const toggleActive = async (item) => {
+    try {
+      await apiRequest(`/api/transactions/referral-codes/${item.id}/`, {
+        method: "PATCH",
+        body: { is_active: !item.is_active },
+      });
+      fetchCodes();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const openAdd = () => {
-    resetForm();
+    setForm(emptyForm);
     setIsAddOpen(true);
   };
 
   const openEdit = (item) => {
     setEditingCode(item);
-    setFormCode(item.code);
-    setFormDiscountType(item.discountType);
-    setFormDiscountValue(String(item.discountValue));
-    setFormMaxDiscount(item.maxDiscount ? String(item.maxDiscount) : "");
-    setFormQuota(String(item.quota));
-    setFormScopeMode(item.scopeMode);
-    setFormSelectedIds(item.productIds);
-    setFormSearch("");
+    setForm({
+      code: item.code,
+      discountType: item.discount_type,
+      discountValue: String(item.discount_value),
+      maxDiscount: item.max_discount ? String(item.max_discount) : "",
+      quota: String(item.quota),
+      scopeMode: item.applies_to_all ? "all" : "specific",
+      selectedIds: item.product_ids,
+      search: "",
+    });
     setIsEditOpen(true);
   };
 
-  const handleCreate = () => {
-    if (!formCode.trim() || !formDiscountValue || !formQuota) return;
-    setCodes((prev) => [
-      ...prev,
-      {
-        id: String(Date.now()),
-        code: formCode.trim().toUpperCase(),
-        discountType: formDiscountType,
-        discountValue: Number(formDiscountValue),
-        maxDiscount: formMaxDiscount ? Number(formMaxDiscount) : null,
-        quota: Number(formQuota),
-        used: 0,
-        isActive: true,
-        scopeMode: formScopeMode,
-        productIds: formScopeMode === "all" ? [] : formSelectedIds,
-      },
-    ]);
-    setIsAddOpen(false);
+  const handleCreate = async () => {
+    if (!form.code.trim() || !form.discountValue || !form.quota) return;
+    setSaving(true);
+    try {
+      await apiRequest("/api/transactions/referral-codes/add/", {
+        method: "POST",
+        body: {
+          code: form.code.trim().toUpperCase(),
+          discount_type: form.discountType,
+          discount_value: Number(form.discountValue),
+          max_discount: form.maxDiscount ? Number(form.maxDiscount) : null,
+          quota: Number(form.quota),
+          applies_to_all: form.scopeMode === "all",
+          product_ids: form.scopeMode === "all" ? [] : form.selectedIds,
+        },
+      });
+      setIsAddOpen(false);
+      fetchCodes();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingCode) return;
-    setCodes((prev) =>
-      prev.map((c) =>
-        c.id === editingCode.id
-          ? {
-              ...c,
-              code: formCode.trim().toUpperCase(),
-              discountType: formDiscountType,
-              discountValue: Number(formDiscountValue),
-              maxDiscount: formMaxDiscount ? Number(formMaxDiscount) : null,
-              quota: Number(formQuota),
-              scopeMode: formScopeMode,
-              productIds: formScopeMode === "all" ? [] : formSelectedIds,
-            }
-          : c,
-      ),
-    );
-    setIsEditOpen(false);
-    setEditingCode(null);
+    setSaving(true);
+    try {
+      await apiRequest(`/api/transactions/referral-codes/${editingCode.id}/`, {
+        method: "PATCH",
+        body: {
+          code: form.code.trim().toUpperCase(),
+          discount_type: form.discountType,
+          discount_value: Number(form.discountValue),
+          max_discount: form.maxDiscount ? Number(form.maxDiscount) : null,
+          quota: Number(form.quota),
+          applies_to_all: form.scopeMode === "all",
+          product_ids: form.scopeMode === "all" ? [] : form.selectedIds,
+        },
+      });
+      setIsEditOpen(false);
+      setEditingCode(null);
+      fetchCodes();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const activeCount = codes.filter((c) => c.isActive).length;
-  const totalUsed = codes.reduce((sum, c) => sum + c.used, 0);
+  const activeCount = codes.filter((c) => c.is_active).length;
+  const totalUsed = codes.reduce((sum, c) => sum + c.used_count, 0);
 
   return (
     <DashboardLayout title="Kode Referral">
@@ -365,12 +324,8 @@ export default function ReferralCodes() {
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="font-bold text-[22px] text-[#0F172A]">
-            Kode Referral & Voucher
-          </h1>
-          <p className="text-[#64748B] text-[14px] mt-1">
-            Kelola kode diskon yang bisa dipakai user pas checkout.
-          </p>
+          <h1 className="font-bold text-[22px] text-[#0F172A]">Kode Referral & Voucher</h1>
+          <p className="text-[#64748B] text-[14px] mt-1">Kelola kode diskon yang bisa dipakai user pas checkout.</p>
         </div>
         <button
           onClick={openAdd}
@@ -383,26 +338,14 @@ export default function ReferralCodes() {
 
       <div className="grid grid-cols-3 gap-5">
         <StatCard label="Total Kode" value={codes.length} unit="kode" />
-        <StatCard
-          label="Kode Aktif"
-          value={activeCount}
-          unit="kode"
-          variant="success"
-        />
-        <StatCard
-          label="Total Terpakai"
-          value={totalUsed}
-          unit="kali"
-          variant="primary"
-        />
+        <StatCard label="Kode Aktif" value={activeCount} unit="kode" variant="success" />
+        <StatCard label="Total Terpakai" value={totalUsed} unit="kali" variant="primary" />
       </div>
 
       <div className="flex flex-col gap-4">
-        <h2 className="text-[16px] font-semibold text-[#0F172A]">
-          Daftar Kode
-        </h2>
+        <h2 className="text-[16px] font-semibold text-[#0F172A]">Daftar Kode</h2>
 
-        {codes.length === 0 ? (
+        {!loading && codes.length === 0 ? (
           <EmptyState message="Belum ada kode referral yang dibuat." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
@@ -410,32 +353,17 @@ export default function ReferralCodes() {
               <table className="w-full text-[13px]">
                 <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                   <tr>
-                    <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">
-                      KODE
-                    </th>
-                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
-                      DISKON
-                    </th>
-                    <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">
-                      BERLAKU UNTUK
-                    </th>
-                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
-                      KUOTA
-                    </th>
-                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
-                      STATUS
-                    </th>
-                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
-                      AKSI
-                    </th>
+                    <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">KODE</th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">DISKON</th>
+                    <th className="px-6 py-3.5 text-left font-bold text-[#64748B] tracking-wider text-[11px]">BERLAKU UNTUK</th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">KUOTA</th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">STATUS</th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">AKSI</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0] bg-white">
                   {codes.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="hover:bg-[#F8FAFC] transition-colors"
-                    >
+                    <tr key={item.id} className="hover:bg-[#F8FAFC] transition-colors">
                       <td className="px-6 py-4">
                         <button
                           onClick={() => copyCode(item)}
@@ -451,40 +379,29 @@ export default function ReferralCodes() {
                       </td>
                       <td className="px-6 py-4 text-center text-[#334155] font-semibold whitespace-nowrap">
                         {formatDiscount(item)}
-                        {item.maxDiscount &&
-                          item.discountType === "percentage" && (
-                            <p className="text-[#94A3B8] text-[10px] font-normal">
-                              maks. {formatIDR(item.maxDiscount)}
-                            </p>
-                          )}
+                        {item.max_discount && item.discount_type === "percentage" && (
+                          <p className="text-[#94A3B8] text-[10px] font-normal">maks. {formatIDR(item.max_discount)}</p>
+                        )}
                       </td>
-                      <td
-                        className="px-6 py-4 text-[#64748B]"
-                        style={{ maxWidth: "220px" }}
-                      >
+                      <td className="px-6 py-4 text-[#64748B]" style={{ maxWidth: "220px" }}>
                         {scopeLabel(item)}
                       </td>
                       <td className="px-6 py-4 text-center text-[#475569] font-medium whitespace-nowrap">
-                        {item.used}/{item.quota}
+                        {item.used_count}/{item.quota}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <button
-                          onClick={() => toggleActive(item.id)}
+                          onClick={() => toggleActive(item)}
                           className={`inline-flex px-3 py-1.5 text-[11px] rounded-full font-bold transition-colors whitespace-nowrap ${
-                            item.isActive
-                              ? "bg-[#DCFCE7] text-[#166534] hover:bg-[#BBF7D0]"
-                              : "bg-[#FEE2E2] text-[#991B1B] hover:bg-[#FECACA]"
+                            item.is_active ? "bg-[#DCFCE7] text-[#166534] hover:bg-[#BBF7D0]" : "bg-[#FEE2E2] text-[#991B1B] hover:bg-[#FECACA]"
                           }`}
                         >
-                          {item.isActive ? "AKTIF" : "NONAKTIF"}
+                          {item.is_active ? "AKTIF" : "NONAKTIF"}
                         </button>
                       </td>
                       <td className="px-6 py-4 text-center">
                         <button onClick={() => openEdit(item)}>
-                          <PenLine
-                            size={17}
-                            className="cursor-pointer text-[#94A3B8] hover:text-[#148F89] transition-colors"
-                          />
+                          <PenLine size={17} className="cursor-pointer text-[#94A3B8] hover:text-[#148F89] transition-colors" />
                         </button>
                       </td>
                     </tr>
@@ -498,10 +415,7 @@ export default function ReferralCodes() {
 
       {/* --- DRAWER TAMBAH --- */}
       {isAddOpen && (
-        <div
-          className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm"
-          onClick={() => setIsAddOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm" onClick={() => setIsAddOpen(false)} />
       )}
       <div
         style={{ width: "480px", maxWidth: "100%" }}
@@ -509,30 +423,21 @@ export default function ReferralCodes() {
       >
         <div className="w-full shrink-0 bg-[#F8FAFC] border-b border-[#E2E8F0] flex flex-col justify-center px-8 py-6 gap-1">
           <div className="flex justify-between items-center">
-            <p className="text-[#1E293B] text-[19px] font-bold">
-              Kode Referral Baru
-            </p>
-            <button
-              onClick={() => setIsAddOpen(false)}
-              className="p-2 hover:bg-[#E2E8F0] rounded-full transition-colors"
-            >
+            <p className="text-[#1E293B] text-[19px] font-bold">Kode Referral Baru</p>
+            <button onClick={() => setIsAddOpen(false)} className="p-2 hover:bg-[#E2E8F0] rounded-full transition-colors">
               <X className="text-[#64748B]" size={20} />
             </button>
           </div>
-          <p className="text-[#64748B] text-[13px]">
-            Bikin kode diskon baru buat dipakai user pas checkout.
-          </p>
+          <p className="text-[#64748B] text-[13px]">Bikin kode diskon baru buat dipakai user pas checkout.</p>
         </div>
 
         <div className="px-8 py-6 flex flex-col gap-5">
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-              Kode
-            </p>
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Kode</p>
             <input
               type="text"
-              value={formCode}
-              onChange={(e) => setFormCode(e.target.value)}
+              value={form.code}
+              onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
               placeholder="Contoh: LAUNCH2026"
               className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B] font-mono uppercase"
             />
@@ -540,32 +445,25 @@ export default function ReferralCodes() {
 
           <div className="flex gap-4 w-full">
             <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-                Tipe Diskon
-              </p>
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Tipe Diskon</p>
               <div className="relative w-full">
                 <select
-                  value={formDiscountType}
-                  onChange={(e) => setFormDiscountType(e.target.value)}
+                  value={form.discountType}
+                  onChange={(e) => setForm((f) => ({ ...f, discountType: e.target.value }))}
                   className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
                 >
                   <option value="percentage">Persentase (%)</option>
                   <option value="fixed">Nominal Tetap (Rp)</option>
                 </select>
-                <ChevronDown
-                  size={18}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
-                />
+                <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none" />
               </div>
             </div>
             <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-                Nilai Diskon
-              </p>
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Nilai Diskon</p>
               <input
                 type="number"
-                value={formDiscountValue}
-                onChange={(e) => setFormDiscountValue(e.target.value)}
+                value={form.discountValue}
+                onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
                 placeholder="0"
                 className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
               />
@@ -573,38 +471,37 @@ export default function ReferralCodes() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-              Maks. Potongan (opsional)
-            </p>
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Maks. Potongan (opsional)</p>
             <input
               type="number"
-              value={formMaxDiscount}
-              onChange={(e) => setFormMaxDiscount(e.target.value)}
+              value={form.maxDiscount}
+              onChange={(e) => setForm((f) => ({ ...f, maxDiscount: e.target.value }))}
               placeholder="Cuma berlaku buat tipe persentase"
               className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
 
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-              Kuota Pemakaian
-            </p>
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Kuota Pemakaian</p>
             <input
               type="number"
-              value={formQuota}
-              onChange={(e) => setFormQuota(e.target.value)}
+              value={form.quota}
+              onChange={(e) => setForm((f) => ({ ...f, quota: e.target.value }))}
               placeholder="Berapa kali kode ini boleh dipakai"
               className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
 
           <ScopeSelector
-            scopeMode={formScopeMode}
-            setScopeMode={setFormScopeMode}
-            selectedIds={formSelectedIds}
-            setSelectedIds={setFormSelectedIds}
-            search={formSearch}
-            setSearch={setFormSearch}
+            catalog={catalog}
+            scopeMode={form.scopeMode}
+            setScopeMode={(v) => setForm((f) => ({ ...f, scopeMode: v }))}
+            selectedIds={form.selectedIds}
+            setSelectedIds={(updater) =>
+              setForm((f) => ({ ...f, selectedIds: typeof updater === "function" ? updater(f.selectedIds) : updater }))
+            }
+            search={form.search}
+            setSearch={(v) => setForm((f) => ({ ...f, search: v }))}
           />
         </div>
 
@@ -617,19 +514,17 @@ export default function ReferralCodes() {
           </button>
           <button
             onClick={handleCreate}
-            className="flex-1 py-3 bg-[#148F89] text-white font-bold rounded-[8px] hover:bg-[#117A75] transition-colors"
+            disabled={saving}
+            className="flex-1 py-3 bg-[#148F89] text-white font-bold rounded-[8px] hover:bg-[#117A75] transition-colors disabled:opacity-50"
           >
-            Buat Kode
+            {saving ? "Menyimpan..." : "Buat Kode"}
           </button>
         </div>
       </div>
 
       {/* --- DRAWER EDIT --- */}
       {isEditOpen && (
-        <div
-          className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm"
-          onClick={() => setIsEditOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm" onClick={() => setIsEditOpen(false)} />
       )}
       <div
         style={{ width: "480px", maxWidth: "100%" }}
@@ -637,107 +532,91 @@ export default function ReferralCodes() {
       >
         <div className="w-full shrink-0 bg-[#F8FAFC] border-b border-[#E2E8F0] flex flex-col justify-center px-8 py-6 gap-1">
           <div className="flex justify-between items-center">
-            <p className="text-[#1E293B] text-[19px] font-bold">
-              Edit Kode Referral
-            </p>
-            <button
-              onClick={() => setIsEditOpen(false)}
-              className="p-2 hover:bg-[#E2E8F0] rounded-full transition-colors"
-            >
+            <p className="text-[#1E293B] text-[19px] font-bold">Edit Kode Referral</p>
+            <button onClick={() => setIsEditOpen(false)} className="p-2 hover:bg-[#E2E8F0] rounded-full transition-colors">
               <X className="text-[#64748B]" size={20} />
             </button>
           </div>
           <p className="text-[#64748B] text-[13px]">
-            {editingCode?.used > 0
-              ? `Udah dipakai ${editingCode.used} kali -- perubahan cuma berlaku buat pemakaian selanjutnya.`
+            {editingCode?.used_count > 0
+              ? `Udah dipakai ${editingCode.used_count} kali -- perubahan cuma berlaku buat pemakaian selanjutnya.`
               : "Ubah detail kode ini."}
           </p>
         </div>
 
         <div className="px-8 py-6 flex flex-col gap-5">
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-              Kode
-            </p>
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Kode</p>
             <input
               type="text"
-              value={formCode}
-              onChange={(e) => setFormCode(e.target.value)}
+              value={form.code}
+              onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
               className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B] font-mono uppercase"
             />
           </div>
 
           <div className="flex gap-4 w-full">
             <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-                Tipe Diskon
-              </p>
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Tipe Diskon</p>
               <div className="relative w-full">
                 <select
-                  value={formDiscountType}
-                  onChange={(e) => setFormDiscountType(e.target.value)}
+                  value={form.discountType}
+                  onChange={(e) => setForm((f) => ({ ...f, discountType: e.target.value }))}
                   className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
                 >
                   <option value="percentage">Persentase (%)</option>
                   <option value="fixed">Nominal Tetap (Rp)</option>
                 </select>
-                <ChevronDown
-                  size={18}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
-                />
+                <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none" />
               </div>
             </div>
             <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-                Nilai Diskon
-              </p>
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Nilai Diskon</p>
               <input
                 type="number"
-                value={formDiscountValue}
-                onChange={(e) => setFormDiscountValue(e.target.value)}
+                value={form.discountValue}
+                onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
                 className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
               />
             </div>
           </div>
 
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-              Maks. Potongan (opsional)
-            </p>
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Maks. Potongan (opsional)</p>
             <input
               type="number"
-              value={formMaxDiscount}
-              onChange={(e) => setFormMaxDiscount(e.target.value)}
+              value={form.maxDiscount}
+              onChange={(e) => setForm((f) => ({ ...f, maxDiscount: e.target.value }))}
               placeholder="Cuma berlaku buat tipe persentase"
               className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
 
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-              Kuota Pemakaian
-            </p>
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Kuota Pemakaian</p>
             <input
               type="number"
-              value={formQuota}
-              onChange={(e) => setFormQuota(e.target.value)}
+              value={form.quota}
+              onChange={(e) => setForm((f) => ({ ...f, quota: e.target.value }))}
               className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
-            {editingCode && Number(formQuota) < editingCode.used && (
+            {editingCode && Number(form.quota) < editingCode.used_count && (
               <p className="text-[#DC2626] text-[11px]">
-                Kuota nggak boleh kurang dari {editingCode.used} (jumlah yang
-                udah kepake).
+                Kuota nggak boleh kurang dari {editingCode.used_count} (jumlah yang udah kepake).
               </p>
             )}
           </div>
 
           <ScopeSelector
-            scopeMode={formScopeMode}
-            setScopeMode={setFormScopeMode}
-            selectedIds={formSelectedIds}
-            setSelectedIds={setFormSelectedIds}
-            search={formSearch}
-            setSearch={setFormSearch}
+            catalog={catalog}
+            scopeMode={form.scopeMode}
+            setScopeMode={(v) => setForm((f) => ({ ...f, scopeMode: v }))}
+            selectedIds={form.selectedIds}
+            setSelectedIds={(updater) =>
+              setForm((f) => ({ ...f, selectedIds: typeof updater === "function" ? updater(f.selectedIds) : updater }))
+            }
+            search={form.search}
+            setSearch={(v) => setForm((f) => ({ ...f, search: v }))}
           />
         </div>
 
@@ -750,10 +629,10 @@ export default function ReferralCodes() {
           </button>
           <button
             onClick={handleSaveEdit}
-            disabled={editingCode && Number(formQuota) < editingCode.used}
+            disabled={saving || (editingCode && Number(form.quota) < editingCode.used_count)}
             className="flex-1 py-3 bg-[#148F89] text-white font-bold rounded-[8px] hover:bg-[#117A75] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Simpan Perubahan
+            {saving ? "Menyimpan..." : "Simpan Perubahan"}
           </button>
         </div>
       </div>

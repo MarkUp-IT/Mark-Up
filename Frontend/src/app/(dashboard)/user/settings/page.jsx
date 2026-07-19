@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Camera,
@@ -13,8 +14,8 @@ import {
   X,
 } from "lucide-react";
 import DashboardLayout from "@/component/user/DashboardLayout";
-import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
-import Toast from "@/component/Toast";
+import { apiRequest, getAccessToken, clearTokens, API_BASE } from "@/lib/api";
+import { toast } from "sonner";
 
 function Field({ label, value, onChange, disabled, note, type = "text" }) {
   return (
@@ -38,8 +39,8 @@ function Field({ label, value, onChange, disabled, note, type = "text" }) {
 
 export default function Settings() {
   const shouldReduceMotion = useReducedMotion();
+  const router = useRouter();
 
-  // TODO: ganti semua data ini dengan data user dari session/auth context
   const [email, setEmail] = useState("");
   const [initialInfo, setInitialInfo] = useState({
     fullName: "",
@@ -60,19 +61,17 @@ export default function Settings() {
   const [photoError, setPhotoError] = useState(null);
 
   const [loadingProfile, setLoadingProfile] = useState(true);
-  const [toast, setToast] = useState({
-    open: false,
-    type: "success",
-    title: "",
-    message: "",
-  });
   const [isSaving, setIsSaving] = useState(false);
 
 
-  const [cvFileName, setCvFileName] = useState("CV_Prabroro_2026.pdf");
+  const [cvUrl, setCvUrl] = useState(null);
+  const [cvFileName, setCvFileName] = useState(null);
+  const [isUploadingCv, setIsUploadingCv] = useState(false);
+  const [cvError, setCvError] = useState(null);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const isInfoDirty =
     fullName !== initialInfo.fullName ||
@@ -114,19 +113,9 @@ export default function Settings() {
         currentStatus: u.current_status,
         linkedIn: u.linkedin_url,
       });
-      setToast({
-        open: true,
-        type: "success",
-        title: "Berhasil",
-        message: "Perubahan berhasil disimpan.",
-      });
+      toast.success("Berhasil", { description: "Perubahan berhasil disimpan." });
     } catch (err) {
-      setToast({
-        open: true,
-        type: "error",
-        title: "Gagal",
-        message: err?.message || "Gagal menyimpan perubahan.",
-      });
+      toast.error("Gagal", { description: err?.message || "Gagal menyimpan perubahan." });
     } finally {
       setIsSaving(false);
     }
@@ -175,6 +164,64 @@ const handleDeletePhoto = async () => {
   }
 };
 
+const handleUploadCv = async (file) => {
+  if (!file) return;
+  setIsUploadingCv(true);
+  setCvError(null);
+  try {
+    const formData = new FormData();
+    formData.append("cv", file);
+
+    const token = getAccessToken();
+    const res = await fetch(`${API_BASE}/api/accounts/me/cv/`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.detail || "Gagal mengunggah CV.");
+    }
+
+    setCvUrl(data.cv_url);
+    setCvFileName(data.cv_filename);
+  } catch (err) {
+    setCvError(err.message || "Gagal mengunggah CV.");
+  } finally {
+    setIsUploadingCv(false);
+  }
+};
+
+const handleDeleteCv = async () => {
+  setIsUploadingCv(true);
+  setCvError(null);
+  try {
+    await apiRequest("/api/accounts/me/cv/delete/", { method: "POST" });
+    setCvUrl(null);
+    setCvFileName(null);
+  } catch (err) {
+    setCvError(err.message || "Gagal menghapus CV.");
+  } finally {
+    setIsUploadingCv(false);
+  }
+};
+
+const handleDeleteAccount = async () => {
+  if (deleteConfirmText !== "HAPUS" || isDeletingAccount) return;
+  setIsDeletingAccount(true);
+  try {
+    await apiRequest("/api/accounts/me/delete/", { method: "POST" });
+    clearTokens();
+    toast.success("Akun berhasil dihapus", { description: "Sampai jumpa lagi." });
+    router.push("/login");
+  } catch (err) {
+    toast.error("Gagal menghapus akun", { description: err?.message || "Terjadi kesalahan." });
+  } finally {
+    setIsDeletingAccount(false);
+  }
+};
+
 
   useEffect(() => {
     async function fetchProfile() {
@@ -184,6 +231,8 @@ const handleDeletePhoto = async () => {
         const u = res.user;
         setEmail(u.email);
         setProfileImage(u.profile_image || null); // BARU
+        setCvUrl(u.cv_url || null);
+        setCvFileName(u.cv_filename || null);
         const info = {
           fullName: u.fullname,
           phone: u.phone,
@@ -346,18 +395,6 @@ const handleDeletePhoto = async () => {
           >
             Simpan Perubahan
           </button>
-          <Toast
-            open={toast.open}
-            type={toast.type}
-            title={toast.title}
-            message={toast.message}
-            onClose={() =>
-              setToast((prev) => ({
-                ...prev,
-                open: false,
-              }))
-            }
-          />
         </div>
       </motion.form>
 
@@ -375,32 +412,64 @@ const handleDeletePhoto = async () => {
           </p>
         </div>
 
+        {cvError && <p className="text-red-400 text-[11px]">{cvError}</p>}
+
         {cvFileName ? (
           <div className="flex items-center justify-between gap-3 bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
-            <div className="flex items-center gap-3 min-w-0">
+            <a
+              href={cvUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity"
+            >
               <FileText size={18} className="text-[#148F89] shrink-0" />
               <span className="text-white text-[13px] truncate">
                 {cvFileName}
               </span>
-            </div>
+            </a>
             <div className="flex items-center gap-3 shrink-0">
-              <button className="text-[#9CA3AF] hover:text-white text-[12px] font-medium transition-colors">
-                Ganti
-              </button>
+              <label
+                className={`text-[12px] font-medium transition-colors cursor-pointer ${
+                  isUploadingCv ? "text-[#6B7280] cursor-wait" : "text-[#9CA3AF] hover:text-white"
+                }`}
+              >
+                <input
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  disabled={isUploadingCv}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleUploadCv(file);
+                  }}
+                />
+                {isUploadingCv ? "Mengunggah..." : "Ganti"}
+              </label>
               <button
-                onClick={() => setCvFileName("")}
+                onClick={handleDeleteCv}
+                disabled={isUploadingCv}
                 aria-label="Hapus CV"
-                className="text-[#9CA3AF] hover:text-red-400 transition-colors"
+                className="text-[#9CA3AF] hover:text-red-400 transition-colors disabled:opacity-40"
               >
                 <Trash2 size={15} />
               </button>
             </div>
           </div>
         ) : (
-          <button className="flex items-center justify-center gap-2 border border-dashed border-[#2D2342] rounded-[8px] py-6 text-[#9CA3AF] hover:border-[#148F89]/50 hover:text-white transition-colors text-[13px]">
+          <label className="flex items-center justify-center gap-2 border border-dashed border-[#2D2342] rounded-[8px] py-6 text-[#9CA3AF] hover:border-[#148F89]/50 hover:text-white transition-colors text-[13px] cursor-pointer">
+            <input
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              disabled={isUploadingCv}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleUploadCv(file);
+              }}
+            />
             <Upload size={16} />
-            Unggah CV (PDF, maks 5MB)
-          </button>
+            {isUploadingCv ? "Mengunggah..." : "Unggah CV (PDF, maks 5MB)"}
+          </label>
         )}
       </motion.div>
 
@@ -446,8 +515,8 @@ const handleDeletePhoto = async () => {
           <div>
             <p className="text-white text-[13px] font-medium">Hapus Akun</p>
             <p className="text-[#9CA3AF] text-[12px] mt-0.5">
-              Semua data, sertifikat, dan riwayat transaksi akan dihapus
-              permanen.
+              Akunmu akan dinonaktifkan dan nggak bisa dipakai login lagi.
+              Riwayat transaksi dan sertifikat tetap tersimpan sebagai catatan.
             </p>
           </div>
           <button
@@ -487,7 +556,7 @@ const handleDeletePhoto = async () => {
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-white font-bold text-[17px]">
-                  Hapus Akun Permanen
+                  Hapus Akun
                 </h3>
                 <button
                   onClick={closeDeleteModal}
@@ -498,8 +567,10 @@ const handleDeletePhoto = async () => {
                 </button>
               </div>
               <p className="text-[#9CA3AF] text-[13px] leading-relaxed">
-                Tindakan ini tidak bisa dibatalkan. Semua sertifikat, riwayat
-                transaksi, dan data profilmu akan dihapus permanen dari Mark-Up.
+                Akunmu akan langsung dinonaktifkan dan kamu nggak akan bisa
+                login lagi. Riwayat sertifikat dan transaksimu tetap tersimpan
+                sebagai catatan -- hubungi tim support kalau ingin
+                mengaktifkan kembali.
               </p>
               <div className="flex flex-col gap-1.5">
                 <label className="text-[#E2E8F0] text-[12px]">
@@ -520,10 +591,11 @@ const handleDeletePhoto = async () => {
                   Batal
                 </button>
                 <button
-                  disabled={deleteConfirmText !== "HAPUS"}
+                  onClick={handleDeleteAccount}
+                  disabled={deleteConfirmText !== "HAPUS" || isDeletingAccount}
                   className="flex-1 py-2.5 rounded-[8px] bg-red-500 text-white text-[13px] font-semibold hover:bg-red-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Hapus Akun
+                  {isDeletingAccount ? "Menghapus..." : "Hapus Akun"}
                 </button>
               </div>
             </motion.div>

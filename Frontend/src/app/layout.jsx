@@ -2,6 +2,7 @@ import { Poppins, Plus_Jakarta_Sans, Geist, Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import SmoothScrollProvider from "@/component/SmoothScroll";
+import { Toaster } from "@/components/ui/sonner";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -33,6 +34,7 @@ export default function RootLayout({ children }) {
     <html lang="en" className={cn("font-sans", geist.variable)}>
       <body className={`${poppins.variable} ${jakarta.variable} ${inter.variable} antialiased`}>
         <SmoothScrollProvider>{children}</SmoothScrollProvider>
+        <Toaster position="top-right" richColors />
       </body>
     </html>
   );

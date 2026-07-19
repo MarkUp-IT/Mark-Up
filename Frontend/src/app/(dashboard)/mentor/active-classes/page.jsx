@@ -1,18 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import DashboardLayout from "@/component/mentor/DashboardLayout";
 import EmptyState from "@/component/mentor/EmptyState";
+import { apiRequest } from "@/lib/api";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#148F89] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0F081C]";
 
 const FILTERS = ["Semua", "Bootcamp", "Mentoring", "Riwayat"];
 
-// Card yang dipakai bareng Bootcamp & Mentoring -- satu sumber kebenaran
-// buat ukuran & style, sama persis kayak yang dipakai di my-products user.
 function ClassCard({ id, title, description, imageClass, badge, isCompleted }) {
   return (
     <Link
@@ -44,9 +43,51 @@ function ClassCard({ id, title, description, imageClass, badge, isCompleted }) {
   );
 }
 
+function groupByUserLibrary(sessions, titleKey) {
+  const groups = new Map();
+  for (const s of sessions) {
+    if (!groups.has(s.user_library_id)) {
+      groups.set(s.user_library_id, {
+        id: s.user_library_id,
+        title: s[titleKey],
+        menteeName: s.mentee_name,
+        sessions: [],
+      });
+    }
+    groups.get(s.user_library_id).sessions.push(s);
+  }
+  return Array.from(groups.values()).map((g) => {
+    const totalSessions = g.sessions.length;
+    const completedSessions = g.sessions.filter((s) => s.status === "completed").length;
+    return { ...g, totalSessions, completedSessions };
+  });
+}
+
 export default function MentorDashboard() {
   const [activeFilter, setActiveFilter] = useState("Semua");
+  const [profileName, setProfileName] = useState("");
+  const [raw, setRaw] = useState({ mentoring: [], bootcamp: [] });
+  const [loading, setLoading] = useState(true);
   const shouldReduceMotion = useReducedMotion() ?? false;
+
+  useEffect(() => {
+    apiRequest("/api/accounts/me/")
+      .then((res) => setProfileName(res?.user?.profile_name?.split(" ")[0] || ""))
+      .catch(() => {});
+    apiRequest("/api/mentors/me/sessions/")
+      .then((res) => setRaw(res || { mentoring: [], bootcamp: [] }))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const bootcampClasses = useMemo(
+    () => groupByUserLibrary(raw.bootcamp, "bootcamp_title"),
+    [raw.bootcamp],
+  );
+  const mentoringClasses = useMemo(
+    () => groupByUserLibrary(raw.mentoring, "title"),
+    [raw.mentoring],
+  );
 
   const sectionReveal = {
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
@@ -65,86 +106,20 @@ export default function MentorDashboard() {
     viewport: { once: true },
   });
 
-  // --- MOCK DATA (nanti ganti dengan query sesi & mentoring milik mentor yang login) ---
-  const bootcampClasses = [
-    {
-      id: "BC-001",
-      title: "Winner Class Dan Module (Debate)",
-      description:
-        "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor.",
-      imageClass: "from-[#4C1D95] to-[#0D9488]",
-      completedSessions: 5,
-      totalSessions: 8,
-    },
-    {
-      id: "BC-002",
-      title: "Frontend Engineering Sprint",
-      description:
-        "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor.",
-      imageClass: "from-[#4C1D95] to-[#0D9488]",
-      completedSessions: 6,
-      totalSessions: 6,
-    },
-  ];
-
-  // Mentoring sekarang jadi card + link ke halaman detail, sama kayak
-  // Bootcamp -- soalnya satu paket mentee bisa punya lebih dari 1 sesi
-  // (2x, 3x), jadi nggak pas lagi ditampilin sebagai 1 baris inline doang.
-  const mentoringClasses = [
-    {
-      id: "MT-001",
-      title: "1-on-1 Career Mentoring — Sarah Jenkins",
-      description: "Reviewing resume and preparing for technical interviews.",
-      imageClass: "from-[#4C1D95] to-[#CA8A04]",
-      completedSessions: 0,
-      totalSessions: 1,
-    },
-    {
-      id: "MT-002",
-      title: "Winner Class Dan Module (Debate) — Affan Fathir D.",
-      description:
-        "Student wants to discuss advanced validation strategies and startup pitching.",
-      imageClass: "from-[#4C1D95] to-[#CA8A04]",
-      completedSessions: 2,
-      totalSessions: 3,
-    },
-  ];
-
   const isRiwayat = activeFilter === "Riwayat";
   const showBootcamp = activeFilter === "Semua" || activeFilter === "Bootcamp";
-  const showMentoring =
-    activeFilter === "Semua" || activeFilter === "Mentoring";
+  const showMentoring = activeFilter === "Semua" || activeFilter === "Mentoring";
 
-  // Aktif vs Riwayat -- SEKARANG bener-bener kepisah kayak pola "my-products"
-  // di sisi user, bukan cuma digeser ke bawah + diredupin dalam list yang
-  // sama kayak sebelumnya. Riwayat SENGAJA nggak nongol pas filter "Semua".
-  const activeBootcamp = bootcampClasses.filter(
-    (i) => i.completedSessions < i.totalSessions,
-  );
-  const pastBootcamp = bootcampClasses.filter(
-    (i) => i.completedSessions >= i.totalSessions,
-  );
-  const activeMentoring = mentoringClasses.filter(
-    (i) => i.completedSessions < i.totalSessions,
-  );
-  const pastMentoring = mentoringClasses.filter(
-    (i) => i.completedSessions >= i.totalSessions,
-  );
+  const activeBootcamp = bootcampClasses.filter((i) => i.completedSessions < i.totalSessions);
+  const pastBootcamp = bootcampClasses.filter((i) => i.completedSessions >= i.totalSessions);
+  const activeMentoring = mentoringClasses.filter((i) => i.completedSessions < i.totalSessions);
+  const pastMentoring = mentoringClasses.filter((i) => i.completedSessions >= i.totalSessions);
 
-  const bootcampList = isRiwayat
-    ? pastBootcamp
-    : showBootcamp
-      ? activeBootcamp
-      : [];
-  const mentoringList = isRiwayat
-    ? pastMentoring
-    : showMentoring
-      ? activeMentoring
-      : [];
+  const bootcampList = isRiwayat ? pastBootcamp : showBootcamp ? activeBootcamp : [];
+  const mentoringList = isRiwayat ? pastMentoring : showMentoring ? activeMentoring : [];
 
   return (
     <DashboardLayout title="Active Classes">
-      {/* Header: welcome + filter (kiri), stat card (kanan) */}
       <motion.div
         {...sectionReveal}
         className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6"
@@ -152,7 +127,7 @@ export default function MentorDashboard() {
         <div className="flex flex-col gap-5">
           <div>
             <h1 className="text-[28px] sm:text-[32px] font-bold text-white leading-tight">
-              Hai Prabroro!
+              Hai {profileName || "Mentor"}!
             </h1>
             <p className="text-[#9CA3AF] text-[14px] mt-1">
               Siap buat sesi mengajar berikutnya?
@@ -202,15 +177,12 @@ export default function MentorDashboard() {
         </motion.p>
       )}
 
-      {/* --- INTENSIVE BOOTCAMP --- */}
-      {(showBootcamp || isRiwayat) && (
+      {!loading && (showBootcamp || isRiwayat) && (
         <motion.div {...sectionReveal} className="flex flex-col gap-5">
           <div
             className={`border-l-[4px] pl-3 ${isRiwayat ? "border-[#3A3545]" : "border-[#00C6D1]"}`}
           >
-            <h3 className="text-[18px] font-bold text-white">
-              Intensive Bootcamp
-            </h3>
+            <h3 className="text-[18px] font-bold text-white">Intensive Bootcamp</h3>
           </div>
           {bootcampList.length === 0 ? (
             <EmptyState
@@ -223,16 +195,12 @@ export default function MentorDashboard() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {bootcampList.map((item, index) => (
-                <motion.div
-                  key={item.id}
-                  {...cardReveal(index)}
-                  className="h-full"
-                >
+                <motion.div key={item.id} {...cardReveal(index)} className="h-full">
                   <ClassCard
-                    id={item.id}
+                    id={`bootcamp-${item.id}`}
                     title={item.title}
-                    description={item.description}
-                    imageClass={item.imageClass}
+                    description={item.menteeName ? `Peserta: ${item.menteeName}` : ""}
+                    imageClass="from-[#4C1D95] to-[#0D9488]"
                     isCompleted={item.completedSessions >= item.totalSessions}
                     badge={`SESSION ${Math.min(item.completedSessions + 1, item.totalSessions)}/${item.totalSessions}`}
                   />
@@ -243,15 +211,12 @@ export default function MentorDashboard() {
         </motion.div>
       )}
 
-      {/* --- PRIVATE MENTORING (sekarang card + link ke detail, sama kayak Bootcamp) --- */}
-      {(showMentoring || isRiwayat) && (
+      {!loading && (showMentoring || isRiwayat) && (
         <motion.div {...sectionReveal} className="flex flex-col gap-5">
           <div
             className={`border-l-[4px] pl-3 ${isRiwayat ? "border-[#3A3545]" : "border-[#D1D83E]"}`}
           >
-            <h3 className="text-[18px] font-bold text-white">
-              Private Mentoring
-            </h3>
+            <h3 className="text-[18px] font-bold text-white">Private Mentoring</h3>
           </div>
           {mentoringList.length === 0 ? (
             <EmptyState
@@ -264,16 +229,12 @@ export default function MentorDashboard() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {mentoringList.map((item, index) => (
-                <motion.div
-                  key={item.id}
-                  {...cardReveal(index)}
-                  className="h-full"
-                >
+                <motion.div key={item.id} {...cardReveal(index)} className="h-full">
                   <ClassCard
-                    id={item.id}
-                    title={item.title}
-                    description={item.description}
-                    imageClass={item.imageClass}
+                    id={`mentoring-${item.id}`}
+                    title={`${item.title} — ${item.menteeName}`}
+                    description={`${item.completedSessions}/${item.totalSessions} sesi selesai`}
+                    imageClass="from-[#4C1D95] to-[#CA8A04]"
                     isCompleted={item.completedSessions >= item.totalSessions}
                     badge={`SESI ${Math.min(item.completedSessions + 1, item.totalSessions)}/${item.totalSessions}`}
                   />

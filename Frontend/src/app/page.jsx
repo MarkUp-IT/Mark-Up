@@ -203,7 +203,7 @@ export default function HomePage() {
             <span className="font-bold">mencetak para juara.</span>
           </p>
           <Link
-            href="/produk"
+            href="/products"
             className={`bg-white py-3 px-6 md:py-2 md:px-5 rounded-full hover:scale-105 transition-all ease-in-out duration-200 overflow-hidden items-center flex text-black text-sm md:text-base font-bold gap-3 shadow-lg shadow-white/10 ${focusRing}`}
           >
             <span>Gabung MarkUp Sekarang</span>
@@ -614,7 +614,7 @@ export default function HomePage() {
           </div>
 
           <Link
-            href="/produk"
+            href="/products"
             className={`bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold text-xs md:text-sm py-3 px-6 md:px-8 rounded-full transition-colors ${focusRing}`}
           >
             Lihat Semua Paket

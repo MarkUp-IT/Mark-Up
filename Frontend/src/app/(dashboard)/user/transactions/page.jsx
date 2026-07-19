@@ -1,60 +1,82 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { Search, X } from "lucide-react";
 import DashboardLayout from "@/component/user/DashboardLayout";
 import EmptyState from "@/component/user/EmptyState";
+import { apiRequest } from "@/lib/api";
 
 const FILTERS = ["Semua", "Lunas", "Diproses", "Ditolak"];
 
 const statusMeta = {
-  paid: {
+  PAID: {
     label: "Lunas",
     bucket: "Lunas",
     className: "bg-[#148F89]/10 text-[#148F89] border border-[#148F89]/30",
   },
-  pending: {
-    label: "Belum Bayar",
-    bucket: "Diproses",
-    className: "bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/30",
-  },
-  waiting_verification: {
+  PENDING: {
     label: "Menunggu Verifikasi",
     bucket: "Diproses",
     className: "bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/30",
   },
-  rejected: {
+  FAILED: {
     label: "Ditolak",
     bucket: "Ditolak",
     className: "bg-[#EF4444]/10 text-[#EF4444] border border-[#EF4444]/30",
   },
-  expired: {
+  EXPIRED: {
     label: "Kedaluwarsa",
     bucket: "Ditolak",
     className: "bg-[#EF4444]/10 text-[#EF4444] border border-[#EF4444]/30",
   },
+  REFUNDED: {
+    label: "Direfund",
+    bucket: "Diproses",
+    className: "bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/30",
+  },
 };
 
 const typeMeta = {
-  bootcamp: { label: "Bootcamp", className: "bg-[#0A4A5C] text-[#00C6D1]" },
-  mentoring: { label: "Mentoring", className: "bg-[#3A3610] text-[#D1D83E]" },
-  modul: { label: "Modul", className: "bg-[#3B0E76] text-[#B19EEF]" },
+  BOOTCAMP: { label: "Bootcamp", className: "bg-[#0A4A5C] text-[#00C6D1]" },
+  MENTORING: { label: "Mentoring", className: "bg-[#3A3610] text-[#D1D83E]" },
+  MODULE: { label: "Modul", className: "bg-[#3B0E76] text-[#B19EEF]" },
 };
 
 const formatCurrency = (value) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
+  new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
+
+function formatDate(dateStr) {
+  if (!dateStr) return "-";
+  return new Date(dateStr).toLocaleString("id-ID", {
+    day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+  }) + " WIB";
+}
 
 export default function Transactions() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("Semua");
   const [selectedTx, setSelectedTx] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
   const shouldReduceMotion = useReducedMotion() ?? false;
+
+  const fetchTransactions = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiRequest("/api/transactions/me/transactions/");
+      setTransactions(res?.transactions || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
 
   useEffect(() => {
     document.body.style.overflow = selectedTx ? "hidden" : "auto";
@@ -73,109 +95,31 @@ export default function Transactions() {
   const cardReveal = (index) => ({
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
     whileInView: { opacity: 1, y: 0 },
-    transition: {
-      duration: shouldReduceMotion ? 0.2 : 0.4,
-      delay: shouldReduceMotion ? 0 : index * 0.05,
-    },
+    transition: { duration: shouldReduceMotion ? 0.2 : 0.4, delay: shouldReduceMotion ? 0 : index * 0.05 },
     viewport: { once: true },
   });
 
   const modalMotion = shouldReduceMotion
     ? { initial: { opacity: 0 }, animate: { opacity: 1 } }
-    : {
-        initial: { opacity: 0, scale: 0.96, y: 12 },
-        animate: { opacity: 1, scale: 1, y: 0 },
-      };
-
-  // --- MOCK DATA (nanti ganti dengan query ke tabel transactions milik user login) ---
-  const transactions = [
-    {
-      id: "TRX-20260701-001",
-      productTitle: "Winner Class Dan Module (Debate)",
-      productType: "bootcamp",
-      createdAt: "1 Juli 2026, 14:32 WIB",
-      status: "paid",
-      paymentMethod: "Transfer Bank Manual",
-    },
-    {
-      id: "TRX-20260705-002",
-      productTitle: "Masterclass Business Case Competition (BCC)",
-      productType: "modul",
-      createdAt: "5 Juli 2026, 09:10 WIB",
-      status: "paid",
-      paymentMethod: "Transfer Bank Manual",
-      subtotal: 125000,
-      discount: 80000,
-      discountCode: "LAUNCH",
-      tax: 0,
-      total: 45000,
-      invoiceUrl: "https://example.com/invoice/TRX-20260705-002.pdf",
-    },
-    {
-      id: "TRX-20260709-003",
-      productTitle: "1-on-1 Career Mentoring",
-      productType: "mentoring",
-      createdAt: "9 Juli 2026, 20:45 WIB",
-      status: "waiting_verification",
-      paymentMethod: "Transfer Bank Manual",
-      subtotal: 110000,
-      discount: 0,
-      discountCode: null,
-      tax: 0,
-      total: 110000,
-      proofUrl: "https://example.com/bukti/TRX-20260709-003.jpg",
-    },
-    {
-      id: "TRX-20260628-004",
-      productTitle: "Bundling PowerPack (Newbie Friendly)",
-      productType: "mentoring",
-      createdAt: "28 Juni 2026, 11:15 WIB",
-      status: "expired",
-      paymentMethod: "Transfer Bank Manual",
-      subtotal: 300000,
-      discount: 0,
-      discountCode: null,
-      tax: 0,
-      total: 300000,
-    },
-    {
-      id: "TRX-20260710-005",
-      productId: "MT-005",
-      productTitle: "101 Career Mentoring",
-      productType: "mentoring",
-      createdAt: "10 Juli 2026, 08:20 WIB",
-      status: "pending",
-      paymentMethod: "Transfer Bank Manual",
-      subtotal: 110000,
-      discount: 0,
-      discountCode: null,
-      tax: 0,
-      total: 110000,
-      // Bukan batasan dari bank/payment gateway -- ini kebijakan reservasi
-      // slot mentor kita sendiri (5 menit sejak checkout). Lewat dari ini,
-      // slot yang tadi di-hold otomatis dilepas lagi ke mentor.
-      expiresAt: "10 Juli 2026, 08:25 WIB",
-    },
-  ];
+    : { initial: { opacity: 0, scale: 0.96, y: 12 }, animate: { opacity: 1, scale: 1, y: 0 } };
 
   const totalTransaksi = transactions.length;
   const totalBelanja = transactions
-    .filter((t) => t.status === "paid")
-    .reduce((sum, t) => sum + t.total, 0);
-  const menungguPembayaran = transactions
-    .filter((t) => t.status === "pending")
-    .reduce((sum, t) => sum + t.total, 0);
+    .filter((t) => t.status === "PAID")
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+  const menungguVerifikasi = transactions
+    .filter((t) => t.status === "PENDING")
+    .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const hasAny = transactions.length > 0;
 
   const filtered = transactions.filter((t) => {
-    const matchesFilter =
-      activeFilter === "Semua" || statusMeta[t.status].bucket === activeFilter;
+    const matchesFilter = activeFilter === "Semua" || statusMeta[t.status]?.bucket === activeFilter;
     const query = searchQuery.trim().toLowerCase();
     const matchesSearch =
       !query ||
-      t.productTitle.toLowerCase().includes(query) ||
-      t.id.toLowerCase().includes(query);
+      (t.product_title || "").toLowerCase().includes(query) ||
+      t.transaction_id.toLowerCase().includes(query);
     return matchesFilter && matchesSearch;
   });
 
@@ -186,57 +130,31 @@ export default function Transactions() {
   return (
     <DashboardLayout title="Transaksi">
       <motion.div {...sectionReveal} className="flex flex-col gap-1">
-        <h1 className="text-[28px] sm:text-[32px] font-bold text-white leading-tight">
-          Transaksi Saya
-        </h1>
+        <h1 className="text-[28px] sm:text-[32px] font-bold text-white leading-tight">Transaksi Saya</h1>
         <p className="text-[#9CA3AF] text-[14px] mt-1">
-          Riwayat semua pembelian produk, bootcamp, dan sesi mentoring kamu di
-          Mark-Up.
+          Riwayat semua pembelian produk, bootcamp, dan sesi mentoring kamu di Mark-Up.
         </p>
       </motion.div>
 
-      {/* Stats */}
-      <motion.div
-        {...sectionReveal}
-        className="grid grid-cols-1 sm:grid-cols-3 gap-6"
-      >
+      <motion.div {...sectionReveal} className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col justify-center">
-          <p className="text-[#E2E8F0] font-medium text-[14px]">
-            Total Transaksi
-          </p>
-          <p className="text-[#148F89] font-bold text-[34px] leading-none mt-2">
-            {totalTransaksi}
-          </p>
+          <p className="text-[#E2E8F0] font-medium text-[14px]">Total Transaksi</p>
+          <p className="text-[#148F89] font-bold text-[34px] leading-none mt-2">{totalTransaksi}</p>
         </div>
         <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col justify-center">
-          <p className="text-[#E2E8F0] font-medium text-[14px]">
-            Total Belanja
-          </p>
-          <p className="text-[#148F89] font-bold text-[26px] sm:text-[28px] leading-none mt-2">
-            {formatCurrency(totalBelanja)}
-          </p>
+          <p className="text-[#E2E8F0] font-medium text-[14px]">Total Belanja</p>
+          <p className="text-[#148F89] font-bold text-[26px] sm:text-[28px] leading-none mt-2">{formatCurrency(totalBelanja)}</p>
         </div>
         <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col justify-center">
-          <p className="text-[#E2E8F0] font-medium text-[14px]">
-            Menunggu Pembayaran
-          </p>
-          <p className="text-[#F59E0B] font-bold text-[26px] sm:text-[28px] leading-none mt-2">
-            {formatCurrency(menungguPembayaran)}
-          </p>
+          <p className="text-[#E2E8F0] font-medium text-[14px]">Menunggu Verifikasi</p>
+          <p className="text-[#F59E0B] font-bold text-[26px] sm:text-[28px] leading-none mt-2">{formatCurrency(menungguVerifikasi)}</p>
         </div>
       </motion.div>
 
-      {/* Search + Filter */}
       {hasAny && (
-        <motion.div
-          {...sectionReveal}
-          className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-        >
+        <motion.div {...sectionReveal} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="relative w-full sm:max-w-[320px]">
-            <Search
-              size={16}
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-[#9CA3AF]"
-            />
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
             <input
               type="text"
               value={searchQuery}
@@ -263,54 +181,46 @@ export default function Transactions() {
         </motion.div>
       )}
 
-      {/* List */}
-      {!hasAny ? (
+      {!loading && !hasAny ? (
         <EmptyState
           message="Kamu belum punya transaksi. Yuk jelajahi katalog produk kami."
           ctaLabel="Jelajahi Produk"
-          ctaHref="/produk"
+          ctaHref="/products"
         />
-      ) : filtered.length === 0 ? (
+      ) : filtered.length === 0 && !loading ? (
         <EmptyState message={emptyMessage} />
       ) : (
         <div className="flex flex-col gap-4">
           {filtered.map((tx, index) => (
             <motion.button
-              key={tx.id}
+              key={tx.transaction_id}
               {...cardReveal(index)}
               onClick={() => setSelectedTx(tx)}
               className="w-full text-left bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-[#148F89]/50 transition-colors"
             >
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span
-                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold ${typeMeta[tx.productType].className}`}
-                  >
-                    {typeMeta[tx.productType].label}
+                  <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold ${typeMeta[tx.product_type]?.className}`}>
+                    {typeMeta[tx.product_type]?.label}
                   </span>
-                  <span className="text-[#9CA3AF] text-[11px]">{tx.id}</span>
+                  <span className="text-[#9CA3AF] text-[11px]">{tx.transaction_id}</span>
                 </div>
                 <h4 className="font-bold text-[15px] text-white truncate max-w-[280px] sm:max-w-[360px]">
-                  {tx.productTitle}
+                  {tx.product_title}
                 </h4>
-                <p className="text-[#9CA3AF] text-[12px]">{tx.createdAt}</p>
+                <p className="text-[#9CA3AF] text-[12px]">{formatDate(tx.created_at)}</p>
               </div>
               <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 sm:gap-1.5 shrink-0">
-                <span
-                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${statusMeta[tx.status].className}`}
-                >
-                  {statusMeta[tx.status].label}
+                <span className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${statusMeta[tx.status]?.className}`}>
+                  {statusMeta[tx.status]?.label}
                 </span>
-                <p className="text-white font-bold text-[16px]">
-                  {formatCurrency(tx.total)}
-                </p>
+                <p className="text-white font-bold text-[16px]">{formatCurrency(tx.amount)}</p>
               </div>
             </motion.button>
           ))}
         </div>
       )}
 
-      {/* --- MODAL DETAIL --- */}
       {selectedTx && (
         <motion.div
           initial={{ opacity: 0 }}
@@ -325,9 +235,7 @@ export default function Transactions() {
             className="bg-[#170F26] w-full max-w-[460px] max-h-[85vh] overflow-y-auto rounded-[16px] border border-[#2D2342] shadow-2xl"
           >
             <div className="sticky top-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
-              <h3 className="text-white font-bold text-[17px]">
-                Detail Transaksi
-              </h3>
+              <h3 className="text-white font-bold text-[17px]">Detail Transaksi</h3>
               <button
                 onClick={() => setSelectedTx(null)}
                 aria-label="Tutup"
@@ -338,123 +246,59 @@ export default function Transactions() {
             </div>
 
             <div className="p-6 flex flex-col gap-5">
-              {/* Produk + status */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <span
-                    className={`self-start px-2.5 py-1 rounded-md text-[10px] font-bold w-fit ${typeMeta[selectedTx.productType].className}`}
-                  >
-                    {typeMeta[selectedTx.productType].label}
+                  <span className={`self-start px-2.5 py-1 rounded-md text-[10px] font-bold w-fit ${typeMeta[selectedTx.product_type]?.className}`}>
+                    {typeMeta[selectedTx.product_type]?.label}
                   </span>
-                  <h4 className="font-bold text-[17px] text-white leading-snug">
-                    {selectedTx.productTitle}
-                  </h4>
+                  <h4 className="font-bold text-[17px] text-white leading-snug">{selectedTx.product_title}</h4>
                 </div>
-                <span
-                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0 ${statusMeta[selectedTx.status].className}`}
-                >
-                  {statusMeta[selectedTx.status].label}
+                <span className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0 ${statusMeta[selectedTx.status]?.className}`}>
+                  {statusMeta[selectedTx.status]?.label}
                 </span>
               </div>
 
-              {/* Info umum */}
               <div className="flex flex-col gap-2 text-[13px]">
                 <div className="flex items-center justify-between">
                   <span className="text-[#9CA3AF]">No. Transaksi</span>
-                  <span className="text-white font-medium">
-                    {selectedTx.id}
-                  </span>
+                  <span className="text-white font-medium">{selectedTx.transaction_id}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[#9CA3AF]">Tanggal</span>
-                  <span className="text-white font-medium">
-                    {selectedTx.createdAt}
-                  </span>
+                  <span className="text-white font-medium">{formatDate(selectedTx.created_at)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[#9CA3AF]">Metode Pembayaran</span>
-                  <span className="text-white font-medium">
-                    {selectedTx.paymentMethod}
-                  </span>
+                  <span className="text-white font-medium">{selectedTx.method}</span>
                 </div>
-                {selectedTx.status === "pending" && selectedTx.expiresAt && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#9CA3AF]">Batas Waktu Bayar</span>
-                    <span className="text-[#F59E0B] font-medium">
-                      {selectedTx.expiresAt}
-                    </span>
-                  </div>
-                )}
               </div>
 
-              {/* Rincian Harga */}
               <div className="flex flex-col gap-2 pt-4 border-t border-[#2D2342] text-[13px]">
                 <div className="flex items-center justify-between">
-                  <span className="text-[#9CA3AF]">Subtotal</span>
-                  <span className="text-white">
-                    {formatCurrency(selectedTx.subtotal)}
-                  </span>
-                </div>
-                {selectedTx.discount > 0 && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#9CA3AF]">
-                      Diskon
-                      {selectedTx.discountCode
-                        ? ` (${selectedTx.discountCode})`
-                        : ""}
-                    </span>
-                    <span className="text-[#148F89]">
-                      -{formatCurrency(selectedTx.discount)}
-                    </span>
-                  </div>
-                )}
-                {selectedTx.tax > 0 && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#9CA3AF]">Pajak</span>
-                    <span className="text-white">
-                      {formatCurrency(selectedTx.tax)}
-                    </span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between pt-2 border-t border-[#2D2342]">
                   <span className="text-white font-semibold">Total</span>
-                  <span className="text-[#148F89] font-bold text-[18px]">
-                    {formatCurrency(selectedTx.total)}
-                  </span>
+                  <span className="text-[#148F89] font-bold text-[18px]">{formatCurrency(selectedTx.amount)}</span>
                 </div>
               </div>
 
-              {/* Aksi sesuai status */}
-              {selectedTx.status === "pending" && selectedTx.productId && (
-                <Link
-                  href={`/checkout/${selectedTx.productId}/payment`}
-                  className="w-full text-center py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors block"
-                >
-                  Bayar Sekarang
-                </Link>
-              )}
-              {selectedTx.status === "waiting_verification" && (
+              {selectedTx.status === "PENDING" && (
                 <p className="text-center text-[#F59E0B] text-[12px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3">
-                  Bukti transfer udah kami terima, sedang diverifikasi tim kami
-                  (maksimal 1x24 jam).
+                  Bukti transfer udah kami terima, sedang diverifikasi tim kami (maksimal 1x24 jam).
                 </p>
               )}
-              {selectedTx.status === "paid" && selectedTx.invoiceUrl && (
+              {selectedTx.proof_of_payment && (
                 <a
-                  href={selectedTx.invoiceUrl}
+                  href={selectedTx.proof_of_payment}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full text-center py-3 rounded-[8px] border border-[#2D2342] text-[#E2E8F0] font-semibold text-[13px] hover:border-[#148F89]/50 hover:text-white transition-colors"
+                  className="w-full text-center py-3 rounded-[8px] border border-[#2D2342] text-[#E2E8F0] font-semibold text-[13px] hover:border-[#148F89]/50 hover:text-white transition-colors block"
                 >
-                  Unduh Invoice
+                  Lihat Bukti Pembayaran
                 </a>
               )}
-              {(selectedTx.status === "failed" ||
-                selectedTx.status === "expired" ||
-                selectedTx.status === "cancelled") && (
+              {(selectedTx.status === "FAILED" || selectedTx.status === "EXPIRED") && (
                 <Link
-                  href="/produk"
-                  className="w-full text-center py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors"
+                  href="/products"
+                  className="w-full text-center py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors block"
                 >
                   Beli Lagi
                 </Link>

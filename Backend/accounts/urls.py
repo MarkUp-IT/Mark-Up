@@ -1,6 +1,30 @@
 from django.urls import path
 
-from .views import login_view, register_view, get_user_summary, get_current_user, logout_user, profile_view, upload_profile_photo, delete_profile_photo
+from .views import (
+    login_view,
+    register_view,
+    get_user_summary,
+    get_current_user,
+    logout_user,
+    profile_view,
+    upload_profile_photo,
+    delete_profile_photo,
+    upload_cv,
+    delete_cv,
+    get_users,
+    get_user_detail,
+    update_user,
+    change_password,
+    delete_account,
+    forgot_password,
+    reset_password,
+    verify_email,
+    resend_verification_email,
+    submit_contact_message,
+    get_contact_messages,
+    get_contact_message_detail,
+    get_audit_logs,
+)
 
 urlpatterns = [
     path("register/", register_view, name="api_register"),
@@ -11,4 +35,19 @@ urlpatterns = [
     path("me/profile/", profile_view, name="api_profile"),
     path("me/profile/photo/", upload_profile_photo, name="upload_profile_photo"),
     path("me/profile/photo/delete/", delete_profile_photo, name="delete_profile_photo"),
+    path("me/cv/", upload_cv, name="upload_cv"),
+    path("me/cv/delete/", delete_cv, name="delete_cv"),
+    path("me/change-password/", change_password, name="api_change_password"),
+    path("me/delete/", delete_account, name="api_delete_account"),
+    path("forgot-password/", forgot_password, name="api_forgot_password"),
+    path("reset-password/", reset_password, name="api_reset_password"),
+    path("verify-email/", verify_email, name="api_verify_email"),
+    path("resend-verification/", resend_verification_email, name="api_resend_verification"),
+    path("users/", get_users, name="api_users_list"),
+    path("users/<uuid:user_id>/", get_user_detail, name="api_user_detail"),
+    path("users/<uuid:user_id>/update/", update_user, name="api_user_update"),
+    path("contact-messages/", get_contact_messages, name="api_contact_messages_list"),
+    path("contact-messages/<uuid:message_id>/", get_contact_message_detail, name="api_contact_message_detail"),
+    path("contact/", submit_contact_message, name="api_contact_submit"),
+    path("audit-logs/", get_audit_logs, name="api_audit_logs_list"),
 ]

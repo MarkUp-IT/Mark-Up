@@ -58,7 +58,7 @@ return {
   title: item.title,
   type: item.type, 
   desc: item.description || "",
-  fullDesc: item.full_description || item.description || "",
+  fullDesc: item.explanation || item.description || "",
   price,
   originalPrice,
   soldCount: item.sold_count || 0,
