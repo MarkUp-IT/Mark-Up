@@ -7,6 +7,8 @@ import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { toast } from "sonner";
+import { extractErrorMessage } from "@/lib/formErrors";
 
 const ROLE_BADGE = {
   ADMIN: "bg-[#F1F5F9] text-[#475569] border-[#CBD5E1]",
@@ -78,8 +80,11 @@ export default function UserManagement() {
       });
       setIsEditOpen(false);
       fetchUsers();
+      toast.success("Perubahan Disimpan", { description: `Data ${selectedUser.fullname} berhasil diperbarui.` });
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal Menyimpan Perubahan", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     } finally {
       setSaving(false);
     }

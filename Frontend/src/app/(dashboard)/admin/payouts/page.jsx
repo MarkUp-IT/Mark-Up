@@ -6,6 +6,8 @@ import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { toast } from "sonner";
+import { extractErrorMessage } from "@/lib/formErrors";
 
 const STATUS_META = {
   pending: { label: "BELUM CAIR", className: "bg-[#FEF3C7] text-[#92400E]" },
@@ -70,8 +72,11 @@ export default function MentorPayouts() {
       });
       setIsModalOpen(false);
       fetchPayouts();
+      toast.success("Pencairan Ditandai Lunas");
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal Menandai Lunas", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     } finally {
       setMarking(false);
     }

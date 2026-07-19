@@ -5,7 +5,10 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, FileText } from "lucide-react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
+import CurrencyInput from "@/component/admin/CurrencyInput";
 import { apiRequest } from "@/lib/api";
+import { toast } from "sonner";
+import { extractErrorMessage } from "@/lib/formErrors";
 
 export default function ModuleContentEditor() {
   const params = useParams();
@@ -49,8 +52,11 @@ export default function ModuleContentEditor() {
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
+      toast.success("Perubahan Disimpan");
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal Menyimpan Perubahan", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     } finally {
       setSaving(false);
     }
@@ -120,12 +126,11 @@ export default function ModuleContentEditor() {
 
         <div className="flex flex-col gap-1.5">
           <label className="text-[#334155] text-[13px] font-medium">Harga</label>
-          <input
-            type="number"
+          <CurrencyInput
             value={originalPrice}
             onChange={(e) => setOriginalPrice(e.target.value)}
             style={{ height: "42px" }}
-            className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 text-[13.5px] text-[#1E293B] outline-none focus:border-[#148F89] transition-colors"
+            className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] pr-4 text-[13.5px] text-[#1E293B] outline-none focus:border-[#148F89] transition-colors"
           />
         </div>
 

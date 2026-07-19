@@ -14,6 +14,8 @@ import {
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { toast } from "sonner";
+import { extractErrorMessage } from "@/lib/formErrors";
 
 export default function BootcampOrderDetail() {
   const params = useParams();
@@ -63,8 +65,11 @@ export default function BootcampOrderDetail() {
         body: { mentor_id: draft.mentor_id || null, meeting_link: draft.meeting_link },
       });
       fetchDetail();
+      toast.success("Sesi Diperbarui", { description: "Mentor & link sesi berhasil disimpan." });
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal Menyimpan Sesi", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     } finally {
       setSaving(false);
     }
@@ -75,8 +80,11 @@ export default function BootcampOrderDetail() {
     try {
       await apiRequest(`/api/programs/bootcamp-sessions/${sessionId}/`, { method: "DELETE" });
       fetchDetail();
+      toast.success("Sesi Dihapus");
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal Menghapus Sesi", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     }
   };
 
@@ -91,8 +99,11 @@ export default function BootcampOrderDetail() {
       setShowAddModal(false);
       setNewSession({ title: "", start_time: "", end_time: "" });
       fetchDetail();
+      toast.success("Sesi Ditambahkan", { description: `"${newSession.title.trim()}" berhasil ditambahkan.` });
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal Menambahkan Sesi", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     } finally {
       setSaving(false);
     }

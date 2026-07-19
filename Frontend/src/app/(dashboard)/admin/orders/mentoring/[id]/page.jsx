@@ -7,6 +7,8 @@ import { ArrowLeft, Send, Users, Check } from "lucide-react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { toast } from "sonner";
+import { extractErrorMessage } from "@/lib/formErrors";
 
 const STATUS_META = {
   completed: { label: "SELESAI", className: "bg-[#DCFCE7] text-[#166534]" },
@@ -54,8 +56,11 @@ export default function MentoringOrderDetail() {
         body: { zoom_link: links[sessionId] },
       });
       fetchDetail();
+      toast.success("Link Disimpan", { description: "Link sesi berhasil diperbarui." });
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal Menyimpan Link", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     } finally {
       setSaving(null);
     }
@@ -69,8 +74,11 @@ export default function MentoringOrderDetail() {
         body: { status: "completed" },
       });
       fetchDetail();
+      toast.success("Sesi Ditandai Selesai");
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal Menandai Sesi Selesai", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
     } finally {
       setSaving(null);
     }
