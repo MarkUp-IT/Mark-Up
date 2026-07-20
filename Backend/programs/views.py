@@ -373,7 +373,9 @@ def update_bootcamp_session_template(request, session_id):
         session.end_time = parse_datetime(request_data["end_time"])
     session.save()
 
-    if "mentor_id" in request_data:
+    mentor_profile = None
+    mentor_changed = "mentor_id" in request_data
+    if mentor_changed:
         session.session_mentors.all().delete()
         mentor_id = request_data.get("mentor_id")
         if mentor_id:
@@ -382,6 +384,17 @@ def update_bootcamp_session_template(request, session_id):
             except MentorProfile.DoesNotExist:
                 return JsonResponse({"errors": {"mentor_id": ["Mentor tidak ditemukan."]}}, status=404)
             BootcampSessionMentor.objects.create(bootcamp_session=session, mentor_profile=mentor_profile)
+
+    # Sesi bootcamp itu kelas bareng -- satu link/jadwal/mentor yang sama
+    # buat semua peserta yang beli batch ini (beda sama mentoring yang
+    # 1-on-1 dan memang wajar beda link per pembeli). Jadi begitu admin
+    # update template-nya, ikut disebar ke salinan sesi tiap peserta yang
+    # sudah beli tapi BELUM menyelesaikan sesi itu -- yang sudah selesai
+    # dibiarkan apa adanya karena riwayatnya sudah final.
+    sync_fields = {"title": session.title, "start_time": session.start_time, "meeting_link": session.meeting_link}
+    if mentor_changed:
+        sync_fields["mentor"] = mentor_profile
+    session.buyer_sessions.exclude(status="completed").update(**sync_fields)
 
     log_audit(request, AuditAction.UPDATE, "bootcamp_sessions", object_id=session.id)
 

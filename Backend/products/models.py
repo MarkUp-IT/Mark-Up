@@ -224,6 +224,17 @@ class BootcampSession(models.Model):
         on_delete=models.CASCADE,
         related_name="bootcamp_sessions",
     )
+    template = models.ForeignKey(
+        "programs.BootcampSession",
+        on_delete=models.SET_NULL,
+        related_name="buyer_sessions",
+        null=True,
+        blank=True,
+        help_text="Sesi jadwal/template asal (dikelola admin) -- dipakai supaya "
+                  "update judul/mentor/link di template ikut ke-sync ke semua "
+                  "peserta yang sudah beli, karena satu sesi bootcamp itu kelas "
+                  "bareng dengan satu link yang sama untuk semua peserta.",
+    )
     order = models.PositiveIntegerField(default=1)
     title = models.CharField(max_length=255)
     mentor = models.ForeignKey(

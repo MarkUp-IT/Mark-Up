@@ -7,7 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { LayoutGrid, LogOut } from "lucide-react";
-import { api, ApiError, clearTokens } from "@/lib/api";
+import { api, ApiError, clearTokens, getRefreshToken } from "@/lib/api";
 
 const GlassSurfaceDynamic = dynamic(() => import("@/component/GlassSurface"), {
   ssr: false,
@@ -69,7 +69,7 @@ export default function Navbar({ variant = "glass" }) {
 
   async function handleLogout() {
     try {
-      await api.post("/api/accounts/logout/", {}, { auth: true });
+      await api.post("/api/accounts/logout/", { refresh: getRefreshToken() }, { auth: true });
     } catch (err) {
       console.error(err);
     } finally {

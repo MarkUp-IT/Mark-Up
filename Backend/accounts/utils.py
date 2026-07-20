@@ -1,5 +1,6 @@
 import json
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.core.cache import cache
 
 
 class EmailVerificationTokenGenerator(PasswordResetTokenGenerator):
@@ -27,6 +28,26 @@ def get_client_ip(request):
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
     return request.META.get("REMOTE_ADDR")
+
+
+def is_rate_limited(key, limit, window_seconds):
+    """Fixed-window rate limiter pakai Django cache framework. Return True
+    kalau `key` ini sudah lewat `limit` hit dalam `window_seconds` terakhir
+    (request yang lagi jalan ini ikut dihitung). Dipakai buat nge-throttle
+    endpoint yang rawan brute-force/spam (login, register, lupa password).
+
+    Backend default (LocMemCache) cukup buat single-process; kalau nanti
+    deploy multi-worker/multi-server, set CACHES ke backend yang shared
+    (mis. Redis) di .env supaya limitnya konsisten lintas proses."""
+    added = cache.add(key, 0, timeout=window_seconds)
+    try:
+        count = cache.incr(key)
+    except ValueError:
+        # Key sempat expired pas race antara add() dan incr() -- anggap ini
+        # hit pertama di window baru.
+        cache.set(key, 1, timeout=window_seconds)
+        count = 1
+    return count > limit
 
 
 def log_audit(request, action, table_name, object_id="", old_data=None, new_data=None):

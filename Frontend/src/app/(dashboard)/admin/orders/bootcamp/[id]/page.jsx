@@ -10,12 +10,27 @@ import {
   Plus,
   ChevronDown,
   X,
+  Check,
+  Users,
 } from "lucide-react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
+
+const PARTICIPANT_STATUS_META = {
+  completed: { label: "SELESAI", className: "bg-[#DCFCE7] text-[#166534]" },
+  scheduled: { label: "TERJADWAL", className: "bg-[#DBEAFE] text-[#1D4ED8]" },
+  waiting_schedule: { label: "BELUM DIJADWALKAN", className: "bg-[#FEF3C7] text-[#92400E]" },
+};
+
+function formatSessionDateTime(dateStr) {
+  if (!dateStr) return null;
+  return new Date(dateStr).toLocaleString("id-ID", {
+    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta",
+  }) + " WIB";
+}
 
 export default function BootcampOrderDetail() {
   const params = useParams();
@@ -27,6 +42,13 @@ export default function BootcampOrderDetail() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newSession, setNewSession] = useState({ title: "", start_time: "", end_time: "" });
   const [saving, setSaving] = useState(false);
+
+  const [participants, setParticipants] = useState([]);
+  const [participantsLoading, setParticipantsLoading] = useState(true);
+  const [selectedParticipant, setSelectedParticipant] = useState(null);
+  const [participantDetail, setParticipantDetail] = useState(null);
+  const [participantLoading, setParticipantLoading] = useState(false);
+  const [savingSession, setSavingSession] = useState(null);
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -45,12 +67,71 @@ export default function BootcampOrderDetail() {
     }
   }, [params.id]);
 
+  const fetchParticipants = useCallback(async () => {
+    try {
+      const res = await apiRequest(`/api/products/bootcamp-orders/?product_id=${params.id}`);
+      setParticipants(res?.packages || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setParticipantsLoading(false);
+    }
+  }, [params.id]);
+
   useEffect(() => {
     fetchDetail();
+    fetchParticipants();
     apiRequest("/api/mentors/", { auth: false })
       .then((res) => setMentors(res?.mentors || []))
       .catch(console.error);
-  }, [fetchDetail]);
+  }, [fetchDetail, fetchParticipants]);
+
+  const openParticipant = async (userLibraryId) => {
+    setSelectedParticipant(userLibraryId);
+    setParticipantLoading(true);
+    try {
+      const res = await apiRequest(`/api/products/bootcamp-orders/${userLibraryId}/`);
+      setParticipantDetail(res);
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal Memuat Detail Peserta", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
+      setSelectedParticipant(null);
+    } finally {
+      setParticipantLoading(false);
+    }
+  };
+
+  const closeParticipant = () => {
+    setSelectedParticipant(null);
+    setParticipantDetail(null);
+  };
+
+  const refreshParticipantDetail = async () => {
+    if (!selectedParticipant) return;
+    const res = await apiRequest(`/api/products/bootcamp-orders/${selectedParticipant}/`);
+    setParticipantDetail(res);
+    fetchParticipants();
+  };
+
+  const markParticipantSessionComplete = async (sessionId) => {
+    setSavingSession(sessionId);
+    try {
+      await apiRequest(`/api/products/bootcamp-orders/sessions/${sessionId}/`, {
+        method: "PATCH",
+        body: { status: "completed" },
+      });
+      await refreshParticipantDetail();
+      toast.success("Sesi Ditandai Selesai");
+    } catch (err) {
+      toast.error("Gagal Menandai Sesi Selesai", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
+    } finally {
+      setSavingSession(null);
+    }
+  };
 
   const updateDraft = (sessionId, field, value) => {
     setDrafts((prev) => ({ ...prev, [sessionId]: { ...prev[sessionId], [field]: value } }));
@@ -295,6 +376,137 @@ export default function BootcampOrderDetail() {
               >
                 {saving ? "Menyimpan..." : "Tambah"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-4">
+        <div>
+          <h2 className="text-[16px] font-semibold text-[#0F172A]">Progres Peserta</h2>
+          <p className="text-[#64748B] text-[13px] mt-1">
+            Pantau progres tiap pembelian bootcamp ini per peserta, dan tandai sesi selesai supaya mentor bisa dapat pencairan dana.
+          </p>
+        </div>
+
+        {!participantsLoading && participants.length === 0 ? (
+          <EmptyState message="Belum ada peserta yang membeli bootcamp ini." />
+        ) : (
+          <div className="flex flex-col gap-3">
+            {participants.map((pkg) => (
+              <div
+                key={pkg.user_library_id}
+                className="w-full bg-white border border-[#E2E8F0] rounded-[12px] p-5 flex items-center justify-between shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-center gap-5">
+                  <div
+                    style={{ width: "40px", height: "40px" }}
+                    className="rounded-full bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center shrink-0 text-[#64748B]"
+                  >
+                    <Users size={16} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <p className="font-bold text-[15px] text-[#1E293B]">
+                      {pkg.user_name}
+                      <span className="ml-2 text-[#148F89] text-[12px] font-semibold">
+                        ({pkg.completed_sessions}/{pkg.total_sessions} sesi selesai)
+                      </span>
+                    </p>
+                    <p className="text-[13px] text-[#64748B] font-medium">
+                      {pkg.unscheduled_sessions > 0 && (
+                        <>
+                          <span className="text-[#DC2626] font-bold">{pkg.unscheduled_sessions}</span> Belum Dijadwalkan
+                        </>
+                      )}
+                      {pkg.pending_links > 0 && (
+                        <>
+                          {pkg.unscheduled_sessions > 0 && " · "}
+                          <span className="text-[#DC2626] font-bold">{pkg.pending_links}</span> Link Tertunda
+                        </>
+                      )}
+                      {pkg.unscheduled_sessions === 0 && pkg.pending_links === 0 && "Semua sesi terjadwal"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => openParticipant(pkg.user_library_id)}
+                  className="font-bold text-[#148F89] text-[13px] hover:underline shrink-0"
+                >
+                  Lihat Detail
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {selectedParticipant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeParticipant} />
+          <div style={{ width: "620px", maxWidth: "100%", maxHeight: "85vh" }} className="relative bg-white rounded-[12px] shadow-2xl z-10 flex flex-col overflow-hidden">
+            <div className="px-6 py-5 border-b border-[#E2E8F0] flex justify-between items-center shrink-0">
+              <div>
+                <p className="text-[#1E293B] font-bold text-[17px]">
+                  {participantDetail?.user_name || "Memuat..."}
+                </p>
+                <p className="text-[#94A3B8] text-[12px]">{participantDetail?.user_email}</p>
+              </div>
+              <button onClick={closeParticipant} className="p-2 text-[#94A3B8] hover:text-[#0F172A] hover:bg-[#F1F5F9] rounded-full transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-5 flex flex-col gap-3 overflow-y-auto">
+              {participantLoading ? (
+                <p className="text-[#64748B] text-[13px]">Memuat detail sesi...</p>
+              ) : (
+                (participantDetail?.sessions || []).map((session) => (
+                  <div
+                    key={session.id}
+                    className="border border-[#E2E8F0] rounded-[10px] p-4 flex items-center justify-between gap-4 flex-wrap"
+                  >
+                    <div className="flex flex-col gap-1">
+                      <span className="font-bold text-[13.5px] text-[#1E293B]">
+                        Sesi {session.order} · {session.title}
+                      </span>
+                      <span className="text-[#64748B] text-[12px]">
+                        {formatSessionDateTime(session.start_time) || "Jadwal belum di-set"}
+                        {session.mentor_name ? ` · ${session.mentor_name}` : ""}
+                      </span>
+                      {session.meeting_link ? (
+                        <a
+                          href={session.meeting_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#148F89] text-[12px] hover:underline truncate max-w-[280px]"
+                        >
+                          {session.meeting_link}
+                        </a>
+                      ) : (
+                        <span className="text-[#94A3B8] text-[12px] italic">
+                          Link belum diatur -- atur di tabel Kelola Sesi di atas
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`inline-flex px-3 py-1.5 text-[10px] rounded-full font-bold whitespace-nowrap ${PARTICIPANT_STATUS_META[session.status].className}`}>
+                        {PARTICIPANT_STATUS_META[session.status].label}
+                      </span>
+                      {session.status !== "completed" && (
+                        <button
+                          onClick={() => markParticipantSessionComplete(session.id)}
+                          disabled={savingSession === session.id}
+                          style={{ height: "36px" }}
+                          className="px-3 rounded-[6px] flex items-center gap-1.5 border border-[#148F89]/40 text-[#148F89] text-[12px] font-semibold hover:bg-[#148F89]/10 transition-colors shrink-0 disabled:opacity-50"
+                          title="Tandai selesai"
+                        >
+                          <Check size={13} />
+                          Selesai
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

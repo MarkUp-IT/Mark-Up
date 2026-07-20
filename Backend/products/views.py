@@ -26,6 +26,8 @@ from django.db.models import Q
 from mentors.models import MentorAvailability
 from django.views.decorators.csrf import csrf_exempt
 
+MAX_CERTIFICATE_SIZE = 5 * 1024 * 1024  # 5MB
+
 DETAIL_FORM_MAP = {
     ProductType.MENTORING: (MentoringProductForm, "mentoring_detail"),
     ProductType.MODULE: (ModuleProductForm, "module_detail"),
@@ -945,6 +947,12 @@ def issue_certificate(request):
         errors["recipient_id"] = ["Penerima wajib dipilih."]
     if not file:
         errors["file"] = ["File PDF wajib diunggah."]
+    else:
+        ext = file.name.rsplit(".", 1)[-1].lower() if "." in file.name else ""
+        if ext != "pdf":
+            errors["file"] = ["File sertifikat harus berformat PDF."]
+        elif file.size > MAX_CERTIFICATE_SIZE:
+            errors["file"] = ["Ukuran file maksimal 5MB."]
     if errors:
         return JsonResponse({"errors": errors}, status=400)
 
@@ -1101,6 +1109,126 @@ def update_mentoring_order_session(request, session_id):
     session.save()
 
     log_audit(request, AuditAction.UPDATE, "mentoring_sessions", object_id=session.id)
+
+    return JsonResponse({"detail": "Sesi berhasil diperbarui."}, status=200)
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_bootcamp_orders(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    libraries = (
+        UserLibrary.objects.filter(product__type=ProductType.BOOTCAMP)
+        .select_related("user", "product__bootcamp_detail")
+        .prefetch_related("bootcamp_sessions__mentor__user")
+        .order_by("-purchased_at")
+    )
+
+    product_id = request.GET.get("product_id")
+    if product_id:
+        libraries = libraries.filter(product_id=product_id)
+
+    data = []
+    for library in libraries:
+        sessions = list(library.bootcamp_sessions.all())
+        if not sessions:
+            continue
+        detail = library.product.bootcamp_detail
+        data.append({
+            "user_library_id": str(library.id),
+            "user_name": library.user.fullname,
+            "product_id": str(library.product_id),
+            "product_title": detail.title if detail else None,
+            "total_sessions": len(sessions),
+            "completed_sessions": sum(1 for s in sessions if s.status == "completed"),
+            "scheduled_sessions": sum(1 for s in sessions if s.status == "scheduled"),
+            "unscheduled_sessions": sum(1 for s in sessions if s.status == "waiting_schedule"),
+            "pending_links": sum(1 for s in sessions if s.status == "scheduled" and not s.meeting_link),
+        })
+
+    return JsonResponse({"packages": data}, status=200)
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_bootcamp_order_detail(request, user_library_id):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    try:
+        library = UserLibrary.objects.select_related(
+            "user", "product__bootcamp_detail"
+        ).get(id=user_library_id, product__type=ProductType.BOOTCAMP)
+    except UserLibrary.DoesNotExist:
+        return JsonResponse({"detail": "Paket bootcamp tidak ditemukan."}, status=404)
+
+    sessions = library.bootcamp_sessions.select_related("mentor__user").order_by("order")
+    detail = library.product.bootcamp_detail
+
+    return JsonResponse(
+        {
+            "user_name": library.user.fullname,
+            "user_email": library.user.email,
+            "product_title": detail.title if detail else None,
+            "sessions": [
+                {
+                    "id": str(s.id),
+                    "order": s.order,
+                    "title": s.title,
+                    "status": s.status,
+                    "mentor_name": s.mentor.user.fullname if s.mentor else None,
+                    "start_time": s.start_time.isoformat() if s.start_time else None,
+                    "meeting_link": s.meeting_link,
+                    "recording_url": s.recording_url,
+                }
+                for s in sessions
+            ],
+        },
+        status=200,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_bootcamp_order_session(request, session_id):
+    if request.method not in ["PATCH", "PUT"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT"])
+
+    try:
+        session = BootcampSession.objects.select_related(
+            "mentor", "bootcamp", "user_library"
+        ).get(id=session_id)
+    except BootcampSession.DoesNotExist:
+        return JsonResponse({"detail": "Sesi tidak ditemukan."}, status=404)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    if "meeting_link" in request_data:
+        session.meeting_link = request_data["meeting_link"]
+
+    if request_data.get("status") == "completed" and session.status != "completed":
+        session.status = BootcampSession.SessionStatus.COMPLETED
+
+        from transactions.models import MentorPayout, PayoutSourceType
+
+        if session.mentor_id and not hasattr(session, "payout"):
+            gross = session.bootcamp.new_price or session.bootcamp.original_price or 0
+            total_sessions = session.user_library.bootcamp_sessions.count() or 1
+            MentorPayout.objects.create(
+                mentor_profile=session.mentor,
+                source_type=PayoutSourceType.BOOTCAMP,
+                bootcamp_session=session,
+                gross_amount=(gross / total_sessions),
+            )
+
+    session.save()
+
+    log_audit(request, AuditAction.UPDATE, "bootcamp_sessions", object_id=session.id)
 
     return JsonResponse({"detail": "Sesi berhasil diperbarui."}, status=200)
 

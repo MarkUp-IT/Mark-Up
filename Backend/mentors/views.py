@@ -150,12 +150,18 @@ def get_my_availability(request):
         local_start = timezone.localtime(slot.start_time)
         local_end = timezone.localtime(slot.end_time)
         mentee_name = None
+        is_pending_payment = False
         if slot.is_booked:
             session = slot.product_mentoring_sessions.select_related(
                 "user_library__user"
             ).first()
             if session:
                 mentee_name = session.user_library.user.fullname
+            else:
+                # Slot udah di-reserve pas checkout tapi transaksinya masih
+                # nunggu diverifikasi admin -- sesi & nama mentee-nya baru
+                # muncul begitu pembayaran di-approve.
+                is_pending_payment = True
 
         data.append(
             {
@@ -164,6 +170,7 @@ def get_my_availability(request):
                 "end_time": local_end.isoformat(),
                 "is_booked": slot.is_booked,
                 "mentee_name": mentee_name,
+                "is_pending_payment": is_pending_payment,
             }
         )
 

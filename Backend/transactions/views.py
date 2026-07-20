@@ -151,7 +151,7 @@ def verify_transaction(request, transaction_id):
         return HttpResponseNotAllowed(["PATCH"])
 
     try:
-        txn = Transaction.objects.get(id=transaction_id)
+        txn = Transaction.objects.select_related("user").get(id=transaction_id)
     except Transaction.DoesNotExist:
         return JsonResponse({"detail": "Transaksi tidak ditemukan."}, status=404)
 
@@ -170,13 +170,65 @@ def verify_transaction(request, transaction_id):
             {"detail": "decision harus 'paid' atau 'failed'."}, status=400
         )
 
-    if decision == "paid":
-        txn.payment_status = PaymentStatus.PAID
-        txn.paid_at = timezone.now()
-    else:
-        txn.payment_status = PaymentStatus.FAILED
+    items = list(
+        txn.items.select_related(
+            "product__mentoring_detail",
+            "product__module_detail",
+            "product__bootcamp_detail",
+            "mentor_availability",
+        )
+    )
 
-    txn.save()
+    with db_transaction.atomic():
+        if decision == "paid":
+            # Baru di sinilah akses produk beneran dikasih -- UserLibrary +
+            # sesi-sesinya, plus sold_count baru nambah sekarang (bukan pas
+            # checkout), karena transaksi resmi dianggap "terjual" setelah
+            # admin approve buktinya, bukan pas user baru upload.
+            txn.payment_status = PaymentStatus.PAID
+            txn.paid_at = timezone.now()
+
+            for item in items:
+                product = item.product
+                detail = _get_checkout_detail(product)
+
+                user_library, _ = UserLibrary.objects.get_or_create(
+                    user=txn.user, product=product,
+                )
+
+                if product.type == ProductType.MENTORING and item.mentor_availability:
+                    _create_mentoring_sessions(user_library, detail, item.mentor_availability)
+                elif product.type == ProductType.BOOTCAMP:
+                    _create_bootcamp_sessions(user_library, product)
+
+                if detail is not None:
+                    detail.sold_count = (detail.sold_count or 0) + item.quantity
+                    detail.save(update_fields=["sold_count"])
+        else:
+            # Ditolak -- lepas lagi semua yang di-reserve pas checkout (slot
+            # mentor, stok, kuota kode referral) supaya bisa dipakai/dibeli
+            # ulang oleh siapa aja, termasuk user yang sama.
+            txn.payment_status = PaymentStatus.FAILED
+
+            for item in items:
+                detail = _get_checkout_detail(item.product)
+
+                if item.mentor_availability_id:
+                    item.mentor_availability.is_booked = False
+                    item.mentor_availability.save(update_fields=["is_booked"])
+
+                if detail is not None and getattr(detail, "stock", None) is not None:
+                    detail.stock = (detail.stock or 0) + item.quantity
+                    detail.save(update_fields=["stock"])
+
+            usage = ReferralCodeUsage.objects.filter(transaction=txn).select_related("referral_code").first()
+            if usage:
+                referral_code = usage.referral_code
+                referral_code.used_count = max(0, referral_code.used_count - 1)
+                referral_code.save(update_fields=["used_count"])
+                usage.delete()
+
+        txn.save()
 
     log_audit(
         request, AuditAction.UPDATE, "transactions", object_id=txn.id,
@@ -449,6 +501,16 @@ def get_user_purchased_product_detail(request, product_id):
         status=200,
     )
 
+def _get_checkout_detail(product):
+    if product.type == ProductType.MENTORING:
+        return getattr(product, "mentoring_detail", None)
+    elif product.type == ProductType.MODULE:
+        return getattr(product, "module_detail", None)
+    elif product.type == ProductType.BOOTCAMP:
+        return getattr(product, "bootcamp_detail", None)
+    return None
+
+
 def _create_mentoring_sessions(user_library, mentoring_detail, first_slot):
     """Bikin baris MentoringSession sejumlah session_count paket. Sesi pertama
     langsung terjadwal sesuai slot yang dipilih saat checkout, sisanya
@@ -497,6 +559,7 @@ def _create_bootcamp_sessions(user_library, product):
             BootcampSession(
                 bootcamp_id=product.id,
                 user_library=user_library,
+                template=template,
                 order=order,
                 title=template.title,
                 mentor=first_assignment.mentor_profile if first_assignment else None,
@@ -616,21 +679,18 @@ def checkout_product(request):
                 mentor_availability.save()
 
             elif product.type in (ProductType.MODULE, ProductType.BOOTCAMP):
-        
+                # Stok di-reserve begitu checkout (biar nggak oversell selama
+                # nunggu verifikasi admin, yang bisa makan waktu 1x24 jam),
+                # tapi sold_count BARU nambah begitu admin approve (lihat
+                # verify_transaction) -- supaya angka "terjual" yang tampil ke
+                # publik nggak ikut kehitung transaksi yang masih pending/gagal.
                 detail_locked = type(detail).objects.select_for_update().get(pk=detail.pk)
 
                 if getattr(detail_locked, "stock", None) is not None:
                     if detail_locked.stock <= 0:
                         return JsonResponse({"detail": "Stok produk habis."}, status=400)
                     detail_locked.stock -= 1
-
-                detail_locked.sold_count = (detail_locked.sold_count or 0) + 1
-                detail_locked.save()
-
-            if product.type == ProductType.MENTORING:
-                detail_locked_mentoring = type(detail).objects.select_for_update().get(pk=detail.pk)
-                detail_locked_mentoring.sold_count = (detail_locked_mentoring.sold_count or 0) + 1
-                detail_locked_mentoring.save()
+                    detail_locked.save()
 
             txn = Transaction.objects.create(
                 user=request.user,
@@ -660,15 +720,11 @@ def checkout_product(request):
                     discount_amount=discount_amount,
                 )
 
-            user_library, _ = UserLibrary.objects.get_or_create(
-                user=request.user,
-                product=product,
-            )
-
-            if product.type == ProductType.MENTORING:
-                _create_mentoring_sessions(user_library, detail, mentor_availability)
-            elif product.type == ProductType.BOOTCAMP:
-                _create_bootcamp_sessions(user_library, product)
+            # UserLibrary (akses produk beneran) & sesi-sesinya SENGAJA belum
+            # dibuat di sini -- baru dibuat begitu admin approve pembayaran
+            # (lihat verify_transaction). Slot mentor & stok di atas cuma
+            # di-reserve dulu supaya nggak direbut orang lain selama nunggu
+            # verifikasi.
 
     except Exception as e:
         return JsonResponse({"detail": f"Checkout gagal: {str(e)}"}, status=500)

@@ -30,12 +30,27 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 
 PRODUCTION = os.getenv("PRODUCTION", "False").lower() == "true"
 
-DEBUG = os.getenv("DEBUG", "True").lower() == "true"
+# Default ke False (aman) kalau env var DEBUG lupa di-set -- server produksi
+# yang ke-deploy tanpa .env lengkap gak akan diam-diam kebuka stack trace +
+# query SQL ke publik. Dev lokal tetap jalan normal karena .env di sini
+# eksplisit set DEBUG=True.
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = os.getenv(
     "ALLOWED_HOSTS",
     "localhost,127.0.0.1"
 ).split(",")
+
+# Hardening HTTPS/cookie -- cuma aktif kalau PRODUCTION=true di .env, jadi
+# gak ganggu dev lokal (http://localhost) yang emang belum pakai TLS.
+if PRODUCTION:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30  # 30 hari
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 
 # Application definition

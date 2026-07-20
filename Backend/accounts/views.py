@@ -6,7 +6,7 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator
+from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, get_client_ip, is_rate_limited
 from .forms import RegisterForm, UpdateProfileForm
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -38,6 +38,13 @@ def _get_cv_filename(user):
 def register_view(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
+
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:register:ip:{ip}", limit=10, window_seconds=3600):
+		return JsonResponse(
+			{"detail": "Terlalu banyak percobaan registrasi dari perangkat ini. Coba lagi nanti."},
+			status=429,
+		)
 
 	request_data = get_request_data(request)
 	if request_data is None:
@@ -86,12 +93,25 @@ def login_view(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
 
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:login:ip:{ip}", limit=20, window_seconds=300):
+		return JsonResponse(
+			{"detail": "Terlalu banyak percobaan login dari perangkat ini. Coba lagi beberapa menit lagi."},
+			status=429,
+		)
+
 	request_data = get_request_data(request)
 	if request_data is None:
 		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
 	email = request_data.get("email")
 	password = request_data.get("password")
+
+	if email and is_rate_limited(f"rl:login:email:{email.strip().lower()}", limit=5, window_seconds=300):
+		return JsonResponse(
+			{"detail": "Terlalu banyak percobaan login untuk akun ini. Coba lagi beberapa menit lagi."},
+			status=429,
+		)
 
 	try:
 		user_obj = User.objects.get(email=email)
@@ -348,6 +368,13 @@ def forgot_password(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
 
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:forgot:ip:{ip}", limit=10, window_seconds=3600):
+		return JsonResponse(
+			{"detail": "Terlalu banyak permintaan reset password. Coba lagi nanti."},
+			status=429,
+		)
+
 	request_data = get_request_data(request)
 	if request_data is None:
 		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
@@ -360,6 +387,13 @@ def forgot_password(request):
 
 	if not email:
 		return JsonResponse({"detail": "Email diperlukan."}, status=400)
+
+	# Limit per-email juga (bukan cuma per-IP) supaya satu akun gak bisa
+	# di-spam link reset dari banyak IP berbeda. Kalau limit ini kelewat,
+	# tetap balikin generic_response (bukan 429) biar gak jadi sinyal buat
+	# nebak-nebak email mana yang terdaftar.
+	if is_rate_limited(f"rl:forgot:email:{email.lower()}", limit=3, window_seconds=3600):
+		return generic_response
 
 	try:
 		user = User.objects.get(email__iexact=email)
@@ -463,6 +497,13 @@ def resend_verification_email(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
 
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:resend-verify:ip:{ip}", limit=10, window_seconds=3600):
+		return JsonResponse(
+			{"detail": "Terlalu banyak permintaan kirim ulang verifikasi. Coba lagi nanti."},
+			status=429,
+		)
+
 	request_data = get_request_data(request)
 	if request_data is None:
 		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
@@ -475,6 +516,9 @@ def resend_verification_email(request):
 
 	if not email:
 		return JsonResponse({"detail": "Email diperlukan."}, status=400)
+
+	if is_rate_limited(f"rl:resend-verify:email:{email.lower()}", limit=3, window_seconds=3600):
+		return generic_response
 
 	try:
 		user = User.objects.get(email__iexact=email)
@@ -638,9 +682,20 @@ def get_current_user(request):
 
 @csrf_exempt
 def logout_user(request):
-   
+
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
+
+    request_data = get_request_data(request) or {}
+    refresh_token = request_data.get("refresh")
+
+    if refresh_token:
+        try:
+            RefreshToken(refresh_token).blacklist()
+        except TokenError:
+            # Token sudah invalid/expired/pernah di-blacklist -- gak masalah,
+            # tujuan akhirnya (token itu gak bisa dipakai lagi) sudah tercapai.
+            pass
 
     return JsonResponse({"detail": "Logout berhasil"}, status=200)
 
