@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { api, clearTokens } from "@/lib/api";
+import { api, clearTokens, getRefreshToken } from "@/lib/api";
 import {
   GraduationCap,
   CalendarDays,
@@ -38,7 +38,7 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
 
   async function handleLogout() {
     try {
-      await api.post("/api/accounts/logout/", {}, { auth: true });
+      await api.post("/api/accounts/logout/", { refresh: getRefreshToken() }, { auth: true });
     } catch (err) {
       console.error(err);
     } finally {

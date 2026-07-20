@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import { useAuthGuard } from "@/lib/useAuthGuard";
 
 export default function DashboardLayout({ title, children }) {
   const { profile, checked } = useAuthGuard(["MENTOR"]);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   if (!checked) {
     return <div style={{ backgroundColor: "#0F081C" }} className="w-full min-h-screen" />;
@@ -26,18 +28,19 @@ export default function DashboardLayout({ title, children }) {
           }}
         />
       </div>
-      <Sidebar />
+      <Sidebar isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
 
-      {/* Sebelumnya lg:ml-[288px] -- prefix responsive kayak gini yang
-          berkali-kali ketauan nggak ke-compile di project ini. Sidebar-nya
-          fixed dan dashboard ini emang didesain buat desktop, jadi margin
-          dipaksa selalu aktif lewat inline style, nggak digantung breakpoint. */}
-      <div
-        style={{ marginLeft: "288px" }}
-        className="flex flex-col min-h-screen"
-      >
+      {mobileNavOpen && (
+        <div
+          onClick={() => setMobileNavOpen(false)}
+          className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+        />
+      )}
+
+      <div className="flex flex-col min-h-screen lg:ml-[288px] relative z-10">
         <Header
           title={title}
+          onMenuClick={() => setMobileNavOpen(true)}
           profileName={profile?.profile_name}
           email={profile?.email}
           avatarSrc={profile?.avatar_src}

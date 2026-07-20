@@ -158,6 +158,7 @@ export default function MentoringSchedule() {
         time,
         status: slot.is_booked ? "booked" : "available",
         menteeName: slot.mentee_name,
+        isPendingPayment: slot.is_pending_payment,
       });
     }
     Object.values(map).forEach((arr) => arr.sort((a, b) => a.time.localeCompare(b.time)));
@@ -413,7 +414,9 @@ export default function MentoringSchedule() {
                           title={
                             slot.menteeName
                               ? `Dibooking ${slot.menteeName}`
-                              : "Sudah dibooking"
+                              : slot.isPendingPayment
+                                ? "Menunggu verifikasi pembayaran"
+                                : "Sudah dibooking"
                           }
                           className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold bg-[#D1D83E]/10 text-[#D1D83E] border border-[#D1D83E]/30"
                         >

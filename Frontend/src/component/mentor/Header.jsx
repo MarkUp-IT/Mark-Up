@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, Bell } from "lucide-react";
+import { Menu } from "lucide-react";
 
 export default function Header({
   title,
@@ -27,13 +27,6 @@ export default function Header({
 
       {/* User Profile -- struktur & ukuran sama persis kayak Header user */}
       <div className="flex flex-row gap-3 sm:gap-4 items-center">
-        <button
-          aria-label="Notifikasi"
-          className="text-[#9CA3AF] hover:text-white transition-colors"
-        >
-          <Bell size={20} />
-        </button>
-
         <div className="hidden sm:flex flex-col text-right">
           <p className="font-semibold text-white text-[13px]">{profileName}</p>
           <p className="text-[11px] text-[#9CA3AF]">{email}</p>

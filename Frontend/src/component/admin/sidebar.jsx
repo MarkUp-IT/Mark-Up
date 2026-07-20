@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
-import { api, clearTokens } from "@/lib/api";
+import { api, clearTokens, getRefreshToken } from "@/lib/api";
 import {
   LayoutDashboard,
   Package,
@@ -22,6 +22,7 @@ import {
   History,
   Settings,
   LogOut,
+  X,
 } from "lucide-react";
 
 const menuList = [
@@ -71,7 +72,7 @@ function NavItem({ item, isActive }) {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -80,7 +81,7 @@ export default function Sidebar() {
 
   async function handleLogout() {
     try {
-      await api.post("/api/accounts/logout/", {}, { auth: true });
+      await api.post("/api/accounts/logout/", { refresh: getRefreshToken() }, { auth: true });
     } catch (err) {
       console.error(err);
     } finally {
@@ -90,10 +91,18 @@ export default function Sidebar() {
   }
 
   return (
-    <aside
-      style={{ width: "288px", height: "100vh" }}
-      className="fixed top-0 left-0 bg-white border-r border-[#E2E8F0] flex flex-col z-50"
-    >
+    <>
+      {isOpen && (
+        <div
+          onClick={onClose}
+          className="fixed inset-0 bg-black/40 z-40 lg:hidden"
+        />
+      )}
+      <aside
+        style={{ width: "288px", height: "100vh" }}
+        className={`fixed top-0 left-0 bg-white border-r border-[#E2E8F0] flex flex-col z-50 transform transition-transform duration-300 ease-in-out
+        ${isOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
+      >
       <div
         style={{ height: "88px" }}
         className="shrink-0 flex items-center px-6 border-b border-[#E2E8F0] gap-2"
@@ -111,9 +120,16 @@ export default function Sidebar() {
         <span className="px-2 py-0.5 rounded-full bg-[#148F89]/10 text-[#148F89] text-[10px] font-bold tracking-wide">
           ADMIN
         </span>
+        <button
+          onClick={onClose}
+          aria-label="Tutup menu"
+          className="lg:hidden ml-auto text-[#94A3B8] hover:text-[#1E293B] transition-colors"
+        >
+          <X size={20} />
+        </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-6">
+      <nav className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-6" onClick={onClose}>
         <div className="flex flex-col gap-1">
           {menuList.map((item) => (
             <NavItem
@@ -174,6 +190,7 @@ export default function Sidebar() {
           Keluar
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
