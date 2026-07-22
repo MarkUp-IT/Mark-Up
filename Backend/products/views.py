@@ -602,10 +602,19 @@ def get_products(request):
     # dari tabel admin begitu di-nonaktifkan.
     include_inactive = request.GET.get("include_inactive") == "true"
 
+    # Product tanpa detail sama sekali (baris yatim -- biasanya sisa proses
+    # tambah produk yang keputus di tengah jalan) bukan produk valid di
+    # tampilan manapun, jadi selalu dikecualikan di sini, terlepas dari flag
+    # all/include_inactive (yang bedain aktif/nonaktif, bukan ada/nggaknya
+    # detail sama sekali).
     base_qs = Product.objects.select_related(
 		"mentoring_detail", "module_detail", "bootcamp_detail"
 	).prefetch_related(
 		"mentoring_detail__highlights"
+	).filter(
+		Q(mentoring_detail__isnull=False) |
+		Q(module_detail__isnull=False) |
+		Q(bootcamp_detail__isnull=False)
 	).order_by("-created_at")
 
     if fetch_all or include_inactive:
