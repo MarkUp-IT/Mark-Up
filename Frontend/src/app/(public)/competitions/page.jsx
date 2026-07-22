@@ -180,7 +180,7 @@ export default function InfoLombaPage() {
           ))}
         </div>
 
-        {/* COUNTER */}
+        {/* COUNTER + GRID LOMBA */}
         {loading ? (
           <div className="w-full max-w-[1050px] flex flex-col items-center justify-center gap-3 text-center py-16">
             <Loader2 className="animate-spin text-[#A19DAB]" size={28} />
@@ -191,22 +191,6 @@ export default function InfoLombaPage() {
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         ) : filteredLomba.length === 0 ? (
-          <div className="w-full max-w-[1050px] flex flex-col items-center justify-center gap-3 text-center py-16 px-6 border border-dashed border-[#3A3545] rounded-md md:rounded-lg bg-[#1A1625]/40">
-            <SearchX size={32} className="text-[#A19DAB]" />
-            <p className="text-[#A19DAB] text-sm max-w-[320px]">
-              {searchQuery
-                ? `Lomba dengan kata kunci "${searchQuery}" tidak ditemukan.`
-                : `Belum ada lomba untuk kategori "${activeCategory}".`}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-[1050px]">
-            {/* ...kode grid yang sudah ada, tidak berubah... */}
-          </div>
-        )}
-
-        {/* GRID LOMBA */}
-        {filteredLomba.length === 0 ? (
           <div className="w-full max-w-[1050px] flex flex-col items-center justify-center gap-3 text-center py-16 px-6 border border-dashed border-[#3A3545] rounded-md md:rounded-lg bg-[#1A1625]/40">
             <SearchX size={32} className="text-[#A19DAB]" />
             <p className="text-[#A19DAB] text-sm max-w-[320px]">
