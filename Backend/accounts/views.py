@@ -159,11 +159,92 @@ def login_view(request):
 				"id": str(user.id),
 				"email": user.email,
 				"fullname": user.fullname,
-				"role": user.role, 
-				
+				"role": user.role,
+
 			},
 		},
 		status=200,
+	)
+
+
+@csrf_exempt
+def google_login_view(request):
+	"""Register/login pakai akun Google. Frontend kirim ID token (credential)
+	dari Google Identity Services, di sini diverifikasi langsung ke Google
+	(bukan cuma dipercaya mentah-mentah), lalu user dicari/dibuat berdasarkan
+	email yang sudah pasti terverifikasi oleh Google -- dan diterbitkan JWT
+	kita sendiri, sama persis kayak alur login manual."""
+	if request.method != "POST":
+		return HttpResponseNotAllowed(["POST"])
+
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:google-login:ip:{ip}", limit=20, window_seconds=300):
+		return JsonResponse(
+			{"detail": "Terlalu banyak percobaan login dari perangkat ini. Coba lagi beberapa menit lagi."},
+			status=429,
+		)
+
+	request_data = get_request_data(request)
+	if request_data is None:
+		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+	credential = request_data.get("credential")
+	if not credential:
+		return JsonResponse({"detail": "Token Google diperlukan."}, status=400)
+
+	client_id = getattr(settings, "GOOGLE_CLIENT_ID", None)
+	if not client_id:
+		return JsonResponse({"detail": "Login Google belum dikonfigurasi di server."}, status=503)
+
+	from google.oauth2 import id_token as google_id_token
+	from google.auth.transport import requests as google_requests
+
+	try:
+		payload = google_id_token.verify_oauth2_token(
+			credential, google_requests.Request(), client_id,
+		)
+	except ValueError:
+		return JsonResponse({"detail": "Token Google tidak valid atau kedaluwarsa."}, status=401)
+
+	if not payload.get("email_verified"):
+		return JsonResponse({"detail": "Email Google kamu belum terverifikasi."}, status=401)
+
+	email = payload["email"].strip().lower()
+	fullname = payload.get("name") or email.split("@")[0]
+
+	user, created = User.objects.get_or_create(
+		email=email,
+		defaults={
+			"fullname": fullname,
+			"role": UserRole.STUDENT,
+			"is_email_verified": True,
+		},
+	)
+	if created:
+		user.set_unusable_password()
+		user.save(update_fields=["password"])
+
+	if user.status == UserStatus.INACTIVE:
+		return JsonResponse(
+			{"detail": "Akun ini sudah dinonaktifkan. Hubungi tim kami kalau ini keliru."},
+			status=403,
+		)
+
+	refresh = RefreshToken.for_user(user)
+
+	return JsonResponse(
+		{
+			"detail": "Login Google berhasil.",
+			"access": str(refresh.access_token),
+			"refresh": str(refresh),
+			"user": {
+				"id": str(user.id),
+				"email": user.email,
+				"fullname": user.fullname,
+				"role": user.role,
+			},
+		},
+		status=201 if created else 200,
 	)
 
 

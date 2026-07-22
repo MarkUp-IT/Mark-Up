@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     login_view,
+    google_login_view,
     register_view,
     get_user_summary,
     get_current_user,
@@ -30,6 +31,7 @@ urlpatterns = [
     path("register/", register_view, name="api_register"),
     path("me/", get_current_user, name="api_auth_me"),
     path("login/", login_view, name="api_login"),
+    path("google-login/", google_login_view, name="api_google_login"),
     path("logout/", logout_user, name="api_logout"),
     path("summary/", get_user_summary, name="api_users_summary"),
     path("me/profile/", profile_view, name="api_profile"),
