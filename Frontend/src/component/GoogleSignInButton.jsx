@@ -89,11 +89,19 @@ export default function GoogleSignInButton() {
         <span className="text-[12px] text-[#9CA3AF]">atau</span>
         <div className="h-px flex-1 bg-white/10" />
       </div>
-      <div ref={buttonRef} className="w-full flex justify-center min-h-[44px]">
-        {!scriptReady && (
-          <span className="text-[12px] text-[#9CA3AF]">Memuat opsi Google...</span>
-        )}
-      </div>
+      {/* Div ini sengaja gak pernah dikasih children dari React -- begitu
+          Google SDK render tombolnya ke sini, ia manipulasi DOM-nya langsung
+          (nyisipin iframe dkk) di luar sepengetahuan React. Kalau React
+          ikut nge-render/ngubah isi div yang sama (misal lewat state kayak
+          `scriptReady`), React bisa nyoba hapus node yang udah keburu
+          diganti Google, bikin crash "removeChild ... not a child of this
+          node". Makanya indikator loading-nya taruh di div terpisah. */}
+      <div ref={buttonRef} className="w-full flex justify-center min-h-[44px]" />
+      {!scriptReady && (
+        <p className="text-[12px] text-[#9CA3AF] text-center -mt-1">
+          Memuat opsi Google...
+        </p>
+      )}
     </>
   );
 }
