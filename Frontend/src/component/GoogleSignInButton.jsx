@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { toast } from "sonner";
@@ -32,70 +32,68 @@ function redirectByRole(router, role) {
 export default function GoogleSignInButton() {
   const router = useRouter();
   const buttonRef = useRef(null);
+  const [scriptReady, setScriptReady] = useState(false);
 
-  useEffect(() => {
-    if (!CLIENT_ID) return;
-
-    function handleCredentialResponse(response) {
-      api
-        .post(
-          "/api/accounts/google-login/",
-          { credential: response.credential },
-          { auth: false },
-        )
-        .then((data) => {
-          setTokens({ access: data.access, refresh: data.refresh });
-          toast.success("Berhasil masuk", {
-            description: "Kamu akan diarahkan ke dashboard.",
-          });
-          redirectByRole(router, data.user?.role);
-        })
-        .catch((err) => {
-          const message =
-            err instanceof ApiError ? err.message : "Terjadi kesalahan. Coba lagi.";
-          toast.error("Login Google gagal", { description: message });
+  function handleCredentialResponse(response) {
+    api
+      .post(
+        "/api/accounts/google-login/",
+        { credential: response.credential },
+        { auth: false },
+      )
+      .then((data) => {
+        setTokens({ access: data.access, refresh: data.refresh });
+        toast.success("Berhasil masuk", {
+          description: "Kamu akan diarahkan ke dashboard.",
         });
-    }
-
-    function renderButton() {
-      if (!window.google?.accounts?.id || !buttonRef.current) return;
-      window.google.accounts.id.initialize({
-        client_id: CLIENT_ID,
-        callback: handleCredentialResponse,
+        redirectByRole(router, data.user?.role);
+      })
+      .catch((err) => {
+        const message =
+          err instanceof ApiError ? err.message : "Terjadi kesalahan. Coba lagi.";
+        toast.error("Login Google gagal", { description: message });
       });
-      window.google.accounts.id.renderButton(buttonRef.current, {
-        theme: "outline",
-        size: "large",
-        width: 380,
-        text: "continue_with",
-      });
-    }
+  }
 
-    if (window.google?.accounts?.id) {
-      renderButton();
-    } else {
-      const interval = setInterval(() => {
-        if (window.google?.accounts?.id) {
-          clearInterval(interval);
-          renderButton();
-        }
-      }, 200);
-      return () => clearInterval(interval);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Dipanggil begitu <Script> beneran selesai load (bukan nebak/polling) --
+  // di titik ini window.google.accounts.id dijamin udah ada.
+  function handleScriptLoad() {
+    setScriptReady(true);
+    if (!buttonRef.current) return;
+    window.google.accounts.id.initialize({
+      client_id: CLIENT_ID,
+      callback: handleCredentialResponse,
+    });
+    window.google.accounts.id.renderButton(buttonRef.current, {
+      theme: "outline",
+      size: "large",
+      width: 380,
+      text: "continue_with",
+    });
+  }
 
   if (!CLIENT_ID) return null;
 
   return (
     <>
-      <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" />
+      <Script
+        src="https://accounts.google.com/gsi/client"
+        strategy="afterInteractive"
+        onLoad={handleScriptLoad}
+        onError={() => toast.error("Gagal memuat Google Sign-In", {
+          description: "Cek koneksi internet kamu, atau muat ulang halaman.",
+        })}
+      />
       <div className="flex items-center gap-3 my-1">
         <div className="h-px flex-1 bg-white/10" />
         <span className="text-[12px] text-[#9CA3AF]">atau</span>
         <div className="h-px flex-1 bg-white/10" />
       </div>
-      <div ref={buttonRef} className="w-full flex justify-center" />
+      <div ref={buttonRef} className="w-full flex justify-center min-h-[44px]">
+        {!scriptReady && (
+          <span className="text-[12px] text-[#9CA3AF]">Memuat opsi Google...</span>
+        )}
+      </div>
     </>
   );
 }

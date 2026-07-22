@@ -3,18 +3,22 @@ const isDev = process.env.NODE_ENV !== "production";
 
 // CSP disusun berdasarkan yang beneran dipakai app ini (dicek langsung ke
 // source, bukan nebak): semua gambar/font self-hosted (next/font), gak ada
-// script/style/iframe eksternal -- link ke wa.me/instagram/dst semuanya cuma
-// <a href> (navigasi keluar, gak kena CSP). 'unsafe-inline' buat script &
-// style tetap dibutuhin karena app ini banyak pakai inline style={{}} JSX
-// dan Next.js sendiri nyisipin inline script buat hydration data.
-// 'unsafe-eval' cuma diizinin pas dev (dibutuhin HMR), dilepas di production.
+// script/style/iframe eksternal selain Google Identity Services (dipakai
+// buat tombol "Lanjutkan dengan Google" -- scriptnya dari accounts.google.com
+// dan tombolnya sendiri di-render lewat iframe dari domain yang sama, jadi
+// butuh diizinin di script-src & frame-src). Link ke wa.me/instagram/dst
+// semuanya cuma <a href> (navigasi keluar, gak kena CSP).
+// 'unsafe-inline' buat script & style tetap dibutuhin karena app ini banyak
+// pakai inline style={{}} JSX dan Next.js sendiri nyisipin inline script
+// buat hydration data. 'unsafe-eval' cuma diizinin pas dev (dibutuhin HMR).
 const csp = [
   `default-src 'self'`,
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  `style-src 'self' 'unsafe-inline'`,
+  `script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client${isDev ? " 'unsafe-eval'" : ""}`,
+  `style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style`,
   `img-src 'self' data: blob: ${apiBase}`,
   `font-src 'self' data:`,
-  `connect-src 'self' ${apiBase}`,
+  `connect-src 'self' ${apiBase} https://accounts.google.com`,
+  `frame-src https://accounts.google.com`,
   `frame-ancestors 'self'`,
   `object-src 'none'`,
   `base-uri 'self'`,
