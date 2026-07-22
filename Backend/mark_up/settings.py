@@ -204,6 +204,14 @@ S3_REGION_NAME = os.getenv("S3_REGION_NAME", "auto")
 USE_S3_STORAGE = all([S3_ENDPOINT_URL, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET_NAME])
 
 if USE_S3_STORAGE:
+    # Botocore versi baru default-nya kirim checksum (x-amz-content-sha256)
+    # yang belum semua provider S3-compatible non-AWS dukung dengan benar,
+    # bikin error "XAmzContentSHA256Mismatch" pas upload. Ini fix standarnya --
+    # balikin ke perilaku lama (checksum cuma kalau operasinya benar-benar
+    # butuh, bukan selalu).
+    os.environ.setdefault("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required")
+    os.environ.setdefault("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required")
+
     AWS_ACCESS_KEY_ID = S3_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY = S3_SECRET_ACCESS_KEY
     AWS_STORAGE_BUCKET_NAME = S3_BUCKET_NAME
