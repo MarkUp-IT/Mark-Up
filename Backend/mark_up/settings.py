@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     "corsheaders",
+    "storages",
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
     "accounts",
@@ -82,6 +83,7 @@ AUTH_USER_MODEL = 'accounts.User'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.common.CommonMiddleware',
@@ -89,6 +91,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'mark_up.middleware.SecurityHeadersMiddleware',
 ]
 
 ROOT_URLCONF = 'mark_up.urls'
@@ -181,6 +184,45 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Object storage S3-compatible (bisa Cloudflare R2, DomainEsia, atau provider
+# S3-compatible lain -- generik, tinggal isi endpoint URL sesuai provider yang
+# dipakai) buat media upload (bukti bayar, sertifikat, CV, foto profil).
+# Sengaja fallback ke local filesystem storage kalau env var S3 belum lengkap
+# diisi -- biar dev lokal & sebelum akun storage-nya aktif tetap jalan normal
+# tanpa perlu ubah kode lagi pas kredensialnya udah ada, tinggal isi .env.
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
+S3_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY_ID")
+S3_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_ACCESS_KEY")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+S3_REGION_NAME = os.getenv("S3_REGION_NAME", "auto")
+
+USE_S3_STORAGE = all([S3_ENDPOINT_URL, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET_NAME])
+
+if USE_S3_STORAGE:
+    AWS_ACCESS_KEY_ID = S3_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY = S3_SECRET_ACCESS_KEY
+    AWS_STORAGE_BUCKET_NAME = S3_BUCKET_NAME
+    AWS_S3_ENDPOINT_URL = S3_ENDPOINT_URL
+    AWS_S3_REGION_NAME = S3_REGION_NAME
+    AWS_S3_SIGNATURE_VERSION = "s3v4"
+    AWS_DEFAULT_ACL = None
+    AWS_S3_FILE_OVERWRITE = False
+    # Bucket private (sesuai keputusan) -- Django generate presigned URL yang
+    # kedaluwarsa, bukan link publik permanen.
+    AWS_QUERYSTRING_AUTH = True
+    AWS_QUERYSTRING_EXPIRE = 3600  # 1 jam
+
+    STORAGES = {
+        "default": {"BACKEND": "storages.backends.s3.S3Storage"},
+        "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    }
+else:
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    }

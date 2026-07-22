@@ -1,0 +1,26 @@
+[Unit]
+Description=MarkUp Django backend (Gunicorn)
+After=network.target postgresql.service
+
+[Service]
+# Ganti user/group ini kalau bukan pakai www-data di server kamu.
+User=www-data
+Group=www-data
+
+# Ganti path ini sesuai lokasi repo di server (hasil `git clone`/deploy).
+WorkingDirectory=/var/www/markup/Backend
+ExecStart=/var/www/markup/Backend/.venv/bin/gunicorn \
+    --workers 3 \
+    --bind 127.0.0.1:8000 \
+    --access-logfile - \
+    --error-logfile - \
+    mark_up.wsgi:application
+
+# .env di-load otomatis sama Django sendiri lewat python-dotenv (settings.py),
+# jadi gak perlu EnvironmentFile= di sini.
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

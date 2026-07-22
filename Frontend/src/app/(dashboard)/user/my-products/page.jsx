@@ -145,14 +145,31 @@ export default function MyProducts() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
 
+  async function fetchProducts() {
+      setLoading(true);
+
+      const res = await apiRequest(
+          `/api/products/my-products/?filter=${activeFilter.toLowerCase()}`
+      );
+
+      setData(res);
+
+      setLoading(false);
+  }
+
+  async function fetchUser() {
+    try {
+      const res = await apiRequest("/api/accounts/me/");
+      setUser(res.user);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   useEffect(() => {
       fetchUser();
       fetchProducts();
   }, [activeFilter]);
-
- 
-
-  
 
   const isRiwayat = activeFilter === "Riwayat";
   const showBootcamp = activeFilter === "Semua" || activeFilter === "Bootcamp";
@@ -192,30 +209,6 @@ export default function MyProducts() {
 
       setIsSubmittingRating(false);
   };
-
-  async function fetchProducts() {
-      setLoading(true);
-
-      const res = await apiRequest(
-          `/api/products/my-products/?filter=${activeFilter.toLowerCase()}`
-      );
-
-      setData(res);
-
-      setLoading(false);
-  }
-
-  async function fetchUser() {
-    try {
-      const res = await apiRequest("/api/accounts/me/");
-
-      console.log("ME API:", res);
-
-      setUser(res.user);
-    } catch (err) {
-      console.error(err);
-    }
-  }
 
   const stats = [
     {
