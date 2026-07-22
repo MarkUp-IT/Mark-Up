@@ -1,3 +1,4 @@
+import gzip
 import os
 import subprocess
 import tempfile
@@ -49,20 +50,20 @@ class Command(BaseCommand):
                 db["NAME"],
             ]
             self.stdout.write("Menjalankan pg_dump...")
-            with open(tmp_path, "wb") as tmp_file:
-                gzip_proc = subprocess.Popen(
-                    ["gzip"], stdin=subprocess.PIPE, stdout=tmp_file,
-                )
-                dump_proc = subprocess.run(
-                    dump_cmd, env=env, stdout=gzip_proc.stdin, stderr=subprocess.PIPE,
-                )
-                gzip_proc.stdin.close()
-                gzip_proc.wait()
+            # Sebelumnya nyoba manual pipe pg_dump -> gzip lewat 2 subprocess
+            # sekaligus (mirip shell `pg_dump | gzip`), tapi ternyata data
+            # yang ke-upload malah SQL mentah nggak terkompres -- keliatan
+            # pas dicek langsung isinya. Ganti pakai modul gzip bawaan Python
+            # yang jelas dan gampang diverifikasi.
+            dump_proc = subprocess.run(dump_cmd, env=env, capture_output=True)
 
             if dump_proc.returncode != 0:
                 raise CommandError(
                     f"pg_dump gagal (exit {dump_proc.returncode}): {dump_proc.stderr.decode(errors='replace')}"
                 )
+
+            with gzip.open(tmp_path, "wb") as gz:
+                gz.write(dump_proc.stdout)
 
             size_mb = os.path.getsize(tmp_path) / (1024 * 1024)
             self.stdout.write(f"Dump selesai ({size_mb:.2f} MB), upload ke storage...")
