@@ -3,8 +3,6 @@ from decimal import Decimal
 from django.core.validators import MinValueValidator, MaxValueValidator
 import uuid
 from django.db import models
-from django.db.models.signals import post_save, post_delete
-from django.dispatch import receiver
 from accounts.models import User
 from mentors.models import MentorProfile
 
@@ -239,11 +237,9 @@ class BootcampSession(models.Model):
     )
     order = models.PositiveIntegerField(default=1)
     title = models.CharField(max_length=255)
-    mentor = models.ForeignKey(
+    mentors = models.ManyToManyField(
         MentorProfile,
-        on_delete=models.CASCADE,
         related_name="bootcamp_sessions",
-        null=True,
         blank=True,
     )
     start_time = models.DateTimeField(blank=True, null=True)
@@ -375,58 +371,3 @@ class Certificate(models.Model):
 
     def __str__(self) -> str:
         return self.number
-
-
-def _mentor_ids_for_product(product_id):
-    return set(
-        MentoringSession.objects.filter(mentoring__product_id=product_id).values_list(
-            "mentor_id", flat=True
-        )
-    ) | set(
-        BootcampSession.objects.filter(bootcamp__product_id=product_id).values_list(
-            "mentor_id", flat=True
-        )
-    )
-
-
-def _product_ids_for_mentor(mentor_id):
-    return set(
-        MentoringSession.objects.filter(mentor_id=mentor_id).values_list(
-            "mentoring__product_id", flat=True
-        )
-    ) | set(
-        BootcampSession.objects.filter(mentor_id=mentor_id).values_list(
-            "bootcamp__product_id", flat=True
-        )
-    )
-
-
-def recompute_mentor_rating(mentor):
-    from django.db.models import Avg, Count
-
-    product_ids = _product_ids_for_mentor(mentor.id)
-    agg = Review.objects.filter(
-        product_id__in=product_ids, is_hidden=False
-    ).aggregate(avg=Avg("rating"), count=Count("id"))
-    mentor.rating = round(agg["avg"] or 0, 2)
-    mentor.review_count = agg["count"] or 0
-    mentor.save(update_fields=["rating", "review_count"])
-
-
-def _update_mentor_ratings_for_review(review):
-    mentor_ids = _mentor_ids_for_product(review.product_id)
-    mentor_ids.discard(None)
-    for mentor in MentorProfile.objects.filter(id__in=mentor_ids):
-        recompute_mentor_rating(mentor)
-
-
-@receiver(post_save, sender=Review)
-def _on_review_saved(sender, instance, **kwargs):
-    # Nyakup review baru maupun edit is_hidden (moderasi admin) -- keduanya
-    # lewat save(), jadi post_save aja udah cukup buat kedua kasus.
-    _update_mentor_ratings_for_review(instance)
-
-
-@receiver(post_delete, sender=Review)
-def _on_review_deleted(sender, instance, **kwargs):
-    _update_mentor_ratings_for_review(instance)

@@ -218,12 +218,15 @@ class MentorPayout(models.Model):
         blank=True,
         related_name="payout",
     )
-    bootcamp_session = models.OneToOneField(
+    bootcamp_session = models.ForeignKey(
         "products.BootcampSession",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name="payout",
+        related_name="payouts",
+        help_text="ForeignKey (bukan OneToOne) karena satu sesi bootcamp bisa "
+                  "diajar >1 mentor -- tiap mentor yang ditugaskan dapat baris "
+                  "payout sendiri-sendiri untuk sesi yang sama.",
     )
     gross_amount = models.DecimalField(max_digits=12, decimal_places=2)
     fee_percent = models.PositiveIntegerField(default=20)
@@ -242,6 +245,13 @@ class MentorPayout(models.Model):
         verbose_name = "Mentor Payout"
         verbose_name_plural = "Mentor Payouts"
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bootcamp_session", "mentor_profile"],
+                condition=models.Q(bootcamp_session__isnull=False),
+                name="unique_bootcamp_session_mentor_payout",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.mentor_profile} - {self.gross_amount}"

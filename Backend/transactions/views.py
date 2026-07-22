@@ -552,23 +552,20 @@ def _create_bootcamp_sessions(user_library, product):
         .order_by("start_time")
     )
 
-    sessions = []
     for order, template in enumerate(templates, start=1):
-        first_assignment = template.session_mentors.first()
-        sessions.append(
-            BootcampSession(
-                bootcamp_id=product.id,
-                user_library=user_library,
-                template=template,
-                order=order,
-                title=template.title,
-                mentor=first_assignment.mentor_profile if first_assignment else None,
-                start_time=template.start_time,
-                status=BootcampSession.SessionStatus.SCHEDULED,
-                meeting_link=template.meeting_link or "",
-            )
+        session = BootcampSession.objects.create(
+            bootcamp_id=product.id,
+            user_library=user_library,
+            template=template,
+            order=order,
+            title=template.title,
+            start_time=template.start_time,
+            status=BootcampSession.SessionStatus.SCHEDULED,
+            meeting_link=template.meeting_link or "",
         )
-    BootcampSession.objects.bulk_create(sessions)
+        mentor_profiles = [a.mentor_profile for a in template.session_mentors.all()]
+        if mentor_profiles:
+            session.mentors.set(mentor_profiles)
 
 
 @csrf_exempt

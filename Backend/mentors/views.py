@@ -461,7 +461,7 @@ def get_my_sessions(request):
         .order_by("user_library_id", "order")
     )
     bootcamp_sessions = (
-        BootcampSession.objects.filter(mentor=mentor_profile, user_library__is_revoked=False)
+        BootcampSession.objects.filter(mentors=mentor_profile, user_library__is_revoked=False)
         .select_related("bootcamp", "bootcamp__product", "user_library__user")
         .order_by("user_library_id", "order")
     )
@@ -518,7 +518,7 @@ def get_my_reviews(request):
             "mentoring__product_id", flat=True
         )
     ) | set(
-        BootcampSession.objects.filter(mentor=mentor_profile).values_list(
+        BootcampSession.objects.filter(mentors=mentor_profile).values_list(
             "bootcamp__product_id", flat=True
         )
     )

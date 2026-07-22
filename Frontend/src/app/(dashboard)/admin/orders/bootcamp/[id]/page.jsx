@@ -25,6 +25,62 @@ const PARTICIPANT_STATUS_META = {
   waiting_schedule: { label: "BELUM DIJADWALKAN", className: "bg-[#FEF3C7] text-[#92400E]" },
 };
 
+function MentorMultiSelect({ mentors, selectedIds, onChange }) {
+  const [open, setOpen] = useState(false);
+  const selectedNames = mentors
+    .filter((m) => selectedIds.includes(m.id))
+    .map((m) => m.name);
+
+  const toggle = (id) => {
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter((x) => x !== id));
+    } else {
+      onChange([...selectedIds, id]);
+    }
+  };
+
+  return (
+    <div className="relative w-full">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] pl-3 pr-8 text-[13px] font-medium text-[#475569] text-left outline-none focus:border-[#148F89] truncate"
+        style={{ height: "36px" }}
+      >
+        {selectedNames.length > 0 ? selectedNames.join(", ") : "-- Pilih Mentor --"}
+      </button>
+      <ChevronDown
+        size={14}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
+      />
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute z-20 mt-1 w-full max-h-52 overflow-y-auto bg-white border border-[#E2E8F0] rounded-[8px] shadow-lg py-1">
+            {mentors.length === 0 && (
+              <p className="px-3 py-2 text-[12px] text-[#94A3B8]">Tidak ada mentor</p>
+            )}
+            {mentors.map((m) => (
+              <label
+                key={m.id}
+                className="flex items-center gap-2 px-3 py-2 text-[12.5px] text-[#334155] hover:bg-[#F8FAFC] cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(m.id)}
+                  onChange={() => toggle(m.id)}
+                  className="accent-[#148F89]"
+                />
+                {m.name}
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function formatSessionDateTime(dateStr) {
   if (!dateStr) return null;
   return new Date(dateStr).toLocaleString("id-ID", {
@@ -57,7 +113,7 @@ export default function BootcampOrderDetail() {
       setSessions(res?.sessions || []);
       const nextDrafts = {};
       (res?.sessions || []).forEach((s) => {
-        nextDrafts[s.id] = { mentor_id: s.mentor_id || "", meeting_link: s.meeting_link || "" };
+        nextDrafts[s.id] = { mentor_ids: s.mentor_ids || [], meeting_link: s.meeting_link || "" };
       });
       setDrafts(nextDrafts);
     } catch (err) {
@@ -143,7 +199,7 @@ export default function BootcampOrderDetail() {
       const draft = drafts[sessionId];
       await apiRequest(`/api/programs/bootcamp-sessions/${sessionId}/`, {
         method: "PATCH",
-        body: { mentor_id: draft.mentor_id || null, meeting_link: draft.meeting_link },
+        body: { mentor_ids: draft.mentor_ids || [], meeting_link: draft.meeting_link },
       });
       fetchDetail();
       toast.success("Sesi Diperbarui", { description: "Mentor & link sesi berhasil disimpan." });
@@ -192,7 +248,7 @@ export default function BootcampOrderDetail() {
 
   const needsAction = (session) => {
     const flags = [];
-    if (!drafts[session.id]?.mentor_id) flags.push("MENTOR");
+    if (!drafts[session.id]?.mentor_ids?.length) flags.push("MENTOR");
     if (!drafts[session.id]?.meeting_link) flags.push("LINK");
     return flags.length > 0 ? flags : null;
   };
@@ -235,20 +291,11 @@ export default function BootcampOrderDetail() {
                     <tr key={item.id} className="hover:bg-[#F8FAFC] transition-colors">
                       <td className="px-4 py-4 text-left text-[#1E293B] font-medium">{item.title}</td>
                       <td className="px-4 py-4">
-                        <div className="relative w-full">
-                          <select
-                            value={drafts[item.id]?.mentor_id || ""}
-                            onChange={(e) => updateDraft(item.id, "mentor_id", e.target.value)}
-                            className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] pl-3 pr-8 text-[13px] font-medium text-[#475569] appearance-none outline-none focus:border-[#148F89]"
-                            style={{ height: "36px" }}
-                          >
-                            <option value="">-- Pilih Mentor --</option>
-                            {mentors.map((m) => (
-                              <option key={m.id} value={m.id}>{m.name}</option>
-                            ))}
-                          </select>
-                          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none" />
-                        </div>
+                        <MentorMultiSelect
+                          mentors={mentors}
+                          selectedIds={drafts[item.id]?.mentor_ids || []}
+                          onChange={(ids) => updateDraft(item.id, "mentor_ids", ids)}
+                        />
                       </td>
                       <td className="px-4 py-4 text-center">
                         <p className="text-[#1E293B] font-bold text-[12px]">
