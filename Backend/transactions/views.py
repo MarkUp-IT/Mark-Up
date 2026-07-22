@@ -624,6 +624,30 @@ def checkout_product(request):
     if detail is None or not detail.is_active:
         return JsonResponse({"detail": "Produk tidak tersedia."}, status=400)
 
+    if product.type == ProductType.MENTORING:
+        required_profile_fields = {
+            "phone": "Nomor WhatsApp",
+            "institution": "Institusi",
+            "current_status": "Status Saat Ini",
+            "linkedin_url": "LinkedIn",
+        }
+        missing_fields = [
+            label
+            for field, label in required_profile_fields.items()
+            if not (getattr(request.user, field) or "").strip()
+        ]
+        if missing_fields:
+            return JsonResponse(
+                {
+                    "detail": (
+                        "Lengkapi dulu data profil kamu di Pengaturan sebelum "
+                        "membeli produk mentoring: " + ", ".join(missing_fields) + "."
+                    ),
+                    "missing_fields": missing_fields,
+                },
+                status=400,
+            )
+
     if product.type == ProductType.MENTORING and not mentor_availability_id:
         return JsonResponse(
             {"detail": "availability_slot_id diperlukan untuk produk mentoring."},

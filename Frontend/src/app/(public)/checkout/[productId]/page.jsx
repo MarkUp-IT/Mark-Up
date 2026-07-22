@@ -170,6 +170,16 @@ export default function CheckoutDetailPage() {
 
   const [formError, setFormError] = useState("");
 
+  const [profileCheck, setProfileCheck] = useState({
+    loading: false,
+    missingFields: null,
+    loggedOut: false,
+  });
+  const profileIncomplete =
+    isMentoring &&
+    !profileCheck.loading &&
+    (profileCheck.loggedOut || (profileCheck.missingFields?.length ?? 0) > 0);
+
   const selectedMentor = mentors.find((m) => m.id === selectedMentorId) || null;
   const selectedSlot =
     selectedMentor?.slots.find((s) => s.id === selectedSlotId) || null;
@@ -223,6 +233,14 @@ export default function CheckoutDetailPage() {
     if (isMentoring && (!selectedMentorId || !selectedSlotId)) {
       setFormError(
         "Pilih mentor dan jadwal sesi dulu sebelum lanjut ke pembayaran.",
+      );
+      return;
+    }
+    if (profileIncomplete) {
+      setFormError(
+        profileCheck.loggedOut
+          ? "Kamu harus login dulu sebelum booking sesi mentoring."
+          : "Lengkapi dulu data profil kamu di Pengaturan sebelum booking sesi mentoring.",
       );
       return;
     }
@@ -285,6 +303,35 @@ export default function CheckoutDetailPage() {
     }
 
     fetchMentors();
+  }, [isMentoring]);
+
+  useEffect(() => {
+    if (!isMentoring) return;
+
+    async function checkProfileCompleteness() {
+      setProfileCheck({ loading: true, missingFields: null, loggedOut: false });
+      try {
+        const data = await api.get("/api/accounts/me/profile/");
+        if (!data) {
+          setProfileCheck({ loading: false, missingFields: null, loggedOut: true });
+          return;
+        }
+        const REQUIRED_FIELDS = {
+          phone: "Nomor WhatsApp",
+          institution: "Institusi",
+          current_status: "Status Saat Ini",
+          linkedin_url: "LinkedIn",
+        };
+        const missingFields = Object.entries(REQUIRED_FIELDS)
+          .filter(([field]) => !data.user?.[field]?.trim())
+          .map(([, label]) => label);
+        setProfileCheck({ loading: false, missingFields, loggedOut: false });
+      } catch {
+        setProfileCheck({ loading: false, missingFields: null, loggedOut: true });
+      }
+    }
+
+    checkProfileCompleteness();
   }, [isMentoring]);
 
 
@@ -383,6 +430,26 @@ export default function CheckoutDetailPage() {
 
           {isMentoring && (
             <>
+              {profileIncomplete && (
+                <motion.div
+                  {...fadeIn}
+                  className="rounded-[12px] border border-amber-500/30 bg-amber-500/10 p-4 flex flex-col gap-2"
+                >
+                  <p className="flex items-start gap-2 text-amber-300 text-[13px] font-semibold">
+                    <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                    {profileCheck.loggedOut
+                      ? "Kamu harus login dulu untuk booking sesi mentoring."
+                      : `Lengkapi dulu data profil kamu di Pengaturan sebelum booking sesi mentoring: ${profileCheck.missingFields.join(", ")}.`}
+                  </p>
+                  <Link
+                    href={profileCheck.loggedOut ? "/login" : "/user/settings"}
+                    className={`inline-flex items-center gap-1.5 text-[13px] font-semibold text-amber-300 underline underline-offset-2 w-fit rounded-lg ${focusRing}`}
+                  >
+                    {profileCheck.loggedOut ? "Ke halaman login" : "Lengkapi di Pengaturan"}
+                  </Link>
+                </motion.div>
+              )}
+
               {/* Widget pilih mentor -- search + list scroll internal sendiri */}
               <motion.div
                 {...fadeIn}
@@ -743,7 +810,8 @@ export default function CheckoutDetailPage() {
 
             <button
               onClick={handleProceed}
-              className={`w-full bg-[#148F89] text-white text-[14px] font-bold py-3.5 rounded-[8px] hover:bg-[#117A75] transition-colors ${focusRing}`}
+              disabled={profileIncomplete}
+              className={`w-full bg-[#148F89] text-white text-[14px] font-bold py-3.5 rounded-[8px] hover:bg-[#117A75] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#148F89] ${focusRing}`}
             >
               Lanjut ke Pembayaran
             </button>
