@@ -168,6 +168,8 @@ PASSWORD_RESET_TIMEOUT = 60 * 30  # 30 menit, samain sama teks di halaman lupa p
 
 FRONTEND_BASE_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
@@ -226,7 +228,7 @@ if USE_S3_STORAGE:
     AWS_QUERYSTRING_EXPIRE = 3600  # 1 jam
 
     STORAGES = {
-        "default": {"BACKEND": "storages.backends.s3.S3Storage"},
+        "default": {"BACKEND": "mark_up.storage.TolerantS3Storage"},
         "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
     }
 else:
