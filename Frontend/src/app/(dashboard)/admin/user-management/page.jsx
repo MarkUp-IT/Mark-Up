@@ -165,13 +165,11 @@ export default function UserManagement() {
                             style={{ width: "38px", height: "38px" }}
                             className="rounded-full overflow-hidden border border-[#E2E8F0] shrink-0 bg-[#F1F5F9]"
                           >
-                            {item.profile_image && (
-                              <img
-                                src={item.profile_image}
-                                alt={item.fullname}
-                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                              />
-                            )}
+                            <img
+                              src={item.profile_image || "/images/default-avatar.svg"}
+                              alt={item.fullname}
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            />
                           </div>
                           <div className="flex flex-col">
                             <span className="font-bold text-[#1E293B] text-[13.5px]">{item.fullname}</span>
@@ -238,13 +236,11 @@ export default function UserManagement() {
               style={{ width: "56px", height: "56px" }}
               className="rounded-full overflow-hidden border border-[#E2E8F0] shrink-0 bg-white"
             >
-              {selectedUser?.profile_image && (
-                <img
-                  src={selectedUser.profile_image}
-                  alt="avatar"
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
-              )}
+              <img
+                src={selectedUser?.profile_image || "/images/default-avatar.svg"}
+                alt="avatar"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-[#1E293B] text-[15px]">{selectedUser?.fullname}</span>

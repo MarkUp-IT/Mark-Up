@@ -368,11 +368,11 @@ export default function MentorSettings() {
       >
         <div className="relative shrink-0">
           <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#2D2342] bg-[#0F081C] flex items-center justify-center">
-            {profileImage ? (
-              <img src={profileImage} alt="Foto profil" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-[#6B7280] text-[11px]">Tidak ada foto</span>
-            )}
+            <img
+              src={profileImage || "/images/default-avatar.svg"}
+              alt="Foto profil"
+              className="w-full h-full object-cover"
+            />
           </div>
           <label
             aria-label="Ganti foto"

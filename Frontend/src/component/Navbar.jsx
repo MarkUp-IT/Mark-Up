@@ -150,7 +150,11 @@ export default function Navbar({ variant = "glass" }) {
           <span className="text-[11px] text-[#9CA3AF]">{profile.email}</span>
         </div>
         <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-white/20 shrink-0">
-          <img src={profile.avatarSrc} alt={profile.profileName} className="w-full h-full object-cover" />
+          <img
+            src={profile.avatarSrc || "/images/default-avatar.svg"}
+            alt={profile.profileName}
+            className="w-full h-full object-cover"
+          />
         </div>
       </button>
 

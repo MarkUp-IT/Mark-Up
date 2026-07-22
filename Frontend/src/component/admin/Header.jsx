@@ -6,7 +6,7 @@ export default function Header({
   judulHalaman = "Dashboard",
   profileName = "Admin",
   role = "",
-  avatarSrc = "/images/pp.png",
+  avatarSrc,
   onMenuClick = () => {},
 }) {
   return (
@@ -40,7 +40,7 @@ export default function Header({
             className="rounded-full overflow-hidden border border-[#E2E8F0] shrink-0"
           >
             <img
-              src={avatarSrc}
+              src={avatarSrc || "/images/default-avatar.svg"}
               alt="Avatar admin"
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
