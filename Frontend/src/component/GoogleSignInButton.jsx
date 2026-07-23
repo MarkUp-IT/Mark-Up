@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { toast } from "sonner";
@@ -25,20 +25,37 @@ function redirectByRole(router, role) {
   }, 1200);
 }
 
-// Tombol "Lanjutkan dengan Google" -- dipakai bareng di halaman login &
-// register karena backend-nya satu endpoint yang sama (google-login/):
-// otomatis bikin akun baru kalau emailnya belum terdaftar, atau login kalau
-// sudah ada, jadi gak perlu alur terpisah buat "daftar" vs "masuk".
+function GoogleLogo() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.617z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" />
+      <path fill="#FBBC05" d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.348 2.827.957 4.042l3.007-2.332z" />
+      <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" />
+    </svg>
+  );
+}
+
+// Tombol custom (bukan tombol bawaan Google) -- disamain persis sama tombol
+// "Masuk"/"Daftar" (ukuran, radius, bobot font), cuma beda warna. Dipakai
+// bareng di halaman login & register karena backend-nya satu endpoint yang
+// sama (google-login/): otomatis bikin akun baru kalau emailnya belum
+// terdaftar, atau login kalau sudah ada.
 export default function GoogleSignInButton() {
   const router = useRouter();
-  const buttonRef = useRef(null);
   const [scriptReady, setScriptReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  function handleCredentialResponse(response) {
+  function handleTokenResponse(tokenResponse) {
+    if (!tokenResponse?.access_token) {
+      setIsLoading(false);
+      return;
+    }
+
     api
       .post(
         "/api/accounts/google-login/",
-        { credential: response.credential },
+        { access_token: tokenResponse.access_token },
         { auth: false },
       )
       .then((data) => {
@@ -52,24 +69,21 @@ export default function GoogleSignInButton() {
         const message =
           err instanceof ApiError ? err.message : "Terjadi kesalahan. Coba lagi.";
         toast.error("Login Google gagal", { description: message });
-      });
+      })
+      .finally(() => setIsLoading(false));
   }
 
-  // Dipanggil begitu <Script> beneran selesai load (bukan nebak/polling) --
-  // di titik ini window.google.accounts.id dijamin udah ada.
-  function handleScriptLoad() {
-    setScriptReady(true);
-    if (!buttonRef.current) return;
-    window.google.accounts.id.initialize({
+  function handleClick() {
+    if (!scriptReady || isLoading) return;
+    setIsLoading(true);
+
+    const client = window.google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
-      callback: handleCredentialResponse,
+      scope: "openid email profile",
+      callback: handleTokenResponse,
+      error_callback: () => setIsLoading(false),
     });
-    window.google.accounts.id.renderButton(buttonRef.current, {
-      theme: "outline",
-      size: "large",
-      width: 380,
-      text: "continue_with",
-    });
+    client.requestAccessToken();
   }
 
   if (!CLIENT_ID) return null;
@@ -79,7 +93,7 @@ export default function GoogleSignInButton() {
       <Script
         src="https://accounts.google.com/gsi/client"
         strategy="afterInteractive"
-        onLoad={handleScriptLoad}
+        onLoad={() => setScriptReady(true)}
         onError={() => toast.error("Gagal memuat Google Sign-In", {
           description: "Cek koneksi internet kamu, atau muat ulang halaman.",
         })}
@@ -89,19 +103,15 @@ export default function GoogleSignInButton() {
         <span className="text-[12px] text-[#9CA3AF]">atau</span>
         <div className="h-px flex-1 bg-white/10" />
       </div>
-      {/* Div ini sengaja gak pernah dikasih children dari React -- begitu
-          Google SDK render tombolnya ke sini, ia manipulasi DOM-nya langsung
-          (nyisipin iframe dkk) di luar sepengetahuan React. Kalau React
-          ikut nge-render/ngubah isi div yang sama (misal lewat state kayak
-          `scriptReady`), React bisa nyoba hapus node yang udah keburu
-          diganti Google, bikin crash "removeChild ... not a child of this
-          node". Makanya indikator loading-nya taruh di div terpisah. */}
-      <div ref={buttonRef} className="w-full flex justify-center min-h-[44px]" />
-      {!scriptReady && (
-        <p className="text-[12px] text-[#9CA3AF] text-center -mt-1">
-          Memuat opsi Google...
-        </p>
-      )}
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={!scriptReady || isLoading}
+        className="bg-white flex items-center justify-center gap-2.5 w-full h-[48px] rounded-[12px] text-[#1F1F1F] font-bold text-[14px] disabled:opacity-60 disabled:cursor-not-allowed transition-opacity"
+      >
+        <GoogleLogo />
+        {isLoading ? "Memproses..." : "Continue with Google"}
+      </button>
     </>
   );
 }

@@ -169,11 +169,13 @@ def login_view(request):
 
 @csrf_exempt
 def google_login_view(request):
-	"""Register/login pakai akun Google. Frontend kirim ID token (credential)
-	dari Google Identity Services, di sini diverifikasi langsung ke Google
-	(bukan cuma dipercaya mentah-mentah), lalu user dicari/dibuat berdasarkan
-	email yang sudah pasti terverifikasi oleh Google -- dan diterbitkan JWT
-	kita sendiri, sama persis kayak alur login manual."""
+	"""Register/login pakai akun Google. Frontend pakai tombol custom sendiri
+	(bukan tombol bawaan Google) yang minta access token lewat popup OAuth2
+	(google.accounts.oauth2.initTokenClient) -- access token itu divalidasi
+	di sini dengan manggil userinfo endpoint Google sendiri (bukan cuma
+	dipercaya mentah-mentah), lalu user dicari/dibuat berdasarkan email yang
+	sudah pasti terverifikasi oleh Google -- dan diterbitkan JWT kita sendiri,
+	sama persis kayak alur login manual."""
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
 
@@ -188,23 +190,29 @@ def google_login_view(request):
 	if request_data is None:
 		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
-	credential = request_data.get("credential")
-	if not credential:
+	access_token = request_data.get("access_token")
+	if not access_token:
 		return JsonResponse({"detail": "Token Google diperlukan."}, status=400)
 
 	client_id = getattr(settings, "GOOGLE_CLIENT_ID", None)
 	if not client_id:
 		return JsonResponse({"detail": "Login Google belum dikonfigurasi di server."}, status=503)
 
-	from google.oauth2 import id_token as google_id_token
-	from google.auth.transport import requests as google_requests
+	import requests as http_requests
 
 	try:
-		payload = google_id_token.verify_oauth2_token(
-			credential, google_requests.Request(), client_id,
+		userinfo_res = http_requests.get(
+			"https://www.googleapis.com/oauth2/v3/userinfo",
+			headers={"Authorization": f"Bearer {access_token}"},
+			timeout=5,
 		)
-	except ValueError:
+	except http_requests.RequestException:
+		return JsonResponse({"detail": "Gagal menghubungi server Google. Coba lagi."}, status=502)
+
+	if userinfo_res.status_code != 200:
 		return JsonResponse({"detail": "Token Google tidak valid atau kedaluwarsa."}, status=401)
+
+	payload = userinfo_res.json()
 
 	if not payload.get("email_verified"):
 		return JsonResponse({"detail": "Email Google kamu belum terverifikasi."}, status=401)
