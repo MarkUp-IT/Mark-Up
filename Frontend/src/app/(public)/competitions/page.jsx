@@ -1,23 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { SearchX, Loader2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
-
-
-const categories = [
-  "Semua",
-  "Business Case",
-  "Business Plan",
-  "Debat",
-  "LKTI",
-  "UI/UX",
-  "Hackathon",
-];
 
 // Token card konten, disamakan persis dengan yang dipakai di Homepage:
 // radius kecil (6->8px), hover cuma ganti warna border, tanpa transform apapun.
@@ -36,6 +25,16 @@ export default function InfoLombaPage() {
   const [error, setError] = useState(null);
 
   const shouldReduceMotion = useReducedMotion();
+
+  // Kategori filter ngikutin data lomba yang beneran diinput admin -- bukan
+  // list statis, biar konsisten sama apa yang ada (kalau admin belum input
+  // lomba sama sekali, filternya kosong juga).
+  const categories = useMemo(() => {
+    const unique = Array.from(
+      new Set(lombaData.map((lomba) => lomba.category).filter(Boolean)),
+    ).sort();
+    return ["Semua", ...unique];
+  }, [lombaData]);
 
   // Filter Logic
   const filteredLomba = lombaData.filter((lomba) => {
@@ -163,7 +162,9 @@ export default function InfoLombaPage() {
           />
         </div>
 
-        {/* CATEGORY FILTERS */}
+        {/* CATEGORY FILTERS -- disembunyiin kalau belum ada variasi kategori
+            buat difilter (cuma "Semua" doang) */}
+        {categories.length > 1 && (
         <div className="flex flex-wrap justify-center gap-3 mb-10 w-full max-w-[800px]">
           {categories.map((cat, index) => (
             <button
@@ -179,6 +180,7 @@ export default function InfoLombaPage() {
             </button>
           ))}
         </div>
+        )}
 
         {/* COUNTER + GRID LOMBA */}
         {loading ? (
@@ -196,7 +198,9 @@ export default function InfoLombaPage() {
             <p className="text-[#A19DAB] text-sm max-w-[320px]">
               {searchQuery
                 ? `Lomba dengan kata kunci "${searchQuery}" tidak ditemukan.`
-                : `Belum ada lomba untuk kategori "${activeCategory}".`}
+                : activeCategory === "Semua"
+                  ? "Belum ada lomba yang tersedia saat ini."
+                  : `Belum ada lomba untuk kategori "${activeCategory}".`}
             </p>
           </div>
         ) : (
