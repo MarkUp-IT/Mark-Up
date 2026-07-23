@@ -171,7 +171,7 @@ export default function HomePage() {
           berubah live pas address bar browser HP collapse waktu discroll,
           bikin kontainer ini (dan render ulang shader DarkVeil di dalamnya)
           keliatan "geser" beberapa piksel pas baru mulai scroll. */}
-      <div className="absolute top-0 left-0 w-full h-[70svh] landscape:h-screen md:h-screen flex flex-col z-0 overflow-hidden pointer-events-none">
+      <div className="absolute top-0 left-0 w-full h-[40svh] landscape:h-screen md:h-screen flex flex-col z-0 overflow-hidden pointer-events-none">
         <DarkVeil
           hueShift={337}
           noiseIntensity={0}
