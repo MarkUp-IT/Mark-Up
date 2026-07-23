@@ -167,7 +167,11 @@ export default function HomePage() {
   return (
     <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col overflow-x-hidden">
       <Navbar />
-      <div className="absolute top-0 left-0 w-full h-[100dvh] md:h-screen flex flex-col z-0 overflow-hidden pointer-events-none">
+      {/* Tinggi dibatasi ke 70dvh di mode portrait (HP/tablet tegak) -- shader
+          DarkVeil nggak aspect-ratio-aware, jadi kalau dipaksa 100dvh di
+          layar sempit-tapi-tinggi, pola visualnya keliatan ketarik vertikal.
+          Landscape & desktop tetap full height kayak semula. */}
+      <div className="absolute top-0 left-0 w-full h-[70dvh] landscape:h-screen md:h-screen flex flex-col z-0 overflow-hidden pointer-events-none">
         <DarkVeil
           hueShift={337}
           noiseIntensity={0}
