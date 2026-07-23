@@ -154,7 +154,7 @@ export default function MentorDashboard() {
         <div className="grid grid-cols-2 gap-4 shrink-0">
           <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-4 sm:px-6 py-5 flex flex-col items-center justify-center min-w-[95px] sm:min-w-[120px]">
             <p className="text-[#148F89] font-bold text-[30px] sm:text-[34px] leading-none">
-              {activeBootcamp.length}
+              {loading ? "-" : activeBootcamp.length}
             </p>
             <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center whitespace-nowrap">
               Bootcamp Aktif
@@ -162,7 +162,7 @@ export default function MentorDashboard() {
           </div>
           <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-4 sm:px-6 py-5 flex flex-col items-center justify-center min-w-[95px] sm:min-w-[120px]">
             <p className="text-[#148F89] font-bold text-[30px] sm:text-[34px] leading-none">
-              {activeMentoring.length}
+              {loading ? "-" : activeMentoring.length}
             </p>
             <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center whitespace-nowrap">
               Mentoring Aktif

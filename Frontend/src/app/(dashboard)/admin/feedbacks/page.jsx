@@ -77,9 +77,9 @@ export default function Feedbacks() {
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total Ulasan" value={feedbacks.length} unit="ulasan" />
-        <StatCard label="Ulasan Terlihat" value={visibleCount} unit="ulasan" variant="success" />
-        <StatCard label="Disembunyikan" value={hiddenCount} unit="ulasan" variant="warning" />
+        <StatCard label="Total Ulasan" value={feedbacks.length} unit="ulasan" loading={loading} />
+        <StatCard label="Ulasan Terlihat" value={visibleCount} unit="ulasan" variant="success" loading={loading} />
+        <StatCard label="Disembunyikan" value={hiddenCount} unit="ulasan" variant="warning" loading={loading} />
       </div>
 
       <div className="flex flex-col gap-4">

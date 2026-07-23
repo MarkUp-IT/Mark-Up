@@ -174,9 +174,9 @@ export default function Certificates() {
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total Diterbitkan" value={certificates.length} unit="sertifikat" />
-        <StatCard label="Sertifikat Peserta" value={participantCount} unit="sertifikat" />
-        <StatCard label="Sertifikat Pemateri" value={instructorCount} unit="sertifikat" variant="primary" />
+        <StatCard label="Total Diterbitkan" value={certificates.length} unit="sertifikat" loading={loading} />
+        <StatCard label="Sertifikat Peserta" value={participantCount} unit="sertifikat" loading={loading} />
+        <StatCard label="Sertifikat Pemateri" value={instructorCount} unit="sertifikat" variant="primary" loading={loading} />
       </div>
 
       <div className="flex flex-col gap-4">

@@ -176,12 +176,14 @@ export default function Transactions() {
           label="Total Transaksi"
           value={transactions.length}
           unit="transaksi"
+          loading={loading}
         />
         <StatCard
           label="Menunggu Verifikasi"
           value={waitingCount}
           unit="transaksi"
           variant="warning"
+          loading={loading}
         />
         <StatCard
           label="Pendapatan Bulan Ini"

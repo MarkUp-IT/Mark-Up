@@ -157,17 +157,20 @@ export default function RefundRequests() {
           value={pendingCount}
           unit="pengajuan"
           variant="warning"
+          loading={loading}
         />
         <StatCard
           label="Disetujui"
           value={approvedCount}
           unit="pengajuan"
           variant="success"
+          loading={loading}
         />
         <StatCard
           label="Total Diajukan"
           value={requests.length}
           unit="pengajuan"
+          loading={loading}
         />
       </div>
 

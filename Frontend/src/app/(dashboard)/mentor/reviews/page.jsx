@@ -104,7 +104,7 @@ export default function MentorReviews() {
         </div>
         <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col justify-center shadow-lg">
           <p className="text-[#E2E8F0] font-medium text-[14px]">Total Ulasan</p>
-          <p className="text-[#148F89] font-bold text-[34px] leading-none mt-2">{reviews.length}</p>
+          <p className="text-[#148F89] font-bold text-[34px] leading-none mt-2">{loading ? "-" : reviews.length}</p>
         </div>
       </motion.div>
 

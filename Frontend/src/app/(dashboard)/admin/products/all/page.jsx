@@ -176,9 +176,11 @@ export default function AllProducts() {
             ))}
           </div>
         </div>
-        <span className="text-[#64748B] text-[13px] font-medium">
-          {filtered.length} produk
-        </span>
+        {!loading && (
+          <span className="text-[#64748B] text-[13px] font-medium">
+            {filtered.length} produk
+          </span>
+        )}
       </div>
 
       {loading ? (

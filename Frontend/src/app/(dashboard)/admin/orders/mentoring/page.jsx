@@ -33,9 +33,9 @@ export default function MentoringOrders() {
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total Paket Aktif" value={packages.length} unit="paket" />
-        <StatCard label="Sesi Belum Dijadwalkan" value={totalUnscheduled} unit="sesi" />
-        <StatCard label="Link Belum Dibagikan" value={totalPendingLinks} unit="sesi" variant="warning" />
+        <StatCard label="Total Paket Aktif" value={packages.length} unit="paket" loading={loading} />
+        <StatCard label="Sesi Belum Dijadwalkan" value={totalUnscheduled} unit="sesi" loading={loading} />
+        <StatCard label="Link Belum Dibagikan" value={totalPendingLinks} unit="sesi" variant="warning" loading={loading} />
       </div>
 
       <div className="flex flex-col gap-4">
