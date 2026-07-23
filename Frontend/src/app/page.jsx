@@ -167,11 +167,11 @@ export default function HomePage() {
   return (
     <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col overflow-x-hidden">
       <Navbar />
-      {/* Tinggi dibatasi ke 70dvh di mode portrait (HP/tablet tegak) -- shader
-          DarkVeil nggak aspect-ratio-aware, jadi kalau dipaksa 100dvh di
-          layar sempit-tapi-tinggi, pola visualnya keliatan ketarik vertikal.
-          Landscape & desktop tetap full height kayak semula. */}
-      <div className="absolute top-0 left-0 w-full h-[70dvh] landscape:h-screen md:h-screen flex flex-col z-0 overflow-hidden pointer-events-none">
+      {/* svh (small viewport height, statis), bukan dvh (dynamic) -- dvh ikut
+          berubah live pas address bar browser HP collapse waktu discroll,
+          bikin kontainer ini (dan render ulang shader DarkVeil di dalamnya)
+          keliatan "geser" beberapa piksel pas baru mulai scroll. */}
+      <div className="absolute top-0 left-0 w-full h-[70svh] landscape:h-screen md:h-screen flex flex-col z-0 overflow-hidden pointer-events-none">
         <DarkVeil
           hueShift={337}
           noiseIntensity={0}
