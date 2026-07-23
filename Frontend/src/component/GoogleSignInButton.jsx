@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { toast } from "sonner";
@@ -46,6 +46,27 @@ export default function GoogleSignInButton() {
   const [scriptReady, setScriptReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Fallback buat kasus script-nya udah pernah ke-load sebelumnya (misal
+  // user pindah dari /register ke /login lewat client-side navigation) --
+  // <Script onLoad> next/script kadang nggak nembak lagi buat instance baru
+  // kalau tag script-nya udah ada di DOM, dan window.google.accounts.oauth2
+  // sendiri kadang telat kepopulasi walau event "load" browser udah lewat.
+  // Polling ringan ini mastiin tombolnya tetap kebuka begitu API-nya beneran
+  // siap, tanpa user perlu refresh manual.
+  useEffect(() => {
+    if (window.google?.accounts?.oauth2) {
+      setScriptReady(true);
+      return;
+    }
+    const interval = setInterval(() => {
+      if (window.google?.accounts?.oauth2) {
+        setScriptReady(true);
+        clearInterval(interval);
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, []);
+
   function handleTokenResponse(tokenResponse) {
     if (!tokenResponse?.access_token) {
       setIsLoading(false);
@@ -77,13 +98,20 @@ export default function GoogleSignInButton() {
     if (!scriptReady || isLoading) return;
     setIsLoading(true);
 
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: "openid email profile",
-      callback: handleTokenResponse,
-      error_callback: () => setIsLoading(false),
-    });
-    client.requestAccessToken();
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: "openid email profile",
+        callback: handleTokenResponse,
+        error_callback: () => setIsLoading(false),
+      });
+      client.requestAccessToken();
+    } catch {
+      setIsLoading(false);
+      toast.error("Google Sign-In belum siap", {
+        description: "Tunggu sebentar dan coba lagi.",
+      });
+    }
   }
 
   if (!CLIENT_ID) return null;
