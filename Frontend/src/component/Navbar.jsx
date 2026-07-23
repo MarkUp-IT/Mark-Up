@@ -246,7 +246,7 @@ export default function Navbar({ variant = "glass" }) {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.2 }}
-          className="fixed top-[80px] left-1/2 -translate-x-1/2 w-[95%] md:w-[90%] rounded-[24px] border border-white/20 bg-white/10 backdrop-blur-md shadow-2xl lg:hidden z-[90] overflow-hidden"
+          className="fixed top-[80px] left-1/2 -translate-x-1/2 w-[95%] md:w-[90%] rounded-[24px] border border-white/20 bg-white/10 backdrop-blur-md shadow-2xl lg:hidden z-[90] overflow-hidden pointer-events-auto"
         >
           <GlassLayer borderRadius={24} />
           <div className="relative z-10 p-6 flex flex-col gap-4">
