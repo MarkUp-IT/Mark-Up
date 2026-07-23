@@ -236,7 +236,7 @@ export default function Navbar({ variant = "glass" }) {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.2 }}
-          className="fixed top-[80px] left-1/2 -translate-x-1/2 w-[95%] md:w-[90%] rounded-[24px] border border-white/20 bg-white/10 backdrop-blur-md shadow-2xl lg:hidden z-[90] overflow-hidden pointer-events-auto"
+          className="absolute top-full left-0 mt-3 w-full rounded-[24px] border border-white/20 bg-white/10 backdrop-blur-md shadow-2xl lg:hidden z-[90] overflow-hidden pointer-events-auto"
         >
           <GlassShine borderRadius={24} />
           <div className="relative z-10 p-6 flex flex-col gap-4">
@@ -300,7 +300,25 @@ export default function Navbar({ variant = "glass" }) {
   if (variant === "solid") {
     return (
       <div className="fixed top-0 left-0 z-[100] w-full flex justify-center mt-4 px-4 pointer-events-none">
-        <nav className="relative pointer-events-auto text-white flex font-jakarta justify-between items-center border border-white/20 bg-white/10 backdrop-blur-md shadow-lg w-[95%] md:w-[90%] rounded-full z-50">
+        <div className="relative w-[95%] md:w-[90%]">
+          <nav className="relative pointer-events-auto text-white flex font-jakarta justify-between items-center border border-white/20 bg-white/10 backdrop-blur-md shadow-lg w-full rounded-full z-50">
+            <GlassShine borderRadius={9999} />
+            <div className="relative z-10 flex items-center py-2 px-4 md:py-3 md:px-8 justify-between w-full">
+              {logo}
+              {desktopLinks}
+              {rightSection}
+            </div>
+          </nav>
+          {mobileMenu}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed top-0 left-0 z-[100] flex w-full justify-center mt-4 px-4 pointer-events-none">
+      <div className="relative w-[95%] md:w-[90%]">
+        <nav className="relative pointer-events-auto text-white flex font-jakarta justify-between items-center border border-white/20 bg-white/10 backdrop-blur-md shadow-lg w-full rounded-full z-50">
           <GlassShine borderRadius={9999} />
           <div className="relative z-10 flex items-center py-2 px-4 md:py-3 md:px-8 justify-between w-full">
             {logo}
@@ -310,20 +328,6 @@ export default function Navbar({ variant = "glass" }) {
         </nav>
         {mobileMenu}
       </div>
-    );
-  }
-
-  return (
-    <div className="fixed top-0 left-0 z-[100] flex w-full justify-center mt-4 px-4 pointer-events-none">
-      <nav className="relative pointer-events-auto text-white flex font-jakarta justify-between items-center border border-white/20 bg-white/10 backdrop-blur-md shadow-lg w-[95%] md:w-[90%] rounded-full z-50">
-        <GlassShine borderRadius={9999} />
-        <div className="relative z-10 flex items-center py-2 px-4 md:py-3 md:px-8 justify-between w-full">
-          {logo}
-          {desktopLinks}
-          {rightSection}
-        </div>
-      </nav>
-      {mobileMenu}
     </div>
   );
 }
