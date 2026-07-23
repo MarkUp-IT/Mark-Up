@@ -170,17 +170,26 @@ export default function HomePage() {
       {/* svh (small viewport height, statis), bukan dvh (dynamic) -- dvh ikut
           berubah live pas address bar browser HP collapse waktu discroll,
           bikin kontainer ini (dan render ulang shader DarkVeil di dalamnya)
-          keliatan "geser" beberapa piksel pas baru mulai scroll. */}
-      <div className="absolute top-0 left-0 w-full h-[40svh] landscape:h-screen md:h-screen flex flex-col z-0 overflow-hidden pointer-events-none">
-        <DarkVeil
-          hueShift={337}
-          noiseIntensity={0}
-          scanlineIntensity={0}
-          speed={0.5}
-          scanlineFrequency={0.5}
-          warpAmount={0}
-          className="w-full h-full object-cover"
-        />
+          keliatan "geser" beberapa piksel pas baru mulai scroll. Kotak luar
+          ini yang motong (overflow-hidden), ukurannya tetap selebar layar. */}
+      <div className="absolute top-0 left-0 w-full h-[70svh] landscape:h-screen md:h-screen z-0 overflow-hidden pointer-events-none">
+        {/* Kotak dalam ini 2x lebar layar & dipusatkan, khusus mode portrait --
+            shader DarkVeil dirender di kanvas yang lebih lebar biar rasio
+            tinggi:lebar-nya nggak seekstrem kalau dipas-in ke lebar layar HP
+            doang (itu penyebab pola shader keliatan ketarik vertikal). Bagian
+            yang "nembus" kiri-kanan kepotong sama overflow-hidden di kotak
+            luar. Landscape & desktop nggak butuh trik ini (rasionya udah
+            wajar), jadi balik ke lebar normal. */}
+        <div className="absolute top-0 h-full w-[200%] left-1/2 -translate-x-1/2 landscape:w-full landscape:left-0 landscape:translate-x-0 md:w-full md:left-0 md:translate-x-0">
+          <DarkVeil
+            hueShift={337}
+            noiseIntensity={0}
+            scanlineIntensity={0}
+            speed={0.5}
+            scanlineFrequency={0.5}
+            warpAmount={0}
+          />
+        </div>
       </div>
       <div className="main-content flex flex-col gap-24 md:gap-32 items-center mt-24 md:mt-28 relative z-40 mb-24 w-full">
         {/* HERO SECTION */}
