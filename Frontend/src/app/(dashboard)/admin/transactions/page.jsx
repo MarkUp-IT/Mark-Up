@@ -402,6 +402,17 @@ export default function Transactions() {
                 </span>
               </div>
 
+              {selectedTx?.notes ? (
+                <div className="flex flex-col gap-1">
+                  <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                    Catatan dari Pembeli
+                  </span>
+                  <p className="text-[#1E293B] text-[13px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3 whitespace-pre-wrap">
+                    {selectedTx.notes}
+                  </p>
+                </div>
+              ) : null}
+
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
                   <Landmark size={15} className="text-[#148F89]" />

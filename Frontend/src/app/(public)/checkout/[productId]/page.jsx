@@ -153,6 +153,9 @@ export default function CheckoutDetailPage() {
   const buyerInfo = useCheckoutFormStore((s) => s.buyerInfo);
   const setBuyerInfo = useCheckoutFormStore((s) => s.setBuyerInfo);
 
+  const notes = useCheckoutFormStore((s) => s.notes);
+  const setNotes = useCheckoutFormStore((s) => s.setNotes);
+
   const voucherCode = useCheckoutFormStore((s) => s.voucherCode);
   const setVoucherCode = useCheckoutFormStore((s) => s.setVoucherCode);
 
@@ -739,6 +742,22 @@ export default function CheckoutDetailPage() {
                 placeholder="+62"
                 className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white placeholder:text-[#64748B] outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
               />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[#E2E8F0] text-[12px] font-semibold">
+                Catatan <span className="text-[#6B7280] font-normal">(opsional)</span>
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                placeholder="Contoh: kalau ini pesanan tim, tulis nama-nama anggota di sini."
+                className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white placeholder:text-[#64748B] outline-none focus:border-[#148F89] transition-colors resize-none ${focusRing}`}
+              />
+              <p className="text-[#6B7280] text-[10px]">
+                Kalau produk ini dipesan buat tim/kelompok, tuliskan nama-nama anggotanya di sini biar mentor tahu.
+              </p>
             </div>
           </motion.div>
 

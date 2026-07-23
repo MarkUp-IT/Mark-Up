@@ -78,6 +78,7 @@ export default function CheckoutPaymentPage() {
 
   const checkoutSummary = useCheckoutFormStore((s) => s.checkoutSummary);
   const buyerInfo = useCheckoutFormStore((s) => s.buyerInfo);
+  const notes = useCheckoutFormStore((s) => s.notes);
   const voucherCode = useCheckoutFormStore((s) => s.voucherCode);
   const selectedMentor = useCheckoutFormStore((s) => s.selectedMentor);
   const selectedSlot = useCheckoutFormStore((s) => s.selectedSlot);
@@ -139,6 +140,10 @@ export default function CheckoutPaymentPage() {
 
         if (selectedSlot?.id) {
           formData.append("availability_slot_id", selectedSlot.id);
+        }
+
+        if (notes) {
+          formData.append("notes", notes);
         }
 
         formData.append("proof_of_payment", proofFile);

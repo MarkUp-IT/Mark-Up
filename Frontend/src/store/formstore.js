@@ -15,6 +15,9 @@ export const useCheckoutFormStore = create((set) => ({
   voucherCode: null,
   setVoucherCode: (code) => set({ voucherCode: code }),
 
+  notes: "",
+  setNotes: (notes) => set({ notes }),
+
   checkoutSummary: {
     productId: null,
     productTitle: "",
@@ -39,6 +42,7 @@ export const useCheckoutFormStore = create((set) => ({
     set({
       buyerInfo: { email: "", fullName: "", phone: "" },
       voucherCode: null,
+      notes: "",
       checkoutSummary: { productId: null, productTitle: "", total: 0 },
       selectedMentor: null,
       selectedSlot: null,

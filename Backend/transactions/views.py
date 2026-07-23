@@ -135,6 +135,7 @@ def get_transactions(request):
             "method": item.transaction.payment_method,
             "status": item.transaction.payment_status,
             "proof_of_payment": item.transaction.proof_of_payment.url if item.transaction.proof_of_payment else None,
+            "notes": item.transaction.notes,
         })
 
     return JsonResponse(
@@ -270,6 +271,7 @@ def get_my_transactions(request):
                 "method": item.transaction.payment_method,
                 "status": item.transaction.payment_status,
                 "proof_of_payment": item.transaction.proof_of_payment.url if item.transaction.proof_of_payment else None,
+                "notes": item.transaction.notes,
             }
         )
 
@@ -585,6 +587,7 @@ def checkout_product(request):
     voucher_code = request_data.get("voucher_code")
     buyer_phone = request_data.get("buyer_phone")
     mentor_availability_id = request_data.get("availability_slot_id")
+    notes = (request_data.get("notes") or "").strip()
     proof_file = request.FILES.get("proof_of_payment")
 
     if not product_id:
@@ -723,6 +726,7 @@ def checkout_product(request):
                 grand_total=grand_total,
                 proof_of_payment=proof_file,
                 payment_status=PaymentStatus.PENDING,
+                notes=notes,
             )
 
             item = TransactionItem.objects.create(

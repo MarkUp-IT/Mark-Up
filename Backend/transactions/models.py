@@ -53,6 +53,11 @@ class Transaction(models.Model):
             blank=True,
             null=True,
         )
+    notes = models.TextField(
+        blank=True,
+        default="",
+        help_text="Catatan dari pembeli, misal nama-nama anggota tim buat pesanan grup.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(blank=True, null=True)
 
