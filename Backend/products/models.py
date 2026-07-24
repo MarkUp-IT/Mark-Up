@@ -4,7 +4,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 import uuid
 from django.db import models
 from accounts.models import User
-from mentors.models import MentorProfile
+from mentors.models import MentorProfile, Expertise
 
 class BaseModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
@@ -78,6 +78,14 @@ class MentoringProduct(BaseProductDetail):
 
     session_count = models.PositiveIntegerField(default=1)
     duration_minutes = models.PositiveIntegerField(default=60)
+
+    expertise = models.ManyToManyField(
+        Expertise,
+        related_name="mentoring_products",
+        blank=True,
+        help_text="Kategori mentoring (BCC, BPC, Karir, dst) -- nentuin mentor mana aja "
+                   "yang boleh dipilih pembeli produk ini (harus overlap sama keahlian mentor).",
+    )
 
     class Meta:
         verbose_name = "Mentoring Product"

@@ -162,6 +162,8 @@ def _serialize_product_item(p):
         if p.type == ProductType.MENTORING:
             item["session_count"] = detail.session_count
             item["duration_minutes"] = detail.duration_minutes
+            item["expertise"] = list(detail.expertise.values_list("id", flat=True))
+            item["expertise_names"] = list(detail.expertise.values_list("name", flat=True))
             item["highlights"] = list(
                 detail.highlights.order_by("order").values_list("text", flat=True)
             )
@@ -578,6 +580,7 @@ def add_product(request):
     detail = detail_form.save(commit=False)
     detail.product = product
     detail.save()
+    detail_form.save_m2m()
 
     log_audit(
         request, AuditAction.CREATE, "products", object_id=product.id,
@@ -612,7 +615,7 @@ def get_products(request):
     base_qs = Product.objects.select_related(
 		"mentoring_detail", "module_detail", "bootcamp_detail"
 	).prefetch_related(
-		"mentoring_detail__highlights"
+		"mentoring_detail__highlights", "mentoring_detail__expertise"
 	).filter(
 		Q(mentoring_detail__isnull=False) |
 		Q(module_detail__isnull=False) |

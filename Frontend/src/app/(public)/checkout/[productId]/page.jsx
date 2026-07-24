@@ -294,7 +294,10 @@ export default function CheckoutDetailPage() {
       setIsLoadingMentors(true);
       setMentorsError("");
       try {
-        const data = await api.get("/api/mentors/", { auth: false });
+        const data = await api.get(
+          `/api/mentors/?product_id=${params.productId}`,
+          { auth: false },
+        );
         setMentors(data.mentors.map(mapMentorFromApi));
       } catch (err) {
         setMentorsError(
@@ -306,7 +309,7 @@ export default function CheckoutDetailPage() {
     }
 
     fetchMentors();
-  }, [isMentoring]);
+  }, [isMentoring, params.productId]);
 
   useEffect(() => {
     if (!isMentoring) return;

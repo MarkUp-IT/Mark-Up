@@ -80,7 +80,35 @@ def get_mentors(request):
         .order_by("-rating")
     )
 
-    data = [_serialize_mentor(mentor, request) for mentor in mentors]
+    # ?product_id= dipakai widget pilih-mentor di checkout -- cuma tampilin
+    # mentor yang keahliannya overlap sama kategori produk mentoring itu.
+    # Kalau produknya belum ditandain kategori sama sekali (belum di-setting
+    # admin), jangan dibatasi dulu -- daripada checkout-nya malah kosong.
+    product_id = request.GET.get("product_id")
+    if product_id:
+        from products.models import MentoringProduct
+
+        try:
+            product = MentoringProduct.objects.prefetch_related("expertise").get(
+                product_id=product_id
+            )
+        except MentoringProduct.DoesNotExist:
+            product = None
+
+        if product is not None:
+            expertise_ids = list(product.expertise.values_list("id", flat=True))
+            if expertise_ids:
+                mentors = mentors.filter(
+                    mentor_expertises__expertise_id__in=expertise_ids
+                ).distinct()
+
+    # Mentor yang profilnya belum lengkap (lihat MentorProfile.is_profile_complete)
+    # nggak ditampilin publik -- masih nyembunyiin diri sampai data wajibnya keisi.
+    data = [
+        _serialize_mentor(mentor, request)
+        for mentor in mentors
+        if mentor.is_profile_complete()
+    ]
     return JsonResponse({"mentors": data}, status=200)
 
 
@@ -546,3 +574,40 @@ def get_my_reviews(request):
         )
 
     return JsonResponse({"reviews": data}, status=200)
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def create_expertise(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    name = (request_data.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"detail": "Nama keahlian diperlukan."}, status=400)
+
+    if Expertise.objects.filter(name__iexact=name).exists():
+        return JsonResponse({"detail": "Keahlian dengan nama ini sudah ada."}, status=400)
+
+    expertise = Expertise.objects.create(name=name)
+    return JsonResponse({"id": str(expertise.id), "name": expertise.name}, status=201)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def delete_expertise(request, expertise_id):
+    if request.method != "DELETE":
+        return HttpResponseNotAllowed(["DELETE"])
+
+    try:
+        expertise = Expertise.objects.get(id=expertise_id)
+    except Expertise.DoesNotExist:
+        return JsonResponse({"detail": "Keahlian tidak ditemukan."}, status=404)
+
+    expertise.delete()
+    return JsonResponse({"detail": "Keahlian berhasil dihapus."}, status=200)

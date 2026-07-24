@@ -762,12 +762,24 @@ def get_current_user(request):
         "dashboard_href": dashboard_href_by_role.get(user.role, "/user/my-products"),
     }
 
+    if user.role == UserRole.MENTOR:
+        data["is_profile_complete"] = _is_mentor_profile_complete(user)
+
     return JsonResponse(
         {
             "is_logged_in": True,
             "user": data,
         }
     )
+
+
+def _is_mentor_profile_complete(user):
+    from mentors.models import MentorProfile
+
+    try:
+        return user.mentor_profile.is_profile_complete()
+    except MentorProfile.DoesNotExist:
+        return False
 
 @csrf_exempt
 def logout_user(request):
