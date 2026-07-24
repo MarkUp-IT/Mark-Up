@@ -178,9 +178,18 @@ export async function apiRequest(
   }
 
   if (!res.ok) {
-    const message =
-      (data && (data.detail || data.message || data.error)) ||
-      `Request gagal dengan status ${res.status}`;
+    // Backend balikin error validasi field dalam bentuk
+    // {"errors": {"field": ["pesan", ...]}} -- kalau nggak ada detail/message
+    // yang kebaca, rangkai pesan dari errors itu biar user tau field mana yang
+    // salah, bukan cuma "Request gagal dengan status 400" yang nggak informatif.
+    let message = data && (data.detail || data.message || data.error);
+    if (!message && data?.errors && typeof data.errors === "object") {
+      const parts = Object.values(data.errors)
+        .flat()
+        .filter(Boolean);
+      if (parts.length) message = parts.join(" ");
+    }
+    if (!message) message = `Request gagal dengan status ${res.status}`;
     throw new ApiError(message, { status: res.status, data, url });
   }
 

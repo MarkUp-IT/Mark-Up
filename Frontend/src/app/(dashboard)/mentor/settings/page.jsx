@@ -16,6 +16,7 @@ import {
   Landmark,
   AlertTriangle,
 } from "lucide-react";
+import { toast } from "sonner";
 import DashboardLayout from "@/component/mentor/DashboardLayout";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 
@@ -235,7 +236,9 @@ export default function MentorSettings() {
       setTimeout(() => setInfoSaved(false), 3000);
       refreshProfileCompleteness();
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menyimpan", {
+        description: err?.message || "Coba lagi, atau cek isian kamu.",
+      });
     }
   };
 
@@ -258,7 +261,9 @@ export default function MentorSettings() {
       setTimeout(() => setExpertiseSaved(false), 3000);
       refreshProfileCompleteness();
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menyimpan keahlian", {
+        description: err?.message || "Coba lagi sebentar.",
+      });
     }
   };
 
@@ -278,7 +283,9 @@ export default function MentorSettings() {
       setTimeout(() => setBankSaved(false), 3000);
       refreshProfileCompleteness();
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menyimpan rekening", {
+        description: err?.message || "Coba lagi sebentar.",
+      });
     }
   };
 
@@ -342,7 +349,9 @@ export default function MentorSettings() {
       await apiRequest(`/api/mentors/me/experiences/${id}/`, { method: "DELETE" });
       setExperiences((prev) => prev.filter((exp) => exp.id !== id));
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menghapus pengalaman", {
+        description: err?.message || "Coba lagi sebentar.",
+      });
     }
   };
 
@@ -382,7 +391,9 @@ export default function MentorSettings() {
       }
       setShowExpModal(false);
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menyimpan pengalaman", {
+        description: err?.message || "Cek isian kamu, lalu coba lagi.",
+      });
     }
   };
 
