@@ -192,6 +192,18 @@ export default function HomePage() {
             warpAmount={0}
           />
         </div>
+
+        {/* Gradasi di tepi bawah DarkVeil biar gak ada potongan tajam ke
+            section berikutnya -- memudar dari transparan (atas) -> ungu gelap
+            (tengah) -> warna bg halaman #060010 (bawah, biar nyambung mulus
+            tanpa garis batas baru). */}
+        <div
+          className="absolute inset-x-0 bottom-0 h-1/2"
+          style={{
+            background:
+              "linear-gradient(to bottom, rgba(6,0,16,0) 0%, rgba(22,12,50,0.55) 60%, #060010 100%)",
+          }}
+        />
       </div>
       <div className="main-content flex flex-col gap-24 md:gap-32 items-center mt-24 md:mt-28 relative z-40 mb-24 w-full">
         {/* HERO SECTION */}
