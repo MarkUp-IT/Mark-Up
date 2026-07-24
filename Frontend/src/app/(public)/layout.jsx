@@ -1,8 +1,8 @@
 "use client";
 
-import { useMentorOnlyDashboard } from "@/lib/useMentorOnlyDashboard";
+import { useDashboardOnlyGuard } from "@/lib/useDashboardOnlyGuard";
 
 export default function PublicLayout({ children }) {
-  useMentorOnlyDashboard();
+  useDashboardOnlyGuard();
   return children;
 }

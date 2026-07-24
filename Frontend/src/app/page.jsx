@@ -7,7 +7,7 @@ import CountUp from "@/component/CountUp";
 import DarkVeil from "@/component/DarkVeil";
 import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
-import { useMentorOnlyDashboard } from "@/lib/useMentorOnlyDashboard";
+import { useDashboardOnlyGuard } from "@/lib/useDashboardOnlyGuard";
 
 const hashtagsRow1 = [
   "#Mentoring",
@@ -141,7 +141,7 @@ const AmbientGlow = ({ tint = "177,158,239", className = "" }) => (
 );
 
 export default function HomePage() {
-  useMentorOnlyDashboard();
+  useDashboardOnlyGuard();
   const statsRef = useRef(null);
   const isStatsInView = useInView(statsRef, { once: true, margin: "-100px" });
 
