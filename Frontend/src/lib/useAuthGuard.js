@@ -12,8 +12,11 @@ import { apiRequest, getAccessToken, clearTokens } from "@/lib/api";
 // Sekalian nge-gate mentor yang profilnya belum lengkap (field wajib belum
 // semua keisi, lihat _is_mentor_profile_complete di backend) -- dipaksa ke
 // /mentor/settings dulu, nggak bisa buka halaman dashboard mentor lainnya
-// sampai lengkap. Role lain nggak punya is_profile_complete sama sekali di
-// response-nya, jadi otomatis nggak kena gate ini.
+// sampai lengkap. Ini SENGAJA di-scope ke role === "MENTOR" doang -- student
+// juga punya is_profile_complete di response-nya (dipakai buat gate checkout
+// di halaman terpisah, bukan lock dashboard blanket kayak mentor), jadi
+// kalau nggak di-scope, student baru daftar (profil pasti belum lengkap)
+// bakal ke-redirect salah ke /mentor/settings gara-gara kondisi ini match.
 export function useAuthGuard(allowedRoles) {
   const router = useRouter();
   const pathname = usePathname();
@@ -42,6 +45,7 @@ export function useAuthGuard(allowedRoles) {
           return;
         }
         if (
+          user.role === "MENTOR" &&
           user.is_profile_complete === false &&
           !pathname?.startsWith("/mentor/settings")
         ) {
