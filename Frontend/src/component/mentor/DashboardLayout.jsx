@@ -46,7 +46,7 @@ export default function DashboardLayout({ title, children }) {
           avatarSrc={profile?.avatar_src}
         />
 
-        <main className="flex-1 py-8 px-8">
+        <main className="flex-1 py-6 px-4 sm:px-6 lg:px-8">
           <div
             style={{ maxWidth: "1158px" }}
             className="w-full mx-auto flex flex-col gap-6"

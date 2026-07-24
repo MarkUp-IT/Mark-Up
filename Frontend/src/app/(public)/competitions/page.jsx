@@ -357,7 +357,7 @@ export default function InfoLombaPage() {
                 </p>
 
                 {/* Grid 6 Box Info */}
-                <div className="grid grid-cols-2 gap-3 mb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
                   <InfoBox
                     title="Pelaksanaan"
                     value={selectedLomba.date}

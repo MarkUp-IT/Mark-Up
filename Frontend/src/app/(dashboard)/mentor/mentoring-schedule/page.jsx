@@ -461,7 +461,7 @@ export default function MentoringSchedule() {
                   <h3 className="text-white font-bold text-[16px]">
                     Pilih Rentang Tanggal
                   </h3>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[#9CA3AF] text-[12px] font-semibold">
                         Tanggal Mulai
