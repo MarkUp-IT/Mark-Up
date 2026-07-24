@@ -21,7 +21,7 @@ from .models import (
 )
 from accounts.decorators import jwt_required, role_required
 from accounts.models import User, UserRole, AuditAction
-from accounts.utils import log_audit
+from accounts.utils import log_audit, notify_team, get_client_ip, is_rate_limited
 from django.db.models import Q
 from mentors.models import MentorAvailability
 from django.views.decorators.csrf import csrf_exempt
@@ -507,6 +507,11 @@ def refund_my_product(request, product_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
 
+    if is_rate_limited(f"rl:refund:user:{request.user.id}", limit=10, window_seconds=3600):
+        return JsonResponse(
+            {"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429
+        )
+
     user_library = _get_user_library(request, product_id)
     if user_library is None:
         return JsonResponse({"detail": "Produk ini belum pernah dibeli oleh pengguna ini."}, status=404)
@@ -539,6 +544,16 @@ def refund_my_product(request, product_id):
     refund = RefundRequest.objects.create(
         user_library=user_library,
         reason=reason,
+    )
+
+    detail = _get_product_detail(user_library.product)
+    notify_team(
+        "Pengajuan refund baru",
+        f"Ada pengajuan refund baru yang butuh ditinjau admin.\n\n"
+        f"Pemohon: {request.user.fullname} ({request.user.email})\n"
+        f"Produk: {detail.title if detail else '-'}\n"
+        f"Alasan: {reason}\n\n"
+        f"Tinjau di dashboard admin -> Pengajuan Refund.",
     )
 
     return JsonResponse(

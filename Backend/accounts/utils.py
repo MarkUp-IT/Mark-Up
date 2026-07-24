@@ -62,3 +62,32 @@ def log_audit(request, action, table_name, object_id="", old_data=None, new_data
         new_data=new_data,
         ip_address=get_client_ip(request),
     )
+
+def notify_team(subject, message):
+    """Kirim notifikasi internal ke inbox tim (settings.TEAM_NOTIFICATION_EMAIL)
+    buat kejadian yang butuh tindakan cepat -- transaksi baru nunggu verifikasi,
+    pesan masuk, pengajuan refund. Dikirim di thread terpisah + fail_silently
+    biar SMTP yang lambat/error nggak pernah nge-block atau nggagalin aksi user
+    yang lagi jalan (checkout, kirim pesan, dll)."""
+    import threading
+    from django.conf import settings
+    from django.core.mail import send_mail
+
+    recipient = getattr(settings, "TEAM_NOTIFICATION_EMAIL", None)
+    if not recipient:
+        return
+
+    def _send():
+        try:
+            send_mail(
+                subject=f"[MarkUp] {subject}",
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[recipient],
+                fail_silently=True,
+            )
+        except Exception:
+            # Notifikasi internal -- kegagalan kirim gak boleh ngeganggu apa pun.
+            pass
+
+    threading.Thread(target=_send, daemon=True).start()

@@ -6,7 +6,7 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, get_client_ip, is_rate_limited
+from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, get_client_ip, is_rate_limited, notify_team
 from .forms import RegisterForm, UpdateProfileForm
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -641,6 +641,14 @@ def submit_contact_message(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
 
+	# Form publik tanpa login -- target spam paling gampang. Throttle per IP.
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:contact:ip:{ip}", limit=5, window_seconds=3600):
+		return JsonResponse(
+			{"detail": "Terlalu banyak pesan dikirim dari perangkat ini. Coba lagi nanti."},
+			status=429,
+		)
+
 	request_data = get_request_data(request)
 	if request_data is None:
 		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
@@ -655,6 +663,16 @@ def submit_contact_message(request):
 
 	contact_message = ContactMessage.objects.create(
 		name=name, email=email, subject=subject, message=message,
+	)
+
+	notify_team(
+		f"Pesan masuk baru dari {name}",
+		f"Ada pesan masuk baru lewat form Kontak.\n\n"
+		f"Nama: {name}\n"
+		f"Email: {email}\n"
+		f"Subjek: {subject}\n\n"
+		f"Isi pesan:\n{message}\n\n"
+		f"Cek di dashboard admin -> Pesan Masuk.",
 	)
 
 	return JsonResponse(

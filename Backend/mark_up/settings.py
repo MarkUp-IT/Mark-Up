@@ -129,6 +129,21 @@ DATABASES = {
 }
 
 
+# Cache -- dipakai rate limiter (is_rate_limited) buat throttle brute-force &
+# spam. WAJIB backend yang SHARED antar-proses di produksi: Gunicorn jalan
+# multi-worker, kalau pakai LocMemCache (default) tiap worker punya penghitung
+# sendiri -> limit efektif jadi berkali lipat lebih longgar (gampang di-bypass).
+# DatabaseCache pakai PostgreSQL yang udah ada, konsisten lintas worker, dan
+# tahan restart. Tabelnya dibuat sekali lewat `manage.py createcachetable`.
+if os.getenv("PRODUCTION", "False").lower() == "true":
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "markup_cache",
+        }
+    }
+
+
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
@@ -164,6 +179,9 @@ if os.getenv("EMAIL_HOST"):
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@markup.com")
+# Inbox tim buat notifikasi internal yang butuh tindakan cepat (transaksi baru
+# nunggu verifikasi, pesan masuk, pengajuan refund).
+TEAM_NOTIFICATION_EMAIL = os.getenv("TEAM_NOTIFICATION_EMAIL", "markup.ofc@gmail.com")
 PASSWORD_RESET_TIMEOUT = 60 * 30  # 30 menit, samain sama teks di halaman lupa password FE
 
 FRONTEND_BASE_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")

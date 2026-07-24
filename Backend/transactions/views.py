@@ -21,7 +21,7 @@ from programs.models import BootcampSession as BootcampSessionTemplate
 from django.utils.dateparse import parse_date
 from accounts.decorators import jwt_required, role_required
 from accounts.models import UserRole, AuditAction
-from accounts.utils import log_audit
+from accounts.utils import log_audit, notify_team, is_rate_limited
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Sum, Case, When, F, DecimalField
@@ -579,6 +579,11 @@ def checkout_product(request):
     if not request.user.is_authenticated:
         return JsonResponse({"detail": "Authentication required."}, status=401)
 
+    if is_rate_limited(f"rl:checkout:user:{request.user.id}", limit=20, window_seconds=3600):
+        return JsonResponse(
+            {"detail": "Terlalu banyak percobaan checkout. Coba lagi nanti."}, status=429
+        )
+
     request_data = get_request_data(request)
     if request_data is None:
         return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
@@ -738,6 +743,20 @@ def checkout_product(request):
 
     except Exception as e:
         return JsonResponse({"detail": f"Checkout gagal: {str(e)}"}, status=500)
+
+    # Notifikasi ke tim -- ada transaksi baru yang nunggu diverifikasi admin.
+    # Dikirim setelah DB transaction commit (di luar block atomic) biar
+    # latency email nggak nahan lock DB.
+    product_title = getattr(detail, "title", None) or "-"
+    notify_team(
+        f"Transaksi baru nunggu verifikasi ({txn.id})",
+        f"Ada transaksi baru yang butuh diverifikasi admin.\n\n"
+        f"ID Transaksi: {txn.id}\n"
+        f"Pembeli: {request.user.fullname} ({request.user.email})\n"
+        f"Produk: {product_title}\n"
+        f"Total: Rp {txn.grand_total}\n\n"
+        f"Cek & verifikasi di dashboard admin -> Transaksi.",
+    )
 
     return JsonResponse(
         {
