@@ -1264,6 +1264,10 @@ def get_all_reviews(request):
         "user", "product__mentoring_detail", "product__module_detail", "product__bootcamp_detail"
     ).order_by("-created_at")
 
+    # Buka daftar ini nandain semua ulasan yang belum dilihat jadi "sudah
+    # dilihat" -- sumber badge notifikasi "ulasan baru" di sidebar.
+    Review.objects.filter(is_seen_by_admin=False).update(is_seen_by_admin=True)
+
     data = []
     for r in reviews:
         detail = _get_product_detail(r.product)

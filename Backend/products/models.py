@@ -167,6 +167,10 @@ class Review(BaseModel):
         null=True,
     )
     is_hidden = models.BooleanField(default=False)
+    is_seen_by_admin = models.BooleanField(
+        default=False,
+        help_text="Ke-set True begitu admin buka halaman daftar ulasan -- dipakai buat badge notifikasi 'ulasan baru' di sidebar.",
+    )
 
     class Meta:
         constraints = [

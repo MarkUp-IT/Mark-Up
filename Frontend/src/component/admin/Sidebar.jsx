@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
@@ -32,27 +33,39 @@ const menuList = [
   { name: "Kode Referral", url: "/admin/referral-codes", icon: Ticket },
 ];
 
+// badgeKey nyambung ke response /api/accounts/admin/sidebar-badges/ -- item
+// tanpa badgeKey (Modul, Manajemen User, dst) memang gak punya konsep
+// "butuh tindakan" yang jelas, jadi gak dikasih buletan notifikasi.
 const orderMenuList = [
-  { name: "Bootcamp", url: "/admin/orders/bootcamp", icon: Presentation },
-  { name: "Mentoring", url: "/admin/orders/mentoring", icon: GraduationCap },
+  { name: "Bootcamp", url: "/admin/orders/bootcamp", icon: Presentation, badgeKey: "bootcamp" },
+  { name: "Mentoring", url: "/admin/orders/mentoring", icon: GraduationCap, badgeKey: "mentoring" },
   { name: "Modul", url: "/admin/orders/module", icon: FileText },
 ];
 
 const financeMenuList = [
-  { name: "Transaksi", url: "/admin/transactions", icon: ReceiptText },
-  { name: "Pengajuan Refund", url: "/admin/refund-requests", icon: RotateCcw },
-  { name: "Pencairan Mentor", url: "/admin/payouts", icon: Landmark },
+  { name: "Transaksi", url: "/admin/transactions", icon: ReceiptText, badgeKey: "transactions" },
+  { name: "Pengajuan Refund", url: "/admin/refund-requests", icon: RotateCcw, badgeKey: "refund_requests" },
+  { name: "Pencairan Mentor", url: "/admin/payouts", icon: Landmark, badgeKey: "payouts" },
 ];
 
 const otherMenuList = [
   { name: "Manajemen User", url: "/admin/user-management", icon: UserCog },
   { name: "Sertifikat", url: "/admin/certificates", icon: Award },
-  { name: "Ulasan", url: "/admin/feedbacks", icon: MessageSquare },
-  { name: "Pesan Masuk", url: "/admin/messages", icon: Inbox },
+  { name: "Ulasan", url: "/admin/feedbacks", icon: MessageSquare, badgeKey: "reviews" },
+  { name: "Pesan Masuk", url: "/admin/messages", icon: Inbox, badgeKey: "messages" },
   { name: "Audit Trail", url: "/admin/audit-trail", icon: History },
 ];
 
-function NavItem({ item, isActive }) {
+function NotifBadge({ count }) {
+  if (!count) return null;
+  return (
+    <span className="min-w-[19px] h-[19px] px-1 rounded-full bg-[#EF4444] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+function NavItem({ item, isActive, badge }) {
   const Icon = item.icon;
   return (
     <Link
@@ -67,14 +80,34 @@ function NavItem({ item, isActive }) {
         size={17}
         className={isActive ? "text-[#148F89]" : "text-[#94A3B8]"}
       />
-      {item.name}
+      <span className="flex-1">{item.name}</span>
+      <NotifBadge count={badge} />
     </Link>
+  );
+}
+
+function SectionLabel({ children, badge }) {
+  return (
+    <div className="px-4 mb-1 flex items-center gap-2">
+      <p className="text-[11px] font-bold text-[#94A3B8] tracking-wider uppercase">
+        {children}
+      </p>
+      <NotifBadge count={badge} />
+    </div>
   );
 }
 
 export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [badges, setBadges] = useState({});
+
+  useEffect(() => {
+    api
+      .get("/api/accounts/admin/sidebar-badges/")
+      .then((data) => data && setBadges(data))
+      .catch(() => {});
+  }, []);
 
   const isActivePath = (url) =>
     url === "/admin" ? pathname === "/admin" : pathname?.startsWith(url);
@@ -89,6 +122,10 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
       router.push("/login");
     }
   }
+
+  const orderSectionBadge = (badges.bootcamp || 0) + (badges.mentoring || 0);
+  const financeSectionBadge =
+    (badges.transactions || 0) + (badges.refund_requests || 0) + (badges.payouts || 0);
 
   return (
     <>
@@ -141,27 +178,25 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
         </div>
 
         <div className="flex flex-col gap-1">
-          <p className="px-4 mb-1 text-[11px] font-bold text-[#94A3B8] tracking-wider uppercase">
-            Kelola Pesanan
-          </p>
+          <SectionLabel badge={orderSectionBadge}>Kelola Pesanan</SectionLabel>
           {orderMenuList.map((item) => (
             <NavItem
               key={item.url}
               item={item}
               isActive={isActivePath(item.url)}
+              badge={badges[item.badgeKey]}
             />
           ))}
         </div>
 
         <div className="flex flex-col gap-1">
-          <p className="px-4 mb-1 text-[11px] font-bold text-[#94A3B8] tracking-wider uppercase">
-            Keuangan
-          </p>
+          <SectionLabel badge={financeSectionBadge}>Keuangan</SectionLabel>
           {financeMenuList.map((item) => (
             <NavItem
               key={item.url}
               item={item}
               isActive={isActivePath(item.url)}
+              badge={badges[item.badgeKey]}
             />
           ))}
         </div>
@@ -172,6 +207,7 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
               key={item.url}
               item={item}
               isActive={isActivePath(item.url)}
+              badge={badges[item.badgeKey]}
             />
           ))}
         </div>

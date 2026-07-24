@@ -989,3 +989,40 @@ def get_audit_logs(request):
     ]
 
     return JsonResponse({"logs": data}, status=200)
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_admin_sidebar_badges(request):
+	"""Angka notifikasi buat tiap menu sidebar admin -- masing-masing hitung
+	item yang beneran butuh tindakan admin (bukan sekadar total data), biar
+	konsisten sama badge/StatCard "butuh tindakan" yang udah ada di
+	halaman-halaman terkait."""
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	from django.db.models import Q
+	from products.models import MentoringSession, RefundRequest, Review
+	from programs.models import BootcampSession as BootcampSessionTemplate
+	from transactions.models import Transaction, PaymentStatus, MentorPayout, PayoutStatus
+
+	bootcamp_pending = (
+		BootcampSessionTemplate.objects.filter(session_mentors__isnull=True).count()
+		+ BootcampSessionTemplate.objects.filter(Q(meeting_link__isnull=True) | Q(meeting_link="")).count()
+	)
+
+	mentoring_pending = (
+		MentoringSession.objects.filter(status="waiting_schedule").count()
+		+ MentoringSession.objects.filter(status="scheduled", zoom_link="").count()
+	)
+
+	data = {
+		"bootcamp": bootcamp_pending,
+		"mentoring": mentoring_pending,
+		"transactions": Transaction.objects.filter(payment_status=PaymentStatus.PENDING).count(),
+		"refund_requests": RefundRequest.objects.filter(status=RefundRequest.RefundStatus.PENDING).count(),
+		"payouts": MentorPayout.objects.filter(status=PayoutStatus.PENDING).count(),
+		"messages": ContactMessage.objects.filter(status=ContactMessageStatus.NEW).count(),
+		"reviews": Review.objects.filter(is_seen_by_admin=False).count(),
+	}
+
+	return JsonResponse(data, status=200)
