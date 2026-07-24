@@ -37,10 +37,10 @@ class Migration(migrations.Migration):
         ('mentors', '0007_mentorprofile_bank_account_holder'),
     ]
 
+    # Dedupe DOANG di migrasi ini. AddConstraint dipisah ke 0009 -- kalau
+    # digabung dalam satu transaksi, Postgres nolak ALTER TABLE karena masih
+    # ada "pending trigger events" dari DELETE (FK SET_NULL ke MentoringSession).
+    # Dipisah bikin dedupe commit duluan (trigger ke-flush), baru constraint.
     operations = [
         migrations.RunPython(dedupe_availability, noop_reverse),
-        migrations.AddConstraint(
-            model_name='mentoravailability',
-            constraint=models.UniqueConstraint(fields=('mentor_profile', 'start_time'), name='unique_mentor_availability_slot'),
-        ),
     ]
