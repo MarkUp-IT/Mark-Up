@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Send,
   Trash2,
   Plus,
   ChevronDown,
@@ -27,6 +26,8 @@ const PARTICIPANT_STATUS_META = {
 
 function MentorMultiSelect({ mentors, selectedIds, onChange }) {
   const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState(null);
+  const btnRef = useRef(null);
   const selectedNames = mentors
     .filter((m) => selectedIds.includes(m.id))
     .map((m) => m.name);
@@ -39,11 +40,32 @@ function MentorMultiSelect({ mentors, selectedIds, onChange }) {
     }
   };
 
+  // Dropdown-nya position: fixed (dihitung dari posisi tombol) -- kalau pakai
+  // absolute biasa, dia keclip sama container tabel yang overflow-x-auto +
+  // overflow-hidden. Fixed bikin dia "lepas" dari container itu. Tutup pas
+  // di-scroll biar posisinya gak nyasar.
+  const openDropdown = () => {
+    if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+
   return (
     <div className="relative w-full">
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (open ? setOpen(false) : openDropdown())}
         className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] pl-3 pr-8 text-[13px] font-medium text-[#475569] text-left outline-none focus:border-[#148F89] truncate"
         style={{ height: "36px" }}
       >
@@ -53,10 +75,13 @@ function MentorMultiSelect({ mentors, selectedIds, onChange }) {
         size={14}
         className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
       />
-      {open && (
+      {open && rect && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute z-20 mt-1 w-full max-h-52 overflow-y-auto bg-white border border-[#E2E8F0] rounded-[8px] shadow-lg py-1">
+          <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
+          <div
+            className="fixed z-[61] max-h-52 overflow-y-auto bg-white border border-[#E2E8F0] rounded-[8px] shadow-lg py-1"
+            style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
+          >
             {mentors.length === 0 && (
               <p className="px-3 py-2 text-[12px] text-[#94A3B8]">Tidak ada mentor</p>
             )}
@@ -193,18 +218,23 @@ export default function BootcampOrderDetail() {
     setDrafts((prev) => ({ ...prev, [sessionId]: { ...prev[sessionId], [field]: value } }));
   };
 
-  const saveSession = async (sessionId) => {
+  const saveAllSessions = async () => {
     setSaving(true);
     try {
-      const draft = drafts[sessionId];
-      await apiRequest(`/api/programs/bootcamp-sessions/${sessionId}/`, {
-        method: "PATCH",
-        body: { mentor_ids: draft.mentor_ids || [], meeting_link: draft.meeting_link },
-      });
-      fetchDetail();
-      toast.success("Sesi Diperbarui", { description: "Mentor & link sesi berhasil disimpan." });
+      // Simpan semua sesi sekaligus (mentor + link) -- gantiin tombol panah
+      // per-baris. Dikirim berurutan biar gak nembak rate-limit rame-rame.
+      for (const s of sessions) {
+        const draft = drafts[s.id];
+        if (!draft) continue;
+        await apiRequest(`/api/programs/bootcamp-sessions/${s.id}/`, {
+          method: "PATCH",
+          body: { mentor_ids: draft.mentor_ids || [], meeting_link: draft.meeting_link },
+        });
+      }
+      await fetchDetail();
+      toast.success("Tersimpan", { description: "Semua sesi (mentor & link) berhasil disimpan." });
     } catch (err) {
-      toast.error("Gagal Menyimpan Sesi", {
+      toast.error("Gagal Menyimpan", {
         description: extractErrorMessage(err, "Terjadi kesalahan."),
       });
     } finally {
@@ -263,9 +293,21 @@ export default function BootcampOrderDetail() {
         Kembali ke Daftar Batch
       </Link>
 
-      <div>
-        <h1 className="font-bold text-[22px] text-[#0F172A]">{title}</h1>
-        <p className="text-[#64748B] text-[14px] mt-1">ID Batch: {params?.id}</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-bold text-[22px] text-[#0F172A]">{title}</h1>
+          <p className="text-[#64748B] text-[14px] mt-1">ID Batch: {params?.id}</p>
+        </div>
+        {!loading && sessions.length > 0 && (
+          <button
+            onClick={saveAllSessions}
+            disabled={saving}
+            className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-[8px] bg-[#148F89] text-white text-[13px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-50"
+          >
+            <Check size={16} />
+            {saving ? "Menyimpan..." : "Simpan Semua"}
+          </button>
+        )}
       </div>
 
       {!loading && sessions.length === 0 ? (
@@ -306,23 +348,15 @@ export default function BootcampOrderDetail() {
                         </p>
                       </td>
                       <td className="px-4 py-4">
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-center">
                           <input
                             type="text"
                             placeholder="Masukkan link zoom..."
                             value={drafts[item.id]?.meeting_link || ""}
                             onChange={(e) => updateDraft(item.id, "meeting_link", e.target.value)}
-                            style={{ width: "150px", height: "36px" }}
+                            style={{ width: "200px", height: "36px" }}
                             className="bg-[#F8FAFC] rounded-[6px] px-3 text-[12px] outline-none border border-[#E2E8F0] text-[#334155] focus:border-[#148F89] transition-colors"
                           />
-                          <button
-                            onClick={() => saveSession(item.id)}
-                            disabled={saving}
-                            style={{ width: "36px", height: "36px" }}
-                            className="rounded-[6px] flex items-center justify-center transition-colors shrink-0 bg-[#148F89] text-white hover:bg-[#117A75] disabled:opacity-50"
-                          >
-                            <Send size={15} />
-                          </button>
                         </div>
                       </td>
                       <td className="px-4 py-4">

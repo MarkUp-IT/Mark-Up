@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     add_availability,
+    add_availability_bulk,
     get_mentors,
     get_my_availability,
     delete_my_availability,
@@ -24,6 +25,7 @@ urlpatterns = [
     path("expertise/create/", create_expertise, name="api_mentors_expertise_create"),
     path("expertise/<uuid:expertise_id>/delete/", delete_expertise, name="api_mentors_expertise_delete"),
     path("availability/add/", add_availability, name="api_mentors_add_availability"),
+    path("availability/add-bulk/", add_availability_bulk, name="api_mentors_add_availability_bulk"),
     path("<uuid:mentor_id>/availability/", get_mentor_availability, name="api_mentor_availability"),
     path("me/availability/", get_my_availability, name="api_mentors_my_availability"),
     path("me/availability/<uuid:availability_id>/", delete_my_availability, name="api_mentors_delete_availability"),

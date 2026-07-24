@@ -659,3 +659,96 @@ def get_mentor_sidebar_badges(request):
         "settings": 0 if mentor_profile.is_profile_complete() else 1,
     }
     return JsonResponse(data, status=200)
+
+
+MAX_BULK_AVAILABILITY_SLOTS = 800
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.MENTOR)
+def add_availability_bulk(request):
+    """Bikin banyak slot availability sekaligus (rentang tanggal x list jam)
+    dalam SATU request. Sebelumnya FE nembak 1 POST per (tanggal x jam) --
+    kalau mentor ngebatch setahun penuh (mis. 2026->2027), itu ratusan/ribuan
+    request paralel yang bikin sebagian kena rate-limit & gagal, jadi kalender
+    keliatan bolong. Di sini semuanya dibuat server-side, idempoten (skip yang
+    udah ada), dan dibatasi biar gak kebablasan."""
+    from datetime import datetime, timedelta
+
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        mentor_profile = request.user.mentor_profile
+    except MentorProfile.DoesNotExist:
+        return JsonResponse({"detail": "Mentor profile tidak ditemukan."}, status=404)
+
+    data = get_request_data(request)
+    if data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    start_date_str = data.get("start_date")
+    end_date_str = data.get("end_date")
+    times = data.get("times") or []
+
+    if not start_date_str or not end_date_str or not isinstance(times, list) or not times:
+        return JsonResponse(
+            {"detail": "start_date, end_date, dan times (list jam) diperlukan."},
+            status=400,
+        )
+
+    try:
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return JsonResponse({"detail": "Format tanggal harus YYYY-MM-DD."}, status=400)
+
+    if end_date < start_date:
+        return JsonResponse({"detail": "end_date tidak boleh sebelum start_date."}, status=400)
+
+    num_days = (end_date - start_date).days + 1
+    if num_days * len(times) > MAX_BULK_AVAILABILITY_SLOTS:
+        return JsonResponse(
+            {"detail": f"Terlalu banyak slot sekaligus (maks {MAX_BULK_AVAILABILITY_SLOTS}). Persempit rentang tanggal atau jamnya."},
+            status=400,
+        )
+
+    # Ambil dulu slot yang udah ada di rentang ini biar gak query berkali-kali.
+    range_start_dt = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+    range_end_dt = timezone.make_aware(datetime.combine(end_date + timedelta(days=1), datetime.min.time()))
+    existing = set(
+        MentorAvailability.objects.filter(
+            mentor_profile=mentor_profile,
+            start_time__gte=range_start_dt,
+            start_time__lt=range_end_dt,
+        ).values_list("start_time", flat=True)
+    )
+
+    to_create = []
+    day = start_date
+    while day <= end_date:
+        for t in times:
+            try:
+                hh, mm = str(t).split(":")
+                slot_time = datetime.min.time().replace(hour=int(hh), minute=int(mm))
+            except (ValueError, TypeError):
+                continue
+            start_dt = timezone.make_aware(datetime.combine(day, slot_time))
+            if start_dt in existing:
+                continue
+            end_dt = start_dt + timedelta(hours=1)
+            to_create.append(
+                MentorAvailability(
+                    mentor_profile=mentor_profile,
+                    start_time=start_dt,
+                    end_time=end_dt,
+                )
+            )
+            existing.add(start_dt)
+        day += timedelta(days=1)
+
+    if to_create:
+        MentorAvailability.objects.bulk_create(to_create, ignore_conflicts=True)
+
+    return JsonResponse({"detail": "Slot berhasil ditambahkan.", "created": len(to_create)}, status=201)

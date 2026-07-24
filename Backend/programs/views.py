@@ -271,6 +271,7 @@ def get_bootcamp_batches(request):
             "sesi": len(sessions),
             "unassigned": unassigned,
             "pending": pending_link,
+            "is_active": batch.is_active,
         })
 
     return JsonResponse({"batches": data}, status=200)
