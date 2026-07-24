@@ -764,6 +764,8 @@ def get_current_user(request):
 
     if user.role == UserRole.MENTOR:
         data["is_profile_complete"] = _is_mentor_profile_complete(user)
+    elif user.role == UserRole.STUDENT:
+        data["is_profile_complete"] = user.is_profile_complete()
 
     return JsonResponse(
         {
@@ -1035,6 +1037,53 @@ def get_admin_sidebar_badges(request):
 		"payouts": MentorPayout.objects.filter(status=PayoutStatus.PENDING).count(),
 		"messages": ContactMessage.objects.filter(status=ContactMessageStatus.NEW).count(),
 		"reviews": Review.objects.filter(is_seen_by_admin=False).count(),
+	}
+
+	return JsonResponse(data, status=200)
+
+
+@jwt_required
+@role_required(UserRole.STUDENT)
+def get_student_sidebar_badges(request):
+	"""Angka notifikasi buat sidebar dashboard student -- My Products (produk
+	yang udah selesai tapi belum dikasih rating), Transaksi (pembayaran yang
+	ditolak admin), dan Pengaturan Akun (profil belum lengkap)."""
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	from products.models import UserLibrary, Review, ProductType
+	from transactions.models import Transaction, PaymentStatus
+
+	user_libraries = list(
+		UserLibrary.objects.filter(user=request.user, is_revoked=False)
+		.exclude(product__type=ProductType.MODULE)
+		.select_related("product")
+		.prefetch_related("bootcamp_sessions", "mentoring_sessions")
+	)
+
+	reviewed_product_ids = set(
+		Review.objects.filter(
+			user=request.user, product_id__in=[lib.product_id for lib in user_libraries]
+		).values_list("product_id", flat=True)
+	)
+
+	needs_rating = 0
+	for library in user_libraries:
+		sessions = list(
+			library.bootcamp_sessions.all()
+			if library.product.type == ProductType.BOOTCAMP
+			else library.mentoring_sessions.all()
+		)
+		is_completed = len(sessions) > 0 and all(s.status == "completed" for s in sessions)
+		if is_completed and library.product_id not in reviewed_product_ids:
+			needs_rating += 1
+
+	data = {
+		"my_products": needs_rating,
+		"transactions": Transaction.objects.filter(
+			user=request.user, payment_status=PaymentStatus.FAILED
+		).count(),
+		"settings": 0 if request.user.is_profile_complete() else 1,
 	}
 
 	return JsonResponse(data, status=200)

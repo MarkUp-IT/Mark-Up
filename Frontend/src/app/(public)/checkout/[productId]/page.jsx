@@ -19,6 +19,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import Navbar from "@/component/Navbar";
+import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
 
@@ -173,15 +174,11 @@ export default function CheckoutDetailPage() {
 
   const [formError, setFormError] = useState("");
 
-  const [profileCheck, setProfileCheck] = useState({
-    loading: false,
-    missingFields: null,
-    loggedOut: false,
-  });
-  const profileIncomplete =
-    isMentoring &&
-    !profileCheck.loading &&
-    (profileCheck.loggedOut || (profileCheck.missingFields?.length ?? 0) > 0);
+  // Semua tipe produk (bukan cuma mentoring) sekarang wajib profil lengkap
+  // sebelum bisa checkout -- kalau belum, langsung diarahkan ke Pengaturan
+  // begitu halaman ini dibuka (lihat useEffect checkProfileCompleteness di
+  // bawah), jadi nggak perlu banner/nunggu tombol diklik dulu.
+  const [checkingProfile, setCheckingProfile] = useState(true);
 
   const selectedMentor = mentors.find((m) => m.id === selectedMentorId) || null;
   const selectedSlot =
@@ -236,14 +233,6 @@ export default function CheckoutDetailPage() {
     if (isMentoring && (!selectedMentorId || !selectedSlotId)) {
       setFormError(
         "Pilih mentor dan jadwal sesi dulu sebelum lanjut ke pembayaran.",
-      );
-      return;
-    }
-    if (profileIncomplete) {
-      setFormError(
-        profileCheck.loggedOut
-          ? "Kamu harus login dulu sebelum booking sesi mentoring."
-          : "Lengkapi dulu data profil kamu di Pengaturan sebelum booking sesi mentoring.",
       );
       return;
     }
@@ -312,16 +301,20 @@ export default function CheckoutDetailPage() {
   }, [isMentoring, params.productId]);
 
   useEffect(() => {
-    if (!isMentoring) return;
+    let cancelled = false;
 
     async function checkProfileCompleteness() {
-      setProfileCheck({ loading: true, missingFields: null, loggedOut: false });
       try {
         const data = await api.get("/api/accounts/me/profile/");
+        if (cancelled) return;
+
         if (!data) {
-          setProfileCheck({ loading: false, missingFields: null, loggedOut: true });
+          // Belum login -- biarin lanjut, nanti keblokir wajar pas submit
+          // checkout beneran (butuh token).
+          setCheckingProfile(false);
           return;
         }
+
         const REQUIRED_FIELDS = {
           phone: "Nomor WhatsApp",
           institution: "Institusi",
@@ -331,17 +324,32 @@ export default function CheckoutDetailPage() {
         const missingFields = Object.entries(REQUIRED_FIELDS)
           .filter(([field]) => !data.user?.[field]?.trim())
           .map(([, label]) => label);
-        setProfileCheck({ loading: false, missingFields, loggedOut: false });
+        if (!data.user?.profile_image) {
+          missingFields.push("Foto Profil");
+        }
+
+        if (missingFields.length > 0) {
+          toast.error("Lengkapi profil kamu dulu", {
+            description: `Sebelum membeli produk, lengkapi dulu: ${missingFields.join(", ")}.`,
+          });
+          router.replace("/user/settings");
+          return;
+        }
+
+        setCheckingProfile(false);
       } catch {
-        setProfileCheck({ loading: false, missingFields: null, loggedOut: true });
+        if (!cancelled) setCheckingProfile(false);
       }
     }
 
     checkProfileCompleteness();
-  }, [isMentoring]);
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
 
-  if (isLoadingProduct) {
+  if (isLoadingProduct || checkingProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center text-white">
         Loading...
@@ -436,26 +444,6 @@ export default function CheckoutDetailPage() {
 
           {isMentoring && (
             <>
-              {profileIncomplete && (
-                <motion.div
-                  {...fadeIn}
-                  className="rounded-[12px] border border-amber-500/30 bg-amber-500/10 p-4 flex flex-col gap-2"
-                >
-                  <p className="flex items-start gap-2 text-amber-300 text-[13px] font-semibold">
-                    <AlertCircle size={15} className="shrink-0 mt-0.5" />
-                    {profileCheck.loggedOut
-                      ? "Kamu harus login dulu untuk booking sesi mentoring."
-                      : `Lengkapi dulu data profil kamu di Pengaturan sebelum booking sesi mentoring: ${profileCheck.missingFields.join(", ")}.`}
-                  </p>
-                  <Link
-                    href={profileCheck.loggedOut ? "/login" : "/user/settings"}
-                    className={`inline-flex items-center gap-1.5 text-[13px] font-semibold text-amber-300 underline underline-offset-2 w-fit rounded-lg ${focusRing}`}
-                  >
-                    {profileCheck.loggedOut ? "Ke halaman login" : "Lengkapi di Pengaturan"}
-                  </Link>
-                </motion.div>
-              )}
-
               {/* Widget pilih mentor -- search + list scroll internal sendiri */}
               <motion.div
                 {...fadeIn}
@@ -832,7 +820,6 @@ export default function CheckoutDetailPage() {
 
             <button
               onClick={handleProceed}
-              disabled={profileIncomplete}
               className={`w-full bg-[#148F89] text-white text-[14px] font-bold py-3.5 rounded-[8px] hover:bg-[#117A75] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#148F89] ${focusRing}`}
             >
               Lanjut ke Pembayaran

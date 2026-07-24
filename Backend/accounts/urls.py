@@ -26,6 +26,7 @@ from .views import (
     get_contact_message_detail,
     get_audit_logs,
     get_admin_sidebar_badges,
+    get_student_sidebar_badges,
 )
 
 urlpatterns = [
@@ -54,4 +55,5 @@ urlpatterns = [
     path("contact/", submit_contact_message, name="api_contact_submit"),
     path("audit-logs/", get_audit_logs, name="api_audit_logs_list"),
     path("admin/sidebar-badges/", get_admin_sidebar_badges, name="api_admin_sidebar_badges"),
+    path("me/sidebar-badges/", get_student_sidebar_badges, name="api_student_sidebar_badges"),
 ]

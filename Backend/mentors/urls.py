@@ -15,6 +15,7 @@ from .views import (
     get_my_reviews,
     create_expertise,
     delete_expertise,
+    get_mentor_sidebar_badges,
 )
 
 urlpatterns = [
@@ -32,4 +33,5 @@ urlpatterns = [
     path("me/experiences/<uuid:experience_id>/", my_experience_detail_view, name="api_mentors_my_experience_detail"),
     path("me/sessions/", get_my_sessions, name="api_mentors_my_sessions"),
     path("me/reviews/", get_my_reviews, name="api_mentors_my_reviews"),
+    path("me/sidebar-badges/", get_mentor_sidebar_badges, name="api_mentors_sidebar_badges"),
 ]

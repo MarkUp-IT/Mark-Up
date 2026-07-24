@@ -624,29 +624,14 @@ def checkout_product(request):
     if detail is None or not detail.is_active:
         return JsonResponse({"detail": "Produk tidak tersedia."}, status=400)
 
-    if product.type == ProductType.MENTORING:
-        required_profile_fields = {
-            "phone": "Nomor WhatsApp",
-            "institution": "Institusi",
-            "current_status": "Status Saat Ini",
-            "linkedin_url": "LinkedIn",
-        }
-        missing_fields = [
-            label
-            for field, label in required_profile_fields.items()
-            if not (getattr(request.user, field) or "").strip()
-        ]
-        if missing_fields:
-            return JsonResponse(
-                {
-                    "detail": (
-                        "Lengkapi dulu data profil kamu di Pengaturan sebelum "
-                        "membeli produk mentoring: " + ", ".join(missing_fields) + "."
-                    ),
-                    "missing_fields": missing_fields,
-                },
-                status=400,
-            )
+    # Berlaku buat semua tipe produk (bukan cuma mentoring) -- frontend udah
+    # nge-redirect ke Pengaturan duluan kalau belum lengkap, ini cuma jaring
+    # pengaman terakhir di sisi server.
+    if not request.user.is_profile_complete():
+        return JsonResponse(
+            {"detail": "Lengkapi dulu profil kamu di Pengaturan sebelum membeli produk."},
+            status=400,
+        )
 
     if product.type == ProductType.MENTORING and not mentor_availability_id:
         return JsonResponse(

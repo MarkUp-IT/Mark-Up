@@ -611,3 +611,39 @@ def delete_expertise(request, expertise_id):
 
     expertise.delete()
     return JsonResponse({"detail": "Keahlian berhasil dihapus."}, status=200)
+
+
+@jwt_required
+@role_required(UserRole.MENTOR)
+def get_mentor_sidebar_badges(request):
+    """Angka notifikasi buat sidebar dashboard mentor -- Active Classes
+    (sesi sendiri yang belum dijadwalkan/link belum dibagikan) & Settings
+    (profil belum lengkap, lihat MentorProfile.is_profile_complete)."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    from django.db.models import Q
+    from products.models import MentoringSession, BootcampSession
+
+    mentor_profile, error = _get_mentor_profile_or_404(request)
+    if error:
+        return error
+
+    active_classes_pending = (
+        MentoringSession.objects.filter(
+            mentor=mentor_profile, user_library__is_revoked=False
+        )
+        .filter(Q(status="waiting_schedule") | Q(status="scheduled", zoom_link=""))
+        .count()
+        + BootcampSession.objects.filter(
+            mentors=mentor_profile, user_library__is_revoked=False
+        )
+        .filter(Q(status="waiting_schedule") | Q(status="scheduled", meeting_link=""))
+        .count()
+    )
+
+    data = {
+        "active_classes": active_classes_pending,
+        "settings": 0 if mentor_profile.is_profile_complete() else 1,
+    }
+    return JsonResponse(data, status=200)

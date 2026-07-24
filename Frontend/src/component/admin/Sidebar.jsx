@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { api, clearTokens, getRefreshToken } from "@/lib/api";
+import NotifBadge from "@/component/NotifBadge";
 import {
   LayoutDashboard,
   Package,
@@ -55,15 +56,6 @@ const otherMenuList = [
   { name: "Pesan Masuk", url: "/admin/messages", icon: Inbox, badgeKey: "messages" },
   { name: "Audit Trail", url: "/admin/audit-trail", icon: History },
 ];
-
-function NotifBadge({ count }) {
-  if (!count) return null;
-  return (
-    <span className="min-w-[19px] h-[19px] px-1 rounded-full bg-[#EF4444] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-      {count > 99 ? "99+" : count}
-    </span>
-  );
-}
 
 function NavItem({ item, isActive, badge }) {
   const Icon = item.icon;
