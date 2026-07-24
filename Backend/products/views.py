@@ -43,6 +43,19 @@ def _get_detail_attr(product_type):
     return DETAIL_FORM_MAP.get(product_type, (None, None))[1]
 
 
+def _get_product_image_url(detail):
+    """URL gambar produk. Prioritas file yang di-upload (detail.image) --
+    URL-nya di-generate fresh di sini (storage pakai presigned URL), fallback
+    ke image_url (link eksternal legacy) kalau belum ada file."""
+    img = getattr(detail, "image", None)
+    if img:
+        try:
+            return img.url
+        except Exception:
+            pass
+    return detail.image_url
+
+
 def _format_product_response(product, detail):
     response = {
         "id": str(product.id),
@@ -52,7 +65,7 @@ def _format_product_response(product, detail):
         "original_price": str(detail.original_price) if detail.original_price else None,
         "discount_percent": detail.discount_percent,
         "sold_count": detail.sold_count,
-        "image_url": detail.image_url,
+        "image_url": _get_product_image_url(detail),
         "registration_link": detail.registration_link,
         "is_active": detail.is_active,
     }
@@ -148,7 +161,7 @@ def _serialize_product_item(p):
             "title": detail.title,
             "description": detail.description,
             "explanation": detail.explanation,
-            "image_url": detail.image_url,
+            "image_url": _get_product_image_url(detail),
             "original_price": str(detail.original_price) if detail.original_price is not None else None,
             "new_price": str(detail.new_price) if detail.new_price is not None else None,
             "discount_percent": detail.discount_percent,
@@ -158,6 +171,9 @@ def _serialize_product_item(p):
         })
         if hasattr(detail, "file_pdf_url"):
             item["file_pdf_url"] = detail.file_pdf_url
+        # stock ada di Module DAN Bootcamp -- dulu cuma di-serialize buat yang
+        # punya file_pdf_url (Module doang), jadi stok Bootcamp ilang pas edit.
+        if hasattr(detail, "stock"):
             item["stock"] = detail.stock
         if p.type == ProductType.MENTORING:
             item["session_count"] = detail.session_count
@@ -594,6 +610,11 @@ def add_product(request):
     product = Product.objects.create(type=product_type)
     detail = detail_form.save(commit=False)
     detail.product = product
+    # image_key = path file yang udah di-upload duluan lewat upload-image/.
+    # Di-assign ke ImageField (Django nyimpen string path-nya sebagai .name).
+    image_key = request_data.get("image_key")
+    if image_key:
+        detail.image = image_key
     detail.save()
     detail_form.save_m2m()
 
@@ -884,7 +905,12 @@ def update_product(request, product_id):
 		return JsonResponse({"errors": errors}, status=400)
 
 	old_data = _format_product_response(product, detail)
-	detail = detail_form.save()
+	detail = detail_form.save(commit=False)
+	image_key = request_data.get("image_key")
+	if image_key:
+		detail.image = image_key
+	detail.save()
+	detail_form.save_m2m()
 
 	log_audit(
 		request, AuditAction.UPDATE, "products", object_id=product.id,
@@ -1329,3 +1355,40 @@ def toggle_review_visibility(request, review_id):
     )
 
     return JsonResponse({"detail": "Status ulasan berhasil diperbarui.", "is_hidden": review.is_hidden}, status=200)
+
+
+ALLOWED_PRODUCT_IMAGE_EXT = {"jpg", "jpeg", "png", "webp"}
+MAX_PRODUCT_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def upload_product_image(request):
+    """Upload gambar produk ke storage, balikin key + URL. Key-nya dipakai FE
+    buat dikirim balik di payload add/update produk (field image_key) -- baru
+    di sana di-assign ke produknya. Kepisah gini karena pas bikin produk baru,
+    produknya belum ada waktu gambar di-upload."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    from django.core.files.storage import default_storage
+
+    image = request.FILES.get("image")
+    if not image:
+        return JsonResponse({"detail": "File gambar diperlukan."}, status=400)
+
+    ext = image.name.rsplit(".", 1)[-1].lower() if "." in image.name else ""
+    if ext not in ALLOWED_PRODUCT_IMAGE_EXT:
+        return JsonResponse({"detail": "Format harus JPG, PNG, atau WEBP."}, status=400)
+
+    if image.size > MAX_PRODUCT_IMAGE_SIZE:
+        return JsonResponse({"detail": "Ukuran file maksimal 5MB."}, status=400)
+
+    now = timezone.now()
+    key = f"product_images/{now.year}/{now.month:02d}/{image.name}"
+    saved_key = default_storage.save(key, image)
+
+    return JsonResponse(
+        {"key": saved_key, "url": default_storage.url(saved_key)}, status=201
+    )

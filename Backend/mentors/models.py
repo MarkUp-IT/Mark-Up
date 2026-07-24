@@ -135,6 +135,14 @@ class MentorAvailability(models.Model):
 
     is_booked = models.BooleanField(default=False)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["mentor_profile", "start_time"],
+                name="unique_mentor_availability_slot",
+            )
+        ]
+
 
 class MentorExpertise(models.Model):
     id = models.UUIDField(

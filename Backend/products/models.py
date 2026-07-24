@@ -44,7 +44,12 @@ class BaseProductDetail(BaseModel):
         default=""
     )
     published_at = models.DateTimeField(blank=True, null=True)
+    # image_url = URL eksternal (legacy / kalau admin mau paste link).
+    # image = file yang di-upload admin ke storage; URL-nya di-generate fresh
+    # tiap request di serializer (storage pakai presigned URL yang expired,
+    # jadi gak boleh disimpen mentah kayak image_url).
     image_url = models.URLField(blank=True, null=True)
+    image = models.ImageField(upload_to="product_images/%Y/%m/", blank=True, null=True)
     original_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     discount_percent = models.PositiveIntegerField(null=True, blank=True)
     sold_count = models.PositiveIntegerField(default=0)

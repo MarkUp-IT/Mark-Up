@@ -138,7 +138,19 @@ def add_availability(request):
 
     availability = form.save(commit=False)
     availability.mentor_profile = mentor_profile
-    availability.save()
+
+    # Idempoten: kalau mentor udah punya slot di jam mulai yang sama persis,
+    # jangan bikin baris baru -- balikin yang udah ada. Ini yang bikin slot
+    # kedouble/ketriple kemarin (de-dup di FE gak reliable karena beda zona
+    # waktu browser), sekarang dijamin unik di sisi server.
+    existing = MentorAvailability.objects.filter(
+        mentor_profile=mentor_profile,
+        start_time=availability.start_time,
+    ).first()
+    if existing:
+        availability = existing
+    else:
+        availability.save()
 
     return JsonResponse(
         {
