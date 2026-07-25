@@ -62,7 +62,13 @@ export default function Certificates() {
       fetchCertificates(),
       apiRequest("/api/products/?all=true", { auth: false }),
     ])
-      .then(([, productsRes]) => setProducts(productsRes?.products || []))
+      .then(([, productsRes]) =>
+        // Sertifikat cuma buat bootcamp -- dropdown produknya difilter ke
+        // bootcamp aja biar admin gak bisa milih mentoring/modul.
+        setProducts(
+          (productsRes?.products || []).filter((p) => p.type === "BOOTCAMP"),
+        ),
+      )
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [fetchCertificates]);
@@ -109,8 +115,8 @@ export default function Certificates() {
 
   const handleSubmit = async () => {
     setErrors({});
-    if (!selectedRecipient || !number.trim() || !file) {
-      setErrors({ detail: "Penerima, nomor sertifikat, dan file wajib diisi." });
+    if (!selectedRecipient || !number.trim() || !file || !productId) {
+      setErrors({ detail: "Penerima, produk bootcamp, nomor sertifikat, dan file wajib diisi." });
       return;
     }
     setSaving(true);
@@ -161,7 +167,7 @@ export default function Certificates() {
         <div>
           <h1 className="font-bold text-[22px] text-[#0F172A]">Manajemen Sertifikat</h1>
           <p className="text-[#64748B] text-[14px] mt-1">
-            Terbitkan sertifikat peserta bootcamp/mentoring atau sertifikat pemateri buat mentor.
+            Terbitkan sertifikat peserta atau pemateri untuk program bootcamp.
           </p>
         </div>
         <button
@@ -314,20 +320,27 @@ export default function Certificates() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Produk Terkait (opsional)</p>
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Produk Bootcamp</p>
             <div className="relative w-full">
               <select
                 value={productId}
-                onChange={(e) => setProductId(e.target.value)}
+                onChange={(e) => {
+                  setProductId(e.target.value);
+                  setErrors((prev) => (prev.product_id ? { ...prev, product_id: undefined } : prev));
+                }}
                 className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
               >
-                <option value="">-- Pilih Produk --</option>
+                <option value="">-- Pilih Bootcamp --</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>{p.title}</option>
                 ))}
               </select>
               <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none" />
             </div>
+            {products.length === 0 && (
+              <p className="text-[#64748B] text-[11px]">Belum ada produk bootcamp. Buat dulu di menu Produk.</p>
+            )}
+            {errors.product_id && <p className="text-[#DC2626] text-[11px]">{errors.product_id[0]}</p>}
           </div>
 
           <div className="flex flex-col gap-2">

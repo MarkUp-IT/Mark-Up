@@ -1060,6 +1060,9 @@ def issue_certificate(request):
         errors["type"] = ["Tipe sertifikat tidak valid."]
     if not recipient_id:
         errors["recipient_id"] = ["Penerima wajib dipilih."]
+    # Sertifikat cuma buat produk bootcamp -- produknya wajib dipilih.
+    if not product_id:
+        errors["product_id"] = ["Produk bootcamp wajib dipilih."]
     if not file:
         errors["file"] = ["File PDF wajib diunggah."]
     else:
@@ -1082,6 +1085,11 @@ def issue_certificate(request):
             product = Product.objects.get(id=product_id)
         except Product.DoesNotExist:
             return JsonResponse({"errors": {"product_id": ["Produk tidak ditemukan."]}}, status=404)
+        if product.type != ProductType.BOOTCAMP:
+            return JsonResponse(
+                {"errors": {"product_id": ["Sertifikat hanya bisa diterbitkan untuk produk bootcamp."]}},
+                status=400,
+            )
 
     cert = Certificate.objects.create(
         number=number, type=cert_type, recipient=recipient, product=product, file=file,
