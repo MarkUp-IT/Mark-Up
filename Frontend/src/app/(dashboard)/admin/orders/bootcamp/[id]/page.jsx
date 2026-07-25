@@ -348,12 +348,18 @@ export default function BootcampOrderDetail() {
                         />
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <p className="text-[#1E293B] font-bold text-[12px]">
-                          {new Date(item.start_time).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                        </p>
-                        <p className="text-[#94A3B8] text-[11px]">
-                          {new Date(item.start_time).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })} WIB
-                        </p>
+                        {item.start_time ? (
+                          <>
+                            <p className="text-[#1E293B] font-bold text-[12px]">
+                              {new Date(item.start_time).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                            </p>
+                            <p className="text-[#94A3B8] text-[11px]">
+                              {new Date(item.start_time).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })} WIB
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-[#94A3B8] text-[11.5px] italic">Belum di-set</p>
+                        )}
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex items-center justify-center">

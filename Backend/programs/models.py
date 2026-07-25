@@ -76,15 +76,21 @@ class BootcampSession(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     meeting_link = models.URLField(blank=True, null=True)
-    start_time = models.DateTimeField()
-    end_time = models.DateTimeField()
+    # Nullable -- slot sesi kosong yang di-generate otomatis dari
+    # BootcampProduct.session_count belum punya tanggal sampai admin
+    # ngisinya sendiri di Kelola Pesanan Bootcamp.
+    start_time = models.DateTimeField(blank=True, null=True)
+    end_time = models.DateTimeField(blank=True, null=True)
+    # Urutan tampil (Sesi 1, 2, 3, ...) -- gak bisa ngandelin start_time
+    # doang buat sorting karena slot kosong belum punya tanggal.
+    order = models.PositiveIntegerField(default=1)
 
     class Meta:
         db_table = "bootcamp_sessions"
         verbose_name = "Bootcamp Session"
         verbose_name_plural = "Bootcamp Sessions"
         indexes = [models.Index(fields=["start_time"])]
-        ordering = ["start_time"]
+        ordering = ["order", "start_time"]
 
     def __str__(self) -> str:
         return self.title

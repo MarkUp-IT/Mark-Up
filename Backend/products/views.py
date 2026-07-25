@@ -76,7 +76,30 @@ def _format_product_response(product, detail):
     if getattr(detail, "stock", None) is not None:
         response["stock"] = detail.stock
 
+    if getattr(detail, "session_count", None) is not None:
+        response["session_count"] = detail.session_count
+
     return response
+
+
+def _sync_bootcamp_session_slots(detail):
+    """Generate slot sesi kosong (programs.BootcampSession) sejumlah
+    session_count produk bootcamp ini, tinggal diisi tanggal/mentor/link-nya
+    admin di Kelola Pesanan Bootcamp. Non-destruktif -- kalau session_count
+    diturunin belakangan, slot yang udah ada (bisa aja udah keisi mentor/
+    link/tanggal) dibiarin apa adanya, cuma nambahin kalau naik."""
+    from programs.models import BootcampSession as BootcampSessionTemplate
+
+    existing_count = BootcampSessionTemplate.objects.filter(bootcamp=detail).count()
+    target_count = detail.session_count or 1
+    if target_count <= existing_count:
+        return
+
+    new_slots = [
+        BootcampSessionTemplate(bootcamp=detail, title=f"Sesi {i}", order=i)
+        for i in range(existing_count + 1, target_count + 1)
+    ]
+    BootcampSessionTemplate.objects.bulk_create(new_slots)
 
 
 def _get_product_detail(product):
@@ -183,6 +206,8 @@ def _serialize_product_item(p):
             item["highlights"] = list(
                 detail.highlights.order_by("order").values_list("text", flat=True)
             )
+        if p.type == ProductType.BOOTCAMP:
+            item["session_count"] = detail.session_count
 
     return item
 
@@ -618,6 +643,9 @@ def add_product(request):
     detail.save()
     detail_form.save_m2m()
 
+    if product_type == ProductType.BOOTCAMP:
+        _sync_bootcamp_session_slots(detail)
+
     log_audit(
         request, AuditAction.CREATE, "products", object_id=product.id,
         new_data=_format_product_response(product, detail),
@@ -911,6 +939,9 @@ def update_product(request, product_id):
 		detail.image = image_key
 	detail.save()
 	detail_form.save_m2m()
+
+	if product_type == ProductType.BOOTCAMP:
+		_sync_bootcamp_session_slots(detail)
 
 	log_audit(
 		request, AuditAction.UPDATE, "products", object_id=product.id,

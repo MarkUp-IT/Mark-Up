@@ -258,8 +258,8 @@ def _serialize_bootcamp_session_template(session):
         "id": str(session.id),
         "title": session.title,
         "description": session.description or "",
-        "start_time": session.start_time.isoformat(),
-        "end_time": session.end_time.isoformat(),
+        "start_time": session.start_time.isoformat() if session.start_time else None,
+        "end_time": session.end_time.isoformat() if session.end_time else None,
         "meeting_link": session.meeting_link or "",
         "mentor_ids": [str(a.mentor_profile_id) for a in assignments],
         "mentor_names": [a.mentor_profile.user.fullname for a in assignments],
@@ -312,7 +312,7 @@ def get_bootcamp_batch_detail(request, product_id):
 
     sessions = batch.sessions.prefetch_related(
         "session_mentors__mentor_profile__user"
-    ).order_by("start_time")
+    ).order_by("order", "start_time")
 
     return JsonResponse(
         {
@@ -344,6 +344,9 @@ def add_bootcamp_session_template(request, product_id):
             status=400,
         )
 
+    next_order = (
+        BootcampSession.objects.filter(bootcamp_id=product_id).count() + 1
+    )
     session = BootcampSession.objects.create(
         bootcamp_id=product_id,
         title=title,
@@ -351,6 +354,7 @@ def add_bootcamp_session_template(request, product_id):
         start_time=start_time,
         end_time=end_time,
         meeting_link=request_data.get("meeting_link", ""),
+        order=next_order,
     )
 
     log_audit(request, AuditAction.CREATE, "bootcamp_sessions", object_id=session.id)

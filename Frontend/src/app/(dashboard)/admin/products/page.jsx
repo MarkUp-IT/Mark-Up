@@ -381,6 +381,33 @@ export default function Products() {
         </div>
       );
     }
+    if (category === "Bootcamp") {
+      return (
+        <div className="flex flex-col gap-2 w-full">
+          <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+            Jumlah Sesi
+          </p>
+          <input
+            type="number"
+            min="1"
+            value={data.session_count}
+            onChange={(e) =>
+              setData((prev) => ({
+                ...prev,
+                session_count: e.target.value,
+              }))
+            }
+            className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+          />
+          <p className="text-[#94A3B8] text-[11px]">
+            Otomatis nyiapin slot sesi kosong sejumlah ini di Kelola Pesanan
+            Bootcamp -- tinggal diisi tanggal, mentor, dan link-nya. Kalau
+            angkanya dinaikin belakangan pas edit, slot baru ditambahin;
+            kalau diturunin, slot yang udah ada gak ikut kehapus.
+          </p>
+        </div>
+      );
+    }
     if (category === "Modul") {
       return (
         <div className="flex flex-col gap-2">

@@ -144,6 +144,12 @@ class BootcampProduct(BaseProductDetail):
         related_name="bootcamp_detail",
     )
     stock = models.PositiveIntegerField(default=0)
+    session_count = models.PositiveIntegerField(
+        default=1,
+        help_text="Jumlah sesi kelas dalam batch ini. Pas produk dibuat/di-update "
+                   "naik, otomatis nge-generate slot sesi kosong (programs.BootcampSession) "
+                   "sejumlah ini, tinggal diisi tanggal/mentor/link-nya di Kelola Pesanan.",
+    )
 
     class Meta:
         verbose_name = "Bootcamp Product"
