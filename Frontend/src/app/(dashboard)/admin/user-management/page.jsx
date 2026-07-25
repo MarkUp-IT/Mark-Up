@@ -35,6 +35,7 @@ export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [formRole, setFormRole] = useState("STUDENT");
   const [formStatus, setFormStatus] = useState("ACTIVE");
+  const [formFeeOverride, setFormFeeOverride] = useState("");
   const [saving, setSaving] = useState(false);
 
   const fetchUsers = useCallback(async () => {
@@ -68,15 +69,22 @@ export default function UserManagement() {
     setSelectedUser(item);
     setFormRole(item.role);
     setFormStatus(item.status);
+    const override = item.mentoring_fee_percent_override;
+    setFormFeeOverride(override === null || override === undefined ? "" : String(override));
     setIsEditOpen(true);
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const body = { role: formRole, status: formStatus };
+      if (formRole === "MENTOR") {
+        body.mentoring_fee_percent_override =
+          formFeeOverride === "" ? null : Number(formFeeOverride);
+      }
       await apiRequest(`/api/accounts/users/${selectedUser.id}/update/`, {
         method: "PATCH",
-        body: { role: formRole, status: formStatus },
+        body,
       });
       setIsEditOpen(false);
       fetchUsers();
@@ -268,6 +276,31 @@ export default function UserManagement() {
               belakangan lewat halaman Mentor).
             </p>
           </div>
+
+          {formRole === "MENTOR" && (
+            <div className="flex flex-col gap-2">
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Komisi Mentoring Khusus
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="Default"
+                  value={formFeeOverride}
+                  onChange={(e) => setFormFeeOverride(e.target.value)}
+                  style={{ width: "100px" }}
+                  className="adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                />
+                <span className="text-[#64748B] text-[13px] font-medium">% buat mentor ini</span>
+              </div>
+              <p className="text-[#94A3B8] text-[11px] leading-relaxed">
+                Kosongkan buat pakai persentase komisi global (diatur di halaman
+                Pencairan Mentor).
+              </p>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Status Akun</p>

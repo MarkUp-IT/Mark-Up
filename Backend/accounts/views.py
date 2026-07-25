@@ -257,7 +257,7 @@ def google_login_view(request):
 
 
 def _serialize_user_row(u, request):
-	return {
+	row = {
 		"id": str(u.id),
 		"fullname": u.fullname,
 		"email": u.email,
@@ -268,6 +268,16 @@ def _serialize_user_row(u, request):
 		"created_at": u.created_at.isoformat() if getattr(u, "created_at", None) else None,
 		"last_login": u.last_login.isoformat() if u.last_login else None,
 	}
+
+	if u.role == UserRole.MENTOR:
+		from mentors.models import MentorProfile
+
+		try:
+			row["mentoring_fee_percent_override"] = u.mentor_profile.mentoring_fee_percent_override
+		except MentorProfile.DoesNotExist:
+			row["mentoring_fee_percent_override"] = None
+
+	return row
 
 
 @jwt_required

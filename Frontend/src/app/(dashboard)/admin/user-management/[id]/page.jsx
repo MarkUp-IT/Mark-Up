@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { toast } from "sonner";
 import {
   ArrowLeft,
   Linkedin,
@@ -12,11 +11,9 @@ import {
   Landmark,
   Mail,
   Phone,
-  Percent,
 } from "lucide-react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import { apiRequest } from "@/lib/api";
-import { extractErrorMessage } from "@/lib/formErrors";
 
 const ROLE_LABEL = { ADMIN: "Admin", MENTOR: "Mentor", STUDENT: "User" };
 
@@ -37,43 +34,13 @@ export default function UserDetail() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [feeOverride, setFeeOverride] = useState("");
-  const [savingFee, setSavingFee] = useState(false);
 
   useEffect(() => {
     apiRequest(`/api/accounts/users/${params.id}/`)
-      .then((res) => {
-        const user = res?.user || null;
-        setProfile(user);
-        const override = user?.mentor_profile?.mentoring_fee_percent_override;
-        setFeeOverride(override === null || override === undefined ? "" : String(override));
-      })
+      .then((res) => setProfile(res?.user || null))
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [params.id]);
-
-  const handleSaveFeeOverride = async () => {
-    setSavingFee(true);
-    try {
-      const value = feeOverride === "" ? null : Number(feeOverride);
-      await apiRequest(`/api/accounts/users/${params.id}/update/`, {
-        method: "PATCH",
-        body: { mentoring_fee_percent_override: value },
-      });
-      toast.success("Komisi Disimpan", {
-        description:
-          value === null
-            ? "Mentor ini balik pakai persentase komisi global."
-            : `Komisi mentoring mentor ini di-set jadi ${value}% buat mentor.`,
-      });
-    } catch (err) {
-      toast.error("Gagal Menyimpan Komisi", {
-        description: extractErrorMessage(err, "Terjadi kesalahan."),
-      });
-    } finally {
-      setSavingFee(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -245,48 +212,6 @@ export default function UserDetail() {
             <Link href="/admin/payouts" className="text-[#148F89] font-bold text-[13px] hover:underline">
               Lihat Riwayat Pencairan
             </Link>
-          </div>
-
-          <div className="bg-white border border-[#E2E8F0] rounded-[12px] p-6 flex flex-col gap-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div
-                style={{ width: "40px", height: "40px" }}
-                className="rounded-full bg-[#148F89]/10 flex items-center justify-center shrink-0"
-              >
-                <Percent size={16} className="text-[#148F89]" />
-              </div>
-              <div>
-                <h2 className="text-[15px] font-semibold text-[#0F172A]">
-                  Komisi Mentoring Khusus
-                </h2>
-                <p className="text-[#94A3B8] text-[12.5px]">
-                  Kosongkan buat pakai persentase global (lihat halaman Pencairan).
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  placeholder="Default"
-                  value={feeOverride}
-                  onChange={(e) => setFeeOverride(e.target.value)}
-                  style={{ width: "100px", height: "40px" }}
-                  className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-3 text-[13px] text-[#1E293B] outline-none focus:border-[#148F89] transition-colors"
-                />
-                <span className="text-[#64748B] text-[13px] font-medium">% buat mentor ini</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleSaveFeeOverride}
-                disabled={savingFee}
-                className="px-4 h-10 rounded-[8px] bg-[#148F89] text-white text-[12.5px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {savingFee ? "Menyimpan..." : "Simpan"}
-              </button>
-            </div>
           </div>
         </>
       ) : (

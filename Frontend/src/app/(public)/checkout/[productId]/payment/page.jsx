@@ -52,9 +52,9 @@ const getInitials = (name) =>
     .toUpperCase();
 
 const mockBank = {
-  name: "Bank Central Asia (BCA)",
-  account: "1234567890",
-  holder: "PT Mark Up Edukasi",
+  name: "Mandiri",
+  account: "4616 9948 8411 4788",
+  holder: "Ahmad Reva Dany Fawwaz",
 };
 
 function StepPill({ current }) {
@@ -160,7 +160,7 @@ export default function CheckoutPaymentPage() {
   }, []);
 
   const handleCopyBank = () => {
-    navigator.clipboard.writeText(mockBank.account);
+    navigator.clipboard.writeText(mockBank.account.replace(/\s/g, ""));
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
