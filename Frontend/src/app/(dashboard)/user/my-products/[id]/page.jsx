@@ -18,9 +18,11 @@ import {
   AlertCircle,
   MoreVertical,
 } from "lucide-react";
+import { toast } from "sonner";
 import DashboardLayout from "@/component/user/DashboardLayout";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { extractErrorMessage } from "@/lib/formErrors";
 
 const statusMeta = {
   completed: {
@@ -107,8 +109,11 @@ export default function ProductDetail() {
       fetchDetail();
   }, []);
 
-  async function fetchDetail() {
-    setLoading(true);
+  // showLoading=false dipakai buat refetch di belakang layar (mis. setelah
+  // pilih jadwal) -- kalau true, seluruh halaman ke-replace layar loading dan
+  // modal ikut ke-unmount, bikin tombol submit-nya keliatan "nyangkut".
+  async function fetchDetail(showLoading = true) {
+    if (showLoading) setLoading(true);
 
     try {
         const res = await apiRequest(
@@ -117,7 +122,7 @@ export default function ProductDetail() {
 
         setProduct(mapProductDetail(res));
     } finally {
-        setLoading(false);
+        if (showLoading) setLoading(false);
     }
 }
 
@@ -255,6 +260,7 @@ export default function ProductDetail() {
 
   const handleSubmitSchedule = async (e) => {
     e.preventDefault();
+    if (!selectedSlotId || scheduleSubmitting) return;
 
     setScheduleSubmitting(true);
 
@@ -270,9 +276,15 @@ export default function ProductDetail() {
         }
       );
 
-      await fetchDetail();
-
+      // Tampilin sukses langsung -- refetch detail dilakuin di belakang layar
+      // (gak di-await, gak nyalain loading layar penuh) biar modal gak
+      // ke-unmount & tombolnya gak nyangkut di "Menyimpan...".
       setScheduleSuccess(true);
+      fetchDetail(false).catch(() => {});
+    } catch (err) {
+      toast.error("Gagal Menyimpan Jadwal", {
+        description: extractErrorMessage(err, "Coba lagi sebentar."),
+      });
     } finally {
       setScheduleSubmitting(false);
     }
