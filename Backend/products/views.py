@@ -1149,16 +1149,20 @@ def update_mentoring_order_session(request, session_id):
     if request_data.get("status") == "completed" and session.status != "completed":
         session.status = MentoringSession.SessionStatus.COMPLETED
 
-        from transactions.models import MentorPayout, PayoutSourceType
+        from transactions.models import MentorPayout, PayoutSourceType, CommissionSetting
 
         if session.mentor_id and not hasattr(session, "payout"):
             gross = session.mentoring.new_price or session.mentoring.original_price or 0
             session_count = session.mentoring.session_count or 1
+            # Fee mentoring ngikutin setelan global (default 25% ke MarkUp,
+            # mentor 75%) -- bisa diubah admin di halaman Pencairan Mentor.
+            fee_percent = CommissionSetting.get_solo().mentoring_fee_percent
             MentorPayout.objects.create(
                 mentor_profile=session.mentor,
                 source_type=PayoutSourceType.MENTORING,
                 mentoring_session=session,
                 gross_amount=(gross / session_count),
+                fee_percent=fee_percent,
             )
 
     session.save()

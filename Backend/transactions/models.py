@@ -273,3 +273,27 @@ class MentorPayout(models.Model):
 
     def __str__(self) -> str:
         return f"{self.mentor_profile} - {self.gross_amount}"
+
+
+class CommissionSetting(models.Model):
+    """Setelan komisi global (singleton, pk=1). mentoring_fee_percent =
+    persen yang masuk kas MarkUp dari tiap payout mentoring (default 25,
+    artinya mentor dapat 75%). Bootcamp gak pakai ini -- fee-nya diisi admin
+    manual per payout di halaman Pencairan Mentor."""
+    mentoring_fee_percent = models.PositiveIntegerField(default=25)
+
+    class Meta:
+        verbose_name = "Commission Setting"
+        verbose_name_plural = "Commission Settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self) -> str:
+        return f"Komisi mentoring: {self.mentoring_fee_percent}% ke MarkUp"

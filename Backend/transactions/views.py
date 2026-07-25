@@ -1003,6 +1003,71 @@ def mark_payout_paid(request, payout_id):
     return JsonResponse({"detail": "Pencairan berhasil ditandai lunas.", "payout": _serialize_payout(payout)}, status=200)
 
 
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_payout_fee(request, payout_id):
+    """Admin atur fee_percent (persen ke MarkUp) sebuah payout -- dipakai buat
+    BOOTCAMP yang komisinya diisi manual. Cuma boleh selama payout masih
+    PENDING (belum dicairkan)."""
+    if request.method not in ["PATCH", "PUT"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT"])
+
+    try:
+        payout = MentorPayout.objects.select_related("mentor_profile__user").get(id=payout_id)
+    except MentorPayout.DoesNotExist:
+        return JsonResponse({"detail": "Data pencairan tidak ditemukan."}, status=404)
+
+    if payout.status == PayoutStatus.PAID:
+        return JsonResponse({"detail": "Pencairan sudah lunas, komisi gak bisa diubah."}, status=400)
+
+    data = get_request_data(request)
+    if data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    try:
+        fee = int(data.get("fee_percent"))
+    except (TypeError, ValueError):
+        return JsonResponse({"detail": "fee_percent harus angka."}, status=400)
+
+    if fee < 0 or fee > 100:
+        return JsonResponse({"detail": "fee_percent harus antara 0 dan 100."}, status=400)
+
+    payout.fee_percent = fee
+    payout.save(update_fields=["fee_percent"])
+
+    return JsonResponse({"detail": "Komisi diperbarui.", "payout": _serialize_payout(payout)}, status=200)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def commission_setting(request):
+    """GET/PATCH setelan komisi global mentoring (default 25% ke MarkUp)."""
+    from .models import CommissionSetting
+
+    setting = CommissionSetting.get_solo()
+
+    if request.method == "GET":
+        return JsonResponse({"mentoring_fee_percent": setting.mentoring_fee_percent}, status=200)
+
+    if request.method in ("PATCH", "PUT"):
+        data = get_request_data(request)
+        if data is None:
+            return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+        try:
+            fee = int(data.get("mentoring_fee_percent"))
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "mentoring_fee_percent harus angka."}, status=400)
+        if fee < 0 or fee > 100:
+            return JsonResponse({"detail": "Harus antara 0 dan 100."}, status=400)
+        setting.mentoring_fee_percent = fee
+        setting.save()
+        return JsonResponse({"mentoring_fee_percent": setting.mentoring_fee_percent}, status=200)
+
+    return HttpResponseNotAllowed(["GET", "PATCH", "PUT"])
+
+
 @jwt_required
 @role_required(UserRole.MENTOR)
 def get_my_payouts(request):

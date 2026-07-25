@@ -33,6 +33,13 @@ export default function MentorPayouts() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [marking, setMarking] = useState(false);
 
+  // Komisi mentoring global (default 25% ke MarkUp, mentor 75%).
+  const [mentoringFee, setMentoringFee] = useState("");
+  const [savingFee, setSavingFee] = useState(false);
+  // Edit fee per-payout (khusus bootcamp -- diisi manual).
+  const [editFee, setEditFee] = useState("");
+  const [savingPayoutFee, setSavingPayoutFee] = useState(false);
+
   const fetchPayouts = useCallback(async () => {
     setLoading(true);
     try {
@@ -47,7 +54,48 @@ export default function MentorPayouts() {
 
   useEffect(() => {
     fetchPayouts();
+    apiRequest("/api/transactions/payouts/commission-setting/")
+      .then((res) => setMentoringFee(String(res?.mentoring_fee_percent ?? 25)))
+      .catch(() => {});
   }, [fetchPayouts]);
+
+  const saveMentoringFee = async () => {
+    setSavingFee(true);
+    try {
+      await apiRequest("/api/transactions/payouts/commission-setting/", {
+        method: "PATCH",
+        body: { mentoring_fee_percent: Number(mentoringFee) },
+      });
+      toast.success("Komisi mentoring disimpan", {
+        description: `MarkUp ${mentoringFee}%, mentor ${100 - Number(mentoringFee)}%. Berlaku untuk payout mentoring baru.`,
+      });
+    } catch (err) {
+      toast.error("Gagal menyimpan komisi", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
+    } finally {
+      setSavingFee(false);
+    }
+  };
+
+  const savePayoutFee = async () => {
+    setSavingPayoutFee(true);
+    try {
+      const res = await apiRequest(`/api/transactions/payouts/${selectedPayout.id}/fee/`, {
+        method: "PATCH",
+        body: { fee_percent: Number(editFee) },
+      });
+      setSelectedPayout(res.payout);
+      fetchPayouts();
+      toast.success("Komisi diperbarui");
+    } catch (err) {
+      toast.error("Gagal memperbarui komisi", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
+    } finally {
+      setSavingPayoutFee(false);
+    }
+  };
 
   useEffect(() => {
     document.body.style.overflow = isModalOpen ? "hidden" : "auto";
@@ -61,6 +109,7 @@ export default function MentorPayouts() {
 
   const openDetail = (p) => {
     setSelectedPayout(p);
+    setEditFee(String(p.fee_percent ?? 0));
     setIsModalOpen(true);
   };
 
@@ -102,10 +151,42 @@ export default function MentorPayouts() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         <StatCard label="Menunggu Dicairkan" value={pendingCount} unit="sesi" variant="warning" />
         <StatCard label="Total Perlu Dicairkan" value={formatIDR(pendingTotal)} />
-        <StatCard label="Potongan Platform" value="20%" unit="per sesi" />
+        <StatCard label="Komisi Mentoring" value={mentoringFee ? `${mentoringFee}%` : "-"} unit="ke MarkUp" />
+      </div>
+
+      {/* Setelan komisi mentoring global -- bootcamp diatur manual per payout
+          di modal detail. */}
+      <div className="bg-white border border-[#E2E8F0] rounded-[12px] p-5 flex flex-col sm:flex-row sm:items-center gap-4 shadow-sm">
+        <div className="flex-1">
+          <p className="font-bold text-[14px] text-[#0F172A]">Komisi Mentoring (Global)</p>
+          <p className="text-[#64748B] text-[12px] mt-0.5">
+            Persen yang masuk kas MarkUp dari tiap payout mentoring. Sisanya buat mentor
+            {mentoringFee ? ` (mentor dapat ${100 - Number(mentoringFee)}%)` : ""}. Cuma berlaku ke payout mentoring baru.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="relative">
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={mentoringFee}
+              onChange={(e) => setMentoringFee(e.target.value)}
+              className="w-24 adm-h-42 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] pl-3 pr-7 outline-none focus:border-[#148F89] text-[#1E293B]"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] text-[13px]">%</span>
+          </div>
+          <button
+            onClick={saveMentoringFee}
+            disabled={savingFee || mentoringFee === ""}
+            className="adm-h-42 px-4 rounded-[8px] bg-[#148F89] text-white text-[13px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-50"
+          >
+            {savingFee ? "Menyimpan..." : "Simpan"}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-4">
@@ -222,6 +303,37 @@ export default function MentorPayouts() {
                   </span>
                 </div>
               </div>
+
+              {/* Bootcamp: komisi diisi manual admin (mentoring ngikut setelan
+                  global, gak bisa diedit per payout). Cuma selama PENDING. */}
+              {selectedPayout?.source_type === "bootcamp" && selectedPayout?.status === "pending" && (
+                <div className="flex flex-col gap-2 bg-[#FEF9C3]/40 border border-[#FDE68A] rounded-[8px] p-4">
+                  <span className="text-[#854D0E] font-bold text-[12px]">Atur Komisi Bootcamp</span>
+                  <p className="text-[#92400E] text-[11px]">
+                    Isi persen yang masuk kas MarkUp buat payout ini. Sisanya buat mentor.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={editFee}
+                        onChange={(e) => setEditFee(e.target.value)}
+                        className="w-24 h-[38px] bg-white border border-[#E2E8F0] rounded-[8px] pl-3 pr-7 outline-none focus:border-[#148F89] text-[#1E293B]"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] text-[13px]">%</span>
+                    </div>
+                    <button
+                      onClick={savePayoutFee}
+                      disabled={savingPayoutFee || editFee === ""}
+                      className="h-[38px] px-4 rounded-[8px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-50"
+                    >
+                      {savingPayoutFee ? "..." : "Terapkan"}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">

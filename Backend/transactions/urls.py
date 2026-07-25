@@ -14,6 +14,8 @@ from .views import (
     update_referral_code,
     get_payouts,
     mark_payout_paid,
+    update_payout_fee,
+    commission_setting,
     get_my_payouts,
 )
 
@@ -30,6 +32,8 @@ urlpatterns = [
     path("referral-codes/add/", add_referral_code, name="api_referral_codes_add"),
     path("referral-codes/<uuid:referral_code_id>/", update_referral_code, name="api_referral_codes_update"),
     path("payouts/", get_payouts, name="api_payouts_list"),
+    path("payouts/commission-setting/", commission_setting, name="api_commission_setting"),
     path("payouts/<uuid:payout_id>/mark-paid/", mark_payout_paid, name="api_payouts_mark_paid"),
+    path("payouts/<uuid:payout_id>/fee/", update_payout_fee, name="api_payouts_update_fee"),
     path("<str:transaction_id>/verify/", verify_transaction, name="api_transaction_verify"),
 ]
