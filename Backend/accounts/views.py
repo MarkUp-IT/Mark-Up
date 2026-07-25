@@ -6,7 +6,7 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, get_client_ip, is_rate_limited, notify_team
+from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, AccountDeletionTokenGenerator, get_client_ip, is_rate_limited, notify_team
 from .forms import RegisterForm, UpdateProfileForm
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -464,13 +464,82 @@ def change_password(request):
 	return JsonResponse({"detail": "Password berhasil diubah."}, status=200)
 
 
+_account_deletion_token = AccountDeletionTokenGenerator()
+
+
 @csrf_exempt
 @jwt_required
 def delete_account(request):
+	"""Langkah 1 hapus akun: BUKAN langsung hapus, tapi kirim link konfirmasi
+	ke email user. Akun baru dinonaktifkan setelah user klik link itu
+	(confirm_delete_account). Ini biar gak ada penghapusan gak sengaja /
+	tanpa akses ke email."""
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
 
 	user = request.user
+
+	if is_rate_limited(f"rl:delete-account:user:{user.id}", limit=5, window_seconds=3600):
+		return JsonResponse(
+			{"detail": "Terlalu banyak permintaan. Coba lagi nanti."}, status=429
+		)
+
+	uid = urlsafe_base64_encode(force_bytes(user.pk))
+	token = _account_deletion_token.make_token(user)
+	confirm_link = f"{settings.FRONTEND_BASE_URL}/delete-account?uid={uid}&token={token}"
+
+	send_mail(
+		subject="Konfirmasi Penghapusan Akun MARK-UP",
+		message=(
+			f"Halo {user.fullname},\n\n"
+			f"Kami menerima permintaan untuk menghapus akun MARK-UP kamu.\n\n"
+			f"Kalau ini memang kamu, klik link berikut untuk mengonfirmasi "
+			f"(berlaku 30 menit):\n{confirm_link}\n\n"
+			"Setelah dikonfirmasi, akunmu dinonaktifkan dan gak bisa dipakai "
+			"login lagi. Riwayat transaksi & sertifikat tetap tersimpan.\n\n"
+			"Kalau kamu NGGAK minta ini, abaikan aja email ini -- akunmu tetap aman."
+		),
+		from_email=settings.DEFAULT_FROM_EMAIL,
+		recipient_list=[user.email],
+		fail_silently=True,
+	)
+
+	return JsonResponse(
+		{"detail": "Link konfirmasi penghapusan akun sudah dikirim ke email kamu."},
+		status=200,
+	)
+
+
+@csrf_exempt
+def confirm_delete_account(request):
+	"""Langkah 2: user klik link di email -> uid+token diverifikasi -> akun
+	beneran dinonaktifkan. Gak butuh login (uid+token yang jadi buktinya),
+	sama polanya kayak reset_password."""
+	if request.method != "POST":
+		return HttpResponseNotAllowed(["POST"])
+
+	request_data = get_request_data(request)
+	if request_data is None:
+		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+	uid = request_data.get("uid")
+	token = request_data.get("token")
+	if not uid or not token:
+		return JsonResponse({"detail": "uid dan token diperlukan."}, status=400)
+
+	try:
+		user_id = urlsafe_base64_decode(uid).decode()
+		user = User.objects.get(pk=user_id)
+	except (User.DoesNotExist, ValueError, TypeError, OverflowError):
+		return JsonResponse({"detail": "Link konfirmasi tidak valid."}, status=400)
+
+	if not _account_deletion_token.check_token(user, token):
+		return JsonResponse(
+			{"detail": "Link konfirmasi tidak valid atau sudah kedaluwarsa."}, status=400
+		)
+
+	if user.status == UserStatus.INACTIVE:
+		return JsonResponse({"detail": "Akun ini sudah dinonaktifkan."}, status=200)
 
 	# Soft-delete (set nonaktif) -- BUKAN hard delete, biar histori transaksi/
 	# review/sertifikat yang udah ada nggak ikut hilang/rusak. Login_view udah
@@ -483,7 +552,7 @@ def delete_account(request):
 		old_data={"status": UserStatus.ACTIVE}, new_data={"status": UserStatus.INACTIVE},
 	)
 
-	return JsonResponse({"detail": "Akun berhasil dinonaktifkan."}, status=200)
+	return JsonResponse({"detail": "Akun berhasil dihapus. Sampai jumpa lagi!"}, status=200)
 
 
 _password_reset_token = PasswordResetTokenGenerator()

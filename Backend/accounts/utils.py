@@ -33,6 +33,15 @@ class EmailVerificationTokenGenerator(PasswordResetTokenGenerator):
         return f"{user.pk}{user.is_email_verified}{timestamp}"
 
 
+class AccountDeletionTokenGenerator(PasswordResetTokenGenerator):
+    """Token buat konfirmasi hapus akun lewat email. Ikut nyertain user.status
+    di hash -- jadi begitu akun kehapus (status jadi INACTIVE), token yang sama
+    otomatis gak valid lagi (efeknya sekali pakai)."""
+
+    def _make_hash_value(self, user, timestamp):
+        return f"{user.pk}{user.status}{timestamp}"
+
+
 def get_request_data(request):
     try:
         if request.content_type.startswith("application/json"):

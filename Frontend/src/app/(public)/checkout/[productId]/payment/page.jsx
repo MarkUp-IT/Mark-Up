@@ -22,7 +22,10 @@ import { toast } from "sonner";
 
 const NAVBAR_CLEARANCE = 150;
 const CONTENT_WIDTH = 640;
+// Bootcamp dikasih waktu bayar lebih lama (30 menit) karena masih perlu
+// upload beberapa dokumen syarat; produk lain cukup 5 menit.
 const RESERVATION_SECONDS = 5 * 60;
+const RESERVATION_SECONDS_BOOTCAMP = 30 * 60;
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#148F89] focus-visible:ring-offset-2 focus-visible:ring-offset-[#060010]";
@@ -126,10 +129,15 @@ export default function CheckoutPaymentPage() {
   const isBootcamp = checkoutSummary.productType === "BOOTCAMP";
   const total = checkoutSummary.total;
 
+  const reservationSeconds = isBootcamp
+    ? RESERVATION_SECONDS_BOOTCAMP
+    : RESERVATION_SECONDS;
+  const reservationMinutes = Math.round(reservationSeconds / 60);
+
   const [isCopied, setIsCopied] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [secondsLeft, setSecondsLeft] = useState(RESERVATION_SECONDS);
+  const [secondsLeft, setSecondsLeft] = useState(reservationSeconds);
   const [isExpired, setIsExpired] = useState(false);
 
   // Syarat khusus bootcamp (diupload di step pembayaran ini).
@@ -305,8 +313,8 @@ export default function CheckoutPaymentPage() {
                   </h3>
                   <p className="text-[#9CA3AF] text-[12px] mt-2 leading-relaxed">
                     {isMentoring
-                      ? "5 menit reservasi jadwal mentor sudah lewat dan slotnya dilepas kembali. Silakan checkout ulang."
-                      : "5 menit waktu pembayaran sudah lewat. Silakan checkout ulang."}
+                      ? `${reservationMinutes} menit reservasi jadwal mentor sudah lewat dan slotnya dilepas kembali. Silakan checkout ulang.`
+                      : `${reservationMinutes} menit waktu pembayaran sudah lewat. Silakan checkout ulang.`}
                   </p>
                 </div>
                 <Link

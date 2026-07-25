@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Camera,
@@ -14,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import DashboardLayout from "@/component/user/DashboardLayout";
-import { apiRequest, getAccessToken, clearTokens, API_BASE } from "@/lib/api";
+import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 import { toast } from "sonner";
 
 function Field({ label, value, onChange, disabled, note, type = "text" }) {
@@ -39,7 +38,6 @@ function Field({ label, value, onChange, disabled, note, type = "text" }) {
 
 export default function Settings() {
   const shouldReduceMotion = useReducedMotion();
-  const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [initialInfo, setInitialInfo] = useState({
@@ -208,15 +206,20 @@ const handleDeleteCv = async () => {
 };
 
 const handleDeleteAccount = async () => {
-  if (deleteConfirmText !== "HAPUS" || isDeletingAccount) return;
+  if (isDeletingAccount) return;
   setIsDeletingAccount(true);
   try {
-    await apiRequest("/api/accounts/me/delete/", { method: "POST" });
-    clearTokens();
-    toast.success("Akun berhasil dihapus", { description: "Sampai jumpa lagi." });
-    router.push("/login");
+    // Ini cuma MINTA hapus akun -- backend kirim link konfirmasi ke email.
+    // Akun baru beneran dihapus setelah user klik link di email itu.
+    const res = await apiRequest("/api/accounts/me/delete/", { method: "POST" });
+    setShowDeleteModal(false);
+    toast.success("Cek email kamu", {
+      description:
+        res?.detail ||
+        "Link konfirmasi penghapusan akun sudah dikirim ke email kamu.",
+    });
   } catch (err) {
-    toast.error("Gagal menghapus akun", { description: err?.message || "Terjadi kesalahan." });
+    toast.error("Gagal mengirim konfirmasi", { description: err?.message || "Terjadi kesalahan." });
   } finally {
     setIsDeletingAccount(false);
   }
@@ -515,8 +518,9 @@ const handleDeleteAccount = async () => {
           <div>
             <p className="text-white text-[13px] font-medium">Hapus Akun</p>
             <p className="text-[#9CA3AF] text-[12px] mt-0.5">
-              Akunmu akan dinonaktifkan dan nggak bisa dipakai login lagi.
-              Riwayat transaksi dan sertifikat tetap tersimpan sebagai catatan.
+              Mau hapus akun? Klik tombol di samping. Kami akan kirim link
+              konfirmasi ke email kamu, dan akun baru dihapus setelah kamu klik
+              link itu. Riwayat transaksi &amp; sertifikat tetap tersimpan.
             </p>
           </div>
           <button
@@ -567,22 +571,14 @@ const handleDeleteAccount = async () => {
                 </button>
               </div>
               <p className="text-[#9CA3AF] text-[13px] leading-relaxed">
-                Akunmu akan langsung dinonaktifkan dan kamu nggak akan bisa
-                login lagi. Riwayat sertifikat dan transaksimu tetap tersimpan
-                sebagai catatan -- hubungi tim support kalau ingin
-                mengaktifkan kembali.
+                Kami akan kirim <span className="text-white font-medium">link
+                konfirmasi</span> ke email{" "}
+                <span className="text-white font-medium">{email || "kamu"}</span>.
+                Akunmu <span className="text-white font-medium">baru dihapus
+                setelah kamu klik link di email itu</span> -- jadi akun aman dari
+                penghapusan gak sengaja. Riwayat transaksi &amp; sertifikat tetap
+                tersimpan.
               </p>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[#E2E8F0] text-[12px]">
-                  Ketik <span className="font-bold text-white">HAPUS</span>{" "}
-                  untuk konfirmasi
-                </label>
-                <input
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-2.5 text-[13px] text-white outline-none focus:border-red-500/50 transition-colors"
-                />
-              </div>
               <div className="flex items-center gap-3 mt-1">
                 <button
                   onClick={closeDeleteModal}
@@ -592,10 +588,10 @@ const handleDeleteAccount = async () => {
                 </button>
                 <button
                   onClick={handleDeleteAccount}
-                  disabled={deleteConfirmText !== "HAPUS" || isDeletingAccount}
+                  disabled={isDeletingAccount}
                   className="flex-1 py-2.5 rounded-[8px] bg-red-500 text-white text-[13px] font-semibold hover:bg-red-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {isDeletingAccount ? "Menghapus..." : "Hapus Akun"}
+                  {isDeletingAccount ? "Mengirim..." : "Kirim Link Konfirmasi"}
                 </button>
               </div>
             </motion.div>
