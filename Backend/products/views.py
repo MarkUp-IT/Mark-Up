@@ -484,6 +484,7 @@ def rate_my_product(request, product_id):
     )
 
 
+@csrf_exempt
 @jwt_required
 def schedule_my_product_session(request, session_id):
     if request.method != "POST":
@@ -521,6 +522,34 @@ def schedule_my_product_session(request, session_id):
 
     if slot.is_booked:
         return JsonResponse({"detail": "Slot sudah dibooking."}, status=400)
+
+    # Urutan waktu antar-sesi harus konsisten: sesi ke-N harus dijadwalkan
+    # SETELAH sesi sebelumnya (order lebih kecil) yang udah punya jadwal, dan
+    # SEBELUM sesi berikutnya (order lebih besar) yang udah dijadwalkan. Jadi
+    # gak mungkin sesi 2 waktunya sebelum sesi 1.
+    sibling_sessions = MentoringSession.objects.filter(
+        user_library=session.user_library
+    ).exclude(id=session.id)
+
+    earlier_times = [
+        s.start_time for s in sibling_sessions
+        if s.order < session.order and s.start_time
+    ]
+    if earlier_times and slot.start_time <= max(earlier_times):
+        return JsonResponse(
+            {"detail": "Jadwal sesi ini harus setelah sesi sebelumnya."},
+            status=400,
+        )
+
+    later_times = [
+        s.start_time for s in sibling_sessions
+        if s.order > session.order and s.start_time
+    ]
+    if later_times and slot.start_time >= min(later_times):
+        return JsonResponse(
+            {"detail": "Jadwal sesi ini harus sebelum sesi berikutnya yang sudah dijadwalkan."},
+            status=400,
+        )
 
     now = timezone.now()
     cutoff = now + timedelta(hours=3)

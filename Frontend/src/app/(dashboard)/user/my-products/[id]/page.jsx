@@ -251,7 +251,28 @@ export default function ProductDetail() {
     if (session.mentorId) {
       setSlotsLoading(true);
       apiRequest(`/api/mentors/${session.mentorId}/availability/`, { auth: false })
-        .then((res) => setAvailableSlots(res?.availability || []))
+        .then((res) => {
+          const all = res?.availability || [];
+          // Batas urutan waktu: sesi ini harus SETELAH sesi sebelumnya yang
+          // udah dijadwalkan, dan SEBELUM sesi berikutnya yang udah dijadwalkan.
+          // Slot yang melanggar disembunyiin biar user gak salah pilih (backend
+          // juga tetap validasi ini sebagai pengaman).
+          const siblings = product?.sessions || [];
+          const earlier = siblings
+            .filter((s) => s.order < session.order && s.startTime)
+            .map((s) => new Date(s.startTime).getTime());
+          const later = siblings
+            .filter((s) => s.order > session.order && s.startTime)
+            .map((s) => new Date(s.startTime).getTime());
+          const minT = earlier.length ? Math.max(...earlier) : -Infinity;
+          const maxT = later.length ? Math.min(...later) : Infinity;
+          const filtered = all.filter((slot) => {
+            if (!slot.start_time) return true;
+            const t = new Date(slot.start_time).getTime();
+            return t > minT && t < maxT;
+          });
+          setAvailableSlots(filtered);
+        })
         .catch((err) => setSlotsError(err?.message || "Gagal memuat jadwal mentor."))
         .finally(() => setSlotsLoading(false));
     }

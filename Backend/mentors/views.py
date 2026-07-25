@@ -280,6 +280,8 @@ def get_mentor_availability(request, mentor_id):
             "id": str(slot.id),
             "date": date_label,
             "time": time_label,
+            # ISO mentah buat frontend banding urutan waktu antar-sesi.
+            "start_time": slot.start_time.isoformat(),
         })
 
     return JsonResponse({"availability": data}, status=200)
