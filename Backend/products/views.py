@@ -1154,9 +1154,15 @@ def update_mentoring_order_session(request, session_id):
         if session.mentor_id and not hasattr(session, "payout"):
             gross = session.mentoring.new_price or session.mentoring.original_price or 0
             session_count = session.mentoring.session_count or 1
-            # Fee mentoring ngikutin setelan global (default 25% ke MarkUp,
-            # mentor 75%) -- bisa diubah admin di halaman Pencairan Mentor.
-            fee_percent = CommissionSetting.get_solo().mentoring_fee_percent
+            # Fee mentoring ngikutin override per-mentor kalau diisi admin di
+            # User Management (mentoring_fee_percent_override), kalau kosong
+            # jatuh ke setelan global (default 25% ke MarkUp, 75% mentor) di
+            # halaman Pencairan Mentor.
+            fee_percent = (
+                session.mentor.mentoring_fee_percent_override
+                if session.mentor.mentoring_fee_percent_override is not None
+                else CommissionSetting.get_solo().mentoring_fee_percent
+            )
             MentorPayout.objects.create(
                 mentor_profile=session.mentor,
                 source_type=PayoutSourceType.MENTORING,

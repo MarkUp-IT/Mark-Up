@@ -60,6 +60,13 @@ class MentorProfile(models.Model):
         default=0,
     )
 
+    mentoring_fee_percent_override = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Persentase komisi mentoring khusus mentor ini (0-100). "
+                   "Kosong = pakai persentase global dari CommissionSetting.",
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True
     )

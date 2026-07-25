@@ -335,6 +335,7 @@ def get_user_detail(request, user_id):
 				"bank_name": mentor_profile.bank_name,
 				"bank_account": mentor_profile.bank_account,
 				"bank_account_holder": mentor_profile.bank_account_holder,
+				"mentoring_fee_percent_override": mentor_profile.mentoring_fee_percent_override,
 			}
 
 	return JsonResponse({"user": data}, status=200)
@@ -377,6 +378,33 @@ def update_user(request, user_id):
 		if status_value not in UserStatus.values:
 			return JsonResponse({"errors": {"status": ["Status tidak valid."]}}, status=400)
 		user.status = status_value
+
+	if "mentoring_fee_percent_override" in request_data and user.role == UserRole.MENTOR:
+		from mentors.models import MentorProfile
+
+		override = request_data.get("mentoring_fee_percent_override")
+		if override is not None:
+			try:
+				override = int(override)
+			except (TypeError, ValueError):
+				return JsonResponse(
+					{"errors": {"mentoring_fee_percent_override": ["Harus berupa angka 0-100."]}},
+					status=400,
+				)
+			if not (0 <= override <= 100):
+				return JsonResponse(
+					{"errors": {"mentoring_fee_percent_override": ["Harus di antara 0-100."]}},
+					status=400,
+				)
+
+		try:
+			mentor_profile = user.mentor_profile
+		except MentorProfile.DoesNotExist:
+			mentor_profile = MentorProfile.objects.create(
+				user=user, bank_name="", bank_account="", linkedin_url=""
+			)
+		mentor_profile.mentoring_fee_percent_override = override
+		mentor_profile.save(update_fields=["mentoring_fee_percent_override"])
 
 	user.save()
 
