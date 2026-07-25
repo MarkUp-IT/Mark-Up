@@ -672,7 +672,7 @@ export default function ProductDetail() {
             {...modalMotion}
             transition={{ duration: 0.18 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-[#170F26] w-full max-w-[420px] max-h-[85vh] overflow-y-auto rounded-[16px] border border-[#2D2342] shadow-2xl"
+            className="bg-[#170F26] w-full max-w-[420px] max-h-[85vh] flex flex-col overflow-hidden rounded-[16px] border border-[#2D2342] shadow-2xl"
           >
             {scheduleSuccess ? (
               <div className="p-8 flex flex-col items-center text-center gap-4">
@@ -698,8 +698,11 @@ export default function ProductDetail() {
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSubmitSchedule}>
-                <div className="sticky top-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
+              // flex-col + min-h-0 supaya daftar slot punya area scroll sendiri;
+              // header & tombol Konfirmasi tetap kelihatan (shrink-0), jadi user
+              // gak perlu scroll sampe slot terakhir cuma buat nyimpan.
+              <form onSubmit={handleSubmitSchedule} className="flex flex-col min-h-0 flex-1">
+                <div className="shrink-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
                   <h3 className="text-white font-bold text-[16px]">
                     {scheduleModal.isInitial ? "Pilih Jadwal" : "Ganti Jadwal"}
                   </h3>
@@ -713,10 +716,13 @@ export default function ProductDetail() {
                   </button>
                 </div>
 
-                <div className="p-6 flex flex-col gap-3">
+                <div className="shrink-0 px-6 pt-5 pb-3">
                   <label className="text-[#E2E8F0] text-[13px] font-medium">
                     Slot tersedia — {scheduleModal.session?.mentor}
                   </label>
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-2">
                   {slotsLoading ? (
                     <p className="text-[#9CA3AF] text-[12px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
                       Memuat jadwal mentor...
@@ -761,11 +767,13 @@ export default function ProductDetail() {
                       ))}
                     </div>
                   )}
+                </div>
 
+                <div className="shrink-0 px-6 py-4 border-t border-[#2D2342] bg-[#170F26]">
                   <button
                     type="submit"
                     disabled={!selectedSlotId || scheduleSubmitting}
-                    className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-1"
+                    className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {scheduleSubmitting ? "Menyimpan..." : "Konfirmasi Jadwal"}
                   </button>

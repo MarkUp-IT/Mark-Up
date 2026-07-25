@@ -109,23 +109,22 @@ export default function MentorReviews() {
       </motion.div>
 
       {hasAny && (
-        <motion.div
-          {...sectionReveal}
-          className="inline-flex items-center gap-1 bg-[#170F26] border border-[#2D2342] rounded-[10px] p-1 w-fit overflow-x-auto no-scrollbar"
-        >
-          {RATING_FILTERS.map((f) => (
-            <button
-              key={f}
-              onClick={() => setActiveFilter(f)}
-              className={`px-4 py-2 rounded-[8px] text-[13px] font-medium whitespace-nowrap transition-colors ${
-                activeFilter === f
-                  ? "bg-[#2D1B4E] text-white shadow-sm"
-                  : "text-[#9CA3AF] hover:text-white"
-              }`}
-            >
-              {f === "Semua" ? f : `${f} ★`}
-            </button>
-          ))}
+        <motion.div {...sectionReveal} className="max-w-full overflow-x-auto no-scrollbar">
+          <div className="inline-flex items-center gap-1 bg-[#170F26] border border-[#2D2342] rounded-[10px] p-1">
+            {RATING_FILTERS.map((f) => (
+              <button
+                key={f}
+                onClick={() => setActiveFilter(f)}
+                className={`px-4 py-2 rounded-[8px] text-[13px] font-medium whitespace-nowrap transition-colors ${
+                  activeFilter === f
+                    ? "bg-[#2D1B4E] text-white shadow-sm"
+                    : "text-[#9CA3AF] hover:text-white"
+                }`}
+              >
+                {f === "Semua" ? f : `${f} ★`}
+              </button>
+            ))}
+          </div>
         </motion.div>
       )}
 

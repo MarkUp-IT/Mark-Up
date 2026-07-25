@@ -134,20 +134,22 @@ export default function MentorDashboard() {
             </p>
           </div>
 
-          <div className="inline-flex items-center gap-1 bg-[#170F26] border border-[#2D2342] rounded-[10px] p-1 w-fit overflow-x-auto no-scrollbar">
-            {FILTERS.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveFilter(tab)}
-                className={`px-5 py-2 rounded-[8px] text-[13px] font-medium whitespace-nowrap transition-colors ${focusRing} ${
-                  activeFilter === tab
-                    ? "bg-[#2D1B4E] text-white shadow-sm"
-                    : "text-[#9CA3AF] hover:text-white"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
+          <div className="max-w-full overflow-x-auto no-scrollbar">
+            <div className="inline-flex items-center gap-1 bg-[#170F26] border border-[#2D2342] rounded-[10px] p-1">
+              {FILTERS.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveFilter(tab)}
+                  className={`px-5 py-2 rounded-[8px] text-[13px] font-medium whitespace-nowrap transition-colors ${focusRing} ${
+                    activeFilter === tab
+                      ? "bg-[#2D1B4E] text-white shadow-sm"
+                      : "text-[#9CA3AF] hover:text-white"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

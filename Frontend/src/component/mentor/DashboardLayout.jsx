@@ -37,7 +37,7 @@ export default function DashboardLayout({ title, children }) {
         />
       )}
 
-      <div className="flex flex-col min-h-screen lg:ml-[288px] relative z-10">
+      <div className="flex flex-col min-h-screen lg:ml-[288px] relative z-10 min-w-0 overflow-x-hidden">
         <Header
           title={title}
           onMenuClick={() => setMobileNavOpen(true)}

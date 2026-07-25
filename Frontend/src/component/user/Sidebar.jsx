@@ -29,7 +29,8 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
 
   return (
     <div
-      className={`fixed top-0 left-0 w-[288px] h-screen flex flex-col py-8 z-50 overflow-y-auto no-scrollbar transform transition-transform duration-300 ease-in-out
+      className={`fixed top-0 left-0 w-[288px] max-w-[85vw] h-screen flex flex-col py-8 z-50 overflow-y-auto no-scrollbar transform transition-transform duration-300 ease-in-out
+      bg-[#140B22] border-r border-white/5 shadow-2xl lg:shadow-none
       ${isOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
     >
       {/* Tombol tutup khusus mobile -- logo brand nggak di sini lagi, sekarang

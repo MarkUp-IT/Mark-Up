@@ -49,7 +49,7 @@ export default function DashboardLayout({ title, children }) {
       <div className="flex flex-col min-h-screen lg:ml-[288px] relative z-10 min-w-0 overflow-x-hidden">
         {/* Trigger buka Sidebar khusus mobile -- hamburger di Navbar tugasnya
             beda (buka menu situs). mt biar nggak ketiban Navbar yang ngambang. */}
-        <div className="lg:hidden sticky top-0 z-20 bg-[#0F081C]/90 backdrop-blur-sm px-4 py-4 mt-28 flex items-center gap-3 border-b border-white/5">
+        <div className="lg:hidden sticky top-0 z-20 bg-[#0F081C]/90 backdrop-blur-sm px-4 py-4 mt-28 md:mt-36 flex items-center gap-3 border-b border-white/5">
           <button
             onClick={() => setMobileNavOpen(true)}
             aria-label="Buka menu"
