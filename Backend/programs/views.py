@@ -11,6 +11,19 @@ from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
 from mentors.models import MentorProfile
 
+
+def _get_competition_image_url(competition):
+    """URL poster kompetisi. Prioritas file yang di-upload (competition.image)
+    -- URL-nya di-generate fresh di sini (storage pakai presigned URL),
+    fallback ke image_url (link eksternal legacy) kalau belum ada file."""
+    if competition.image:
+        try:
+            return competition.image.url
+        except Exception:
+            pass
+    return competition.image_url
+
+
 @csrf_exempt
 @jwt_required
 @role_required(UserRole.ADMIN)
@@ -32,6 +45,10 @@ def add_competition(request):
 		return JsonResponse({"errors": errors}, status=400)
 
 	competition = form.save(commit=False)
+	# image_key = path file yang udah di-upload duluan lewat upload-poster/.
+	image_key = request_data.get("image_key")
+	if image_key:
+		competition.image = image_key
 	competition.save()
 
 	return JsonResponse(
@@ -153,7 +170,7 @@ def get_competitions(request):
             "prize": c.prizepool,
             "level": c.level,
             "target": c.target_participant,
-            "image": c.image_url,
+            "image": _get_competition_image_url(c),
             "link": c.registration_link,
         }
         for c in page.object_list
@@ -220,6 +237,9 @@ def update_competition(request, competition_id):
 		return JsonResponse({"errors": errors}, status=400)
 
 	competition = form.save(commit=False)
+	image_key = request_data.get("image_key")
+	if image_key:
+		competition.image = image_key
 	competition.save()
 
 	return JsonResponse(
@@ -406,4 +426,40 @@ def update_bootcamp_session_template(request, session_id):
     return JsonResponse(
         {"detail": "Sesi berhasil diperbarui.", "session": _serialize_bootcamp_session_template(session)},
         status=200,
+    )
+
+
+ALLOWED_POSTER_IMAGE_EXT = {"jpg", "jpeg", "png", "webp"}
+MAX_POSTER_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def upload_competition_poster(request):
+    """Upload poster kompetisi ke storage, balikin key + URL. Key-nya dipakai
+    FE buat dikirim balik di payload add/update kompetisi (field image_key)
+    -- sama polanya kayak upload_product_image."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    from django.core.files.storage import default_storage
+
+    image = request.FILES.get("image")
+    if not image:
+        return JsonResponse({"detail": "File gambar diperlukan."}, status=400)
+
+    ext = image.name.rsplit(".", 1)[-1].lower() if "." in image.name else ""
+    if ext not in ALLOWED_POSTER_IMAGE_EXT:
+        return JsonResponse({"detail": "Format harus JPG, PNG, atau WEBP."}, status=400)
+
+    if image.size > MAX_POSTER_IMAGE_SIZE:
+        return JsonResponse({"detail": "Ukuran file maksimal 5MB."}, status=400)
+
+    now = timezone.now()
+    key = f"competition_posters/{now.year}/{now.month:02d}/{image.name}"
+    saved_key = default_storage.save(key, image)
+
+    return JsonResponse(
+        {"key": saved_key, "url": default_storage.url(saved_key)}, status=201
     )

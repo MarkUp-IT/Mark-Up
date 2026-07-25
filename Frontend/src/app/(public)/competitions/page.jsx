@@ -423,7 +423,7 @@ function mapApiCompetition(item) {
     level: item.level ?? "-",
     target: item.target_participant ?? "-",
 
-    image: item.image_url,
+    image: item.image,
     link: item.registration_link,
   };
 }

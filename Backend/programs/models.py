@@ -30,7 +30,12 @@ class Competition(models.Model):
         related_name="competitions",
     )
     title = models.CharField(max_length=255)
-    image_url = models.URLField(blank=True, null=True)
+    image_url = models.URLField(
+        blank=True, null=True,
+        help_text="Legacy -- link poster lama. Dipakai fallback kalau `image` "
+                   "(file upload) belum diisi.",
+    )
+    image = models.ImageField(upload_to="competition_posters/%Y/%m/", blank=True, null=True)
     organizer = models.CharField(max_length=255, blank=True, null=True)
     registration_fee = models.DecimalField(
         max_digits=12,
