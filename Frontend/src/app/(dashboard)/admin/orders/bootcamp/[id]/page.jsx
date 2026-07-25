@@ -11,6 +11,8 @@ import {
   X,
   Check,
   Users,
+  CalendarClock,
+  Pencil,
 } from "lucide-react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import EmptyState from "@/component/admin/EmptyState";
@@ -121,6 +123,21 @@ function formatSessionDateTime(dateStr) {
   }) + " WIB";
 }
 
+// ISO (disimpan UTC di server) -> string "YYYY-MM-DDTHH:mm" jam WIB, format
+// yang dibutuhin input type="datetime-local". Konversinya manual (bukan
+// toISOString().slice) soalnya itu bakal ngasih jam UTC, geser 7 jam dari
+// yang ditampilin ke admin di tabel.
+function toWIBLocalInputValue(dateStr) {
+  if (!dateStr) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date(dateStr));
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+}
+
 export default function BootcampOrderDetail() {
   const params = useParams();
   const [title, setTitle] = useState("");
@@ -131,6 +148,9 @@ export default function BootcampOrderDetail() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newSession, setNewSession] = useState({ title: "", start_time: "", end_time: "" });
   const [saving, setSaving] = useState(false);
+  const [scheduleSession, setScheduleSession] = useState(null);
+  const [scheduleForm, setScheduleForm] = useState({ start_time: "", end_time: "" });
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   const [participants, setParticipants] = useState([]);
   const [participantsLoading, setParticipantsLoading] = useState(true);
@@ -250,6 +270,34 @@ export default function BootcampOrderDetail() {
     }
   };
 
+  const openScheduleModal = (session) => {
+    setScheduleSession(session);
+    setScheduleForm({
+      start_time: toWIBLocalInputValue(session.start_time),
+      end_time: toWIBLocalInputValue(session.end_time),
+    });
+  };
+
+  const saveSchedule = async () => {
+    if (!scheduleForm.start_time || !scheduleForm.end_time) return;
+    setSavingSchedule(true);
+    try {
+      await apiRequest(`/api/programs/bootcamp-sessions/${scheduleSession.id}/`, {
+        method: "PATCH",
+        body: { start_time: scheduleForm.start_time, end_time: scheduleForm.end_time },
+      });
+      setScheduleSession(null);
+      await fetchDetail();
+      toast.success("Jadwal Disimpan", { description: `Jadwal "${scheduleSession.title}" berhasil diatur.` });
+    } catch (err) {
+      toast.error("Gagal Menyimpan Jadwal", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
   const deleteSession = async (sessionId) => {
     if (!confirm("Hapus sesi ini?")) return;
     try {
@@ -348,18 +396,28 @@ export default function BootcampOrderDetail() {
                         />
                       </td>
                       <td className="px-4 py-4 text-center">
-                        {item.start_time ? (
-                          <>
-                            <p className="text-[#1E293B] font-bold text-[12px]">
-                              {new Date(item.start_time).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                            </p>
-                            <p className="text-[#94A3B8] text-[11px]">
-                              {new Date(item.start_time).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })} WIB
-                            </p>
-                          </>
-                        ) : (
-                          <p className="text-[#94A3B8] text-[11.5px] italic">Belum di-set</p>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => openScheduleModal(item)}
+                          className="group w-full flex flex-col items-center gap-0.5 rounded-[6px] px-2 py-1 hover:bg-[#F1F5F9] transition-colors"
+                        >
+                          {item.start_time ? (
+                            <>
+                              <span className="text-[#1E293B] font-bold text-[12px] flex items-center gap-1.5">
+                                {new Date(item.start_time).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                                <Pencil size={10} className="text-[#94A3B8] opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </span>
+                              <span className="text-[#94A3B8] text-[11px]">
+                                {new Date(item.start_time).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })} WIB
+                              </span>
+                            </>
+                          ) : (
+                            <span className="flex items-center gap-1.5 text-[#148F89] text-[11.5px] font-semibold">
+                              <CalendarClock size={13} />
+                              Atur Jadwal
+                            </span>
+                          )}
+                        </button>
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex items-center justify-center">
@@ -470,6 +528,62 @@ export default function BootcampOrderDetail() {
                 className="flex-1 py-2.5 bg-[#148F89] text-white font-bold text-[13px] rounded-[8px] hover:bg-[#117A75] transition-colors disabled:opacity-50"
               >
                 {saving ? "Menyimpan..." : "Tambah"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scheduleSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setScheduleSession(null)} />
+          <div style={{ width: "420px", maxWidth: "100%" }} className="relative bg-white rounded-[12px] shadow-2xl z-10">
+            <div className="px-6 py-5 border-b border-[#E2E8F0] flex justify-between items-center">
+              <div>
+                <p className="text-[#1E293B] font-bold text-[17px]">Atur Jadwal</p>
+                <p className="text-[#64748B] text-[12.5px] mt-0.5">{scheduleSession.title}</p>
+              </div>
+              <button onClick={() => setScheduleSession(null)} className="p-2 text-[#94A3B8] hover:text-[#0F172A] hover:bg-[#F1F5F9] rounded-full transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-6 flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[#334155] text-[13px] font-medium">Mulai</label>
+                <input
+                  type="datetime-local"
+                  value={scheduleForm.start_time}
+                  onChange={(e) => setScheduleForm((f) => ({ ...f, start_time: e.target.value }))}
+                  style={{ height: "42px", colorScheme: "light" }}
+                  className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 text-[13.5px] text-[#1E293B] outline-none focus:border-[#148F89] transition-colors"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[#334155] text-[13px] font-medium">Selesai</label>
+                <input
+                  type="datetime-local"
+                  value={scheduleForm.end_time}
+                  min={scheduleForm.start_time || undefined}
+                  onChange={(e) => setScheduleForm((f) => ({ ...f, end_time: e.target.value }))}
+                  style={{ height: "42px", colorScheme: "light" }}
+                  className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 text-[13.5px] text-[#1E293B] outline-none focus:border-[#148F89] transition-colors"
+                />
+              </div>
+              <p className="text-[#94A3B8] text-[11px]">Jam mengikuti waktu WIB (Asia/Jakarta).</p>
+            </div>
+            <div className="px-6 py-5 bg-[#F8FAFC] border-t border-[#E2E8F0] flex gap-3">
+              <button
+                onClick={() => setScheduleSession(null)}
+                className="flex-1 py-2.5 bg-white border border-[#E2E8F0] text-[#475569] font-bold text-[13px] rounded-[8px] hover:bg-[#F1F5F9] transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={saveSchedule}
+                disabled={savingSchedule || !scheduleForm.start_time || !scheduleForm.end_time}
+                className="flex-1 py-2.5 bg-[#148F89] text-white font-bold text-[13px] rounded-[8px] hover:bg-[#117A75] transition-colors disabled:opacity-50"
+              >
+                {savingSchedule ? "Menyimpan..." : "Simpan Jadwal"}
               </button>
             </div>
           </div>
