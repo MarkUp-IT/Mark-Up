@@ -783,6 +783,7 @@ export default function MentorSettings() {
                     type="date"
                     value={expForm.startDate}
                     onChange={(e) => setExpForm((f) => ({ ...f, startDate: e.target.value }))}
+                    style={{ colorScheme: "dark" }}
                     className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[13px] text-white outline-none focus:border-[#148F89]/60 transition-colors"
                   />
                 </div>
@@ -793,6 +794,7 @@ export default function MentorSettings() {
                     value={expForm.endDate}
                     disabled={expForm.isOngoing}
                     onChange={(e) => setExpForm((f) => ({ ...f, endDate: e.target.value }))}
+                    style={{ colorScheme: "dark" }}
                     className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[13px] outline-none transition-colors ${
                       expForm.isOngoing
                         ? "text-[#6B7280] cursor-not-allowed"

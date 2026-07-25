@@ -99,8 +99,6 @@ export default function Products() {
   });
 
   const [expertiseOptions, setExpertiseOptions] = useState([]);
-  const [newExpertiseName, setNewExpertiseName] = useState("");
-  const [isSavingExpertise, setIsSavingExpertise] = useState(false);
 
   // Upload gambar produk: key = path storage yg dikirim ke payload add/update,
   // preview = URL buat ditampilin. Kepisah antara add & edit modal.
@@ -182,32 +180,6 @@ export default function Products() {
   useEffect(() => {
     fetchExpertiseOptions();
   }, []);
-
-  const handleAddExpertise = async () => {
-    const name = newExpertiseName.trim();
-    if (!name) return;
-    setIsSavingExpertise(true);
-    try {
-      await api.post("/api/mentors/expertise/create/", { name });
-      setNewExpertiseName("");
-      await fetchExpertiseOptions();
-    } catch (err) {
-      showToast("error", "Gagal menambah keahlian", extractErrorMessage(err));
-    } finally {
-      setIsSavingExpertise(false);
-    }
-  };
-
-  const handleDeleteExpertise = async (id) => {
-    try {
-      await api.delete(`/api/mentors/expertise/${id}/delete/`);
-      await fetchExpertiseOptions();
-      setFormData((prev) => ({ ...prev, expertise: prev.expertise.filter((x) => x !== id) }));
-      setEditFormData((prev) => ({ ...prev, expertise: prev.expertise.filter((x) => x !== id) }));
-    } catch (err) {
-      showToast("error", "Gagal menghapus keahlian", extractErrorMessage(err));
-    }
-  };
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -383,61 +355,27 @@ export default function Products() {
               {expertiseOptions.map((opt) => {
                 const isSelected = data.expertise.includes(opt.id);
                 return (
-                  <div key={opt.id} className="relative group">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setData((prev) => ({
-                          ...prev,
-                          expertise: isSelected
-                            ? prev.expertise.filter((x) => x !== opt.id)
-                            : [...prev.expertise, opt.id],
-                        }))
-                      }
-                      className={`px-3.5 py-2 pr-7 rounded-[8px] text-[12.5px] font-medium border transition-colors ${
-                        isSelected
-                          ? "bg-[#148F89]/10 border-[#148F89] text-[#148F89]"
-                          : "bg-[#F8FAFC] border-[#E2E8F0] text-[#64748B] hover:border-[#94A3B8]"
-                      }`}
-                    >
-                      {opt.name}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteExpertise(opt.id);
-                      }}
-                      aria-label={`Hapus keahlian ${opt.name}`}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() =>
+                      setData((prev) => ({
+                        ...prev,
+                        expertise: isSelected
+                          ? prev.expertise.filter((x) => x !== opt.id)
+                          : [...prev.expertise, opt.id],
+                      }))
+                    }
+                    className={`px-3.5 py-2 rounded-[8px] text-[12.5px] font-medium border transition-colors ${
+                      isSelected
+                        ? "bg-[#148F89]/10 border-[#148F89] text-[#148F89]"
+                        : "bg-[#F8FAFC] border-[#E2E8F0] text-[#64748B] hover:border-[#94A3B8]"
+                    }`}
+                  >
+                    {opt.name}
+                  </button>
                 );
               })}
-              {expertiseOptions.length === 0 && (
-                <p className="text-[#94A3B8] text-[12px] italic">
-                  Belum ada kategori keahlian, tambahin di bawah.
-                </p>
-              )}
-            </div>
-            <div className="flex gap-2 mt-1">
-              <input
-                type="text"
-                value={newExpertiseName}
-                onChange={(e) => setNewExpertiseName(e.target.value)}
-                placeholder="Tambah kategori baru, mis. BCC"
-                className="flex-1 adm-h-42 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-3.5 text-[13px] outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
-              />
-              <button
-                type="button"
-                onClick={handleAddExpertise}
-                disabled={!newExpertiseName.trim() || isSavingExpertise}
-                className="px-4 adm-h-42 rounded-[8px] bg-[#148F89] text-white text-[12.5px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-              >
-                Tambah
-              </button>
             </div>
           </div>
         </div>

@@ -467,7 +467,7 @@ export default function MentoringSchedule() {
                         type="date"
                         value={rangeStart}
                         onChange={(e) => setRangeStart(e.target.value)}
-                        style={{ height: "46px" }}
+                        style={{ height: "46px", colorScheme: "dark" }}
                         className={`w-full ms-inset border border-[#2D2342] rounded-[8px] px-3.5 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
                       />
                     </div>
@@ -480,7 +480,7 @@ export default function MentoringSchedule() {
                         value={rangeEnd}
                         min={rangeStart || undefined}
                         onChange={(e) => setRangeEnd(e.target.value)}
-                        style={{ height: "46px" }}
+                        style={{ height: "46px", colorScheme: "dark" }}
                         className={`w-full ms-inset border border-[#2D2342] rounded-[8px] px-3.5 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
                       />
                     </div>

@@ -28,6 +28,7 @@ function MentorMultiSelect({ mentors, selectedIds, onChange }) {
   const [open, setOpen] = useState(false);
   const [rect, setRect] = useState(null);
   const btnRef = useRef(null);
+  const listRef = useRef(null);
   const selectedNames = mentors
     .filter((m) => selectedIds.includes(m.id))
     .map((m) => m.name);
@@ -43,7 +44,10 @@ function MentorMultiSelect({ mentors, selectedIds, onChange }) {
   // Dropdown-nya position: fixed (dihitung dari posisi tombol) -- kalau pakai
   // absolute biasa, dia keclip sama container tabel yang overflow-x-auto +
   // overflow-hidden. Fixed bikin dia "lepas" dari container itu. Tutup pas
-  // di-scroll biar posisinya gak nyasar.
+  // HALAMAN di-scroll biar posisinya gak nyasar -- tapi scroll di DALAM
+  // list mentor sendiri (listRef, buat liat mentor lain) harus diabaikan,
+  // soalnya listener scroll di window pakai capture jadi ke-trigger juga
+  // sama scroll di elemen manapun di bawahnya termasuk list ini.
   const openDropdown = () => {
     if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
     setOpen(true);
@@ -51,7 +55,10 @@ function MentorMultiSelect({ mentors, selectedIds, onChange }) {
 
   useEffect(() => {
     if (!open) return;
-    const close = () => setOpen(false);
+    const close = (e) => {
+      if (listRef.current && listRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
     window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     return () => {
@@ -79,6 +86,7 @@ function MentorMultiSelect({ mentors, selectedIds, onChange }) {
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
           <div
+            ref={listRef}
             className="fixed z-[61] max-h-52 overflow-y-auto bg-white border border-[#E2E8F0] rounded-[8px] shadow-lg py-1"
             style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
           >

@@ -587,44 +587,6 @@ def get_my_reviews(request):
 
     return JsonResponse({"reviews": data}, status=200)
 
-@csrf_exempt
-@jwt_required
-@role_required(UserRole.ADMIN)
-def create_expertise(request):
-    if request.method != "POST":
-        return HttpResponseNotAllowed(["POST"])
-
-    request_data = get_request_data(request)
-    if request_data is None:
-        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
-
-    name = (request_data.get("name") or "").strip()
-    if not name:
-        return JsonResponse({"detail": "Nama keahlian diperlukan."}, status=400)
-
-    if Expertise.objects.filter(name__iexact=name).exists():
-        return JsonResponse({"detail": "Keahlian dengan nama ini sudah ada."}, status=400)
-
-    expertise = Expertise.objects.create(name=name)
-    return JsonResponse({"id": str(expertise.id), "name": expertise.name}, status=201)
-
-
-@csrf_exempt
-@jwt_required
-@role_required(UserRole.ADMIN)
-def delete_expertise(request, expertise_id):
-    if request.method != "DELETE":
-        return HttpResponseNotAllowed(["DELETE"])
-
-    try:
-        expertise = Expertise.objects.get(id=expertise_id)
-    except Expertise.DoesNotExist:
-        return JsonResponse({"detail": "Keahlian tidak ditemukan."}, status=404)
-
-    expertise.delete()
-    return JsonResponse({"detail": "Keahlian berhasil dihapus."}, status=200)
-
-
 @jwt_required
 @role_required(UserRole.MENTOR)
 def get_mentor_sidebar_badges(request):

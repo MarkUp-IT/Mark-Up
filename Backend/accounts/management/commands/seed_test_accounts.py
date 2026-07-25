@@ -41,7 +41,7 @@ MENTOR_ACCOUNTS = [
         ),
         "linkedin_url": "https://linkedin.com/in/alya-hamidah",
         "instagram_url": "https://instagram.com/alyahamidah",
-        "expertise": ["Business Case", "Strategy Consulting", "Market Analysis"],
+        "expertise": ["BCC"],
         "experiences": [
             ("Senior Associate, Strategy Consulting Firm", "2021-01-01", None),
             ("Juara 1 National Business Case Competition", "2019-06-01", "2019-06-01"),
@@ -58,7 +58,7 @@ MENTOR_ACCOUNTS = [
         ),
         "linkedin_url": "https://linkedin.com/in/adena-laksita",
         "instagram_url": "https://instagram.com/adenalaksita",
-        "expertise": ["Pitching", "Public Speaking", "Business Plan"],
+        "expertise": ["BPC"],
         "experiences": [
             ("Pitching Coach, Startup Incubator", "2022-03-01", None),
             ("Finalis Business Plan Competition Nasional", "2018-08-01", "2018-08-01"),
@@ -74,7 +74,7 @@ MENTOR_ACCOUNTS = [
         ),
         "linkedin_url": "https://linkedin.com/in/fathir-ramadhan",
         "instagram_url": "https://instagram.com/fathirramadhan",
-        "expertise": ["Financial Modeling", "Business Plan", "Market Analysis"],
+        "expertise": ["BPC"],
         "experiences": [
             ("Financial Analyst, Venture Capital", "2020-05-01", None),
         ],
@@ -90,7 +90,7 @@ MENTOR_ACCOUNTS = [
         ),
         "linkedin_url": "https://linkedin.com/in/sarah-jenkins",
         "instagram_url": "https://instagram.com/sarahjenkins",
-        "expertise": ["Marketing", "Personal Branding", "Business Case"],
+        "expertise": ["BCC", "Konsultasi Karir"],
         "experiences": [
             ("Brand Manager, FMCG Company", "2021-09-01", None),
         ],
@@ -105,7 +105,7 @@ MENTOR_ACCOUNTS = [
         ),
         "linkedin_url": "https://linkedin.com/in/muhammad-arfan",
         "instagram_url": "https://instagram.com/muhammadarfan",
-        "expertise": ["Product Case", "UI/UX", "Business Case"],
+        "expertise": ["BCC"],
         "experiences": [
             ("Product Designer, Tech Startup", "2022-01-01", None),
         ],

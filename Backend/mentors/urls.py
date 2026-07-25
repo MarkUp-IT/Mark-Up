@@ -14,16 +14,12 @@ from .views import (
     my_experience_detail_view,
     get_my_sessions,
     get_my_reviews,
-    create_expertise,
-    delete_expertise,
     get_mentor_sidebar_badges,
 )
 
 urlpatterns = [
     path("", get_mentors, name="api_mentors_list"),
     path("expertise/", get_expertise_catalog, name="api_mentors_expertise_catalog"),
-    path("expertise/create/", create_expertise, name="api_mentors_expertise_create"),
-    path("expertise/<uuid:expertise_id>/delete/", delete_expertise, name="api_mentors_expertise_delete"),
     path("availability/add/", add_availability, name="api_mentors_add_availability"),
     path("availability/add-bulk/", add_availability_bulk, name="api_mentors_add_availability_bulk"),
     path("<uuid:mentor_id>/availability/", get_mentor_availability, name="api_mentor_availability"),
