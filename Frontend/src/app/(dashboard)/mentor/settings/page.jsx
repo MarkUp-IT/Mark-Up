@@ -724,6 +724,9 @@ export default function MentorSettings() {
       >
         <div>
           <h3 className="text-white font-semibold text-[15px]">Keamanan Akun</h3>
+          <p className="text-[#9CA3AF] text-[12px] mt-1">
+            Ganti kata sandi secara berkala dan pakai yang kuat untuk menjaga keamanan akunmu.
+          </p>
         </div>
         <Link
           href="/mentor/settings/change-password"

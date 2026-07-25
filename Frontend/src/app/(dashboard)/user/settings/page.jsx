@@ -483,7 +483,7 @@ const handleDeleteAccount = async () => {
             Keamanan Akun
           </h3>
           <p className="text-[#9CA3AF] text-[12px] mt-1">
-            Kata sandi terakhir diubah 3 bulan lalu.
+            Ganti kata sandi secara berkala dan pakai yang kuat untuk menjaga keamanan akunmu.
           </p>
         </div>
         <Link
