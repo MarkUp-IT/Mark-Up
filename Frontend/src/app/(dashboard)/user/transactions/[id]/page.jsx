@@ -133,7 +133,7 @@ export default function TransactionDetail() {
         <div className="flex flex-col sm:flex-row gap-3 pt-2">
           {tx.status === "PENDING" && (
             <p className="text-[#F59E0B] text-[13px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3">
-              Bukti transfer udah kami terima, sedang diverifikasi tim kami (maksimal 1x24 jam).
+              Bukti transfer sudah kami terima dan sedang diverifikasi oleh tim kami (maksimal 1x24 jam).
             </p>
           )}
           {tx.proof_of_payment && (

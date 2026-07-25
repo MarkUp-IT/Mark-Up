@@ -103,7 +103,7 @@ export default function MentoringOrderDetail() {
           Kembali ke Daftar Paket
         </Link>
         <p className="text-[#64748B] text-[14px]">
-          Paket dengan ID &ldquo;{params?.id}&rdquo; nggak ditemukan.
+          Paket dengan ID &ldquo;{params?.id}&rdquo; tidak ditemukan.
         </p>
       </DashboardLayout>
     );

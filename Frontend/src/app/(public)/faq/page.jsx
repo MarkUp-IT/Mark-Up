@@ -112,7 +112,7 @@ const faqData = {
     },
     {
       q: "Bagaimana cara menghapus akun saya?",
-      a: 'Masuk ke Pengaturan Akun, lalu buka bagian "Zona Berbahaya" di bagian paling bawah. Akunmu akan dinonaktifkan dan nggak bisa dipakai login lagi, tapi riwayat produk, sertifikat, dan transaksimu tetap tersimpan sebagai catatan.',
+      a: 'Masuk ke Pengaturan Akun, lalu buka bagian "Zona Berbahaya" di bagian paling bawah dan tekan Hapus Akun. Kami akan mengirim tautan konfirmasi ke email kamu, dan akun baru dihapus setelah kamu membuka tautan tersebut. Setelah dihapus, akun tidak dapat digunakan untuk masuk lagi, tetapi riwayat produk, sertifikat, dan transaksi kamu tetap tersimpan sebagai catatan.',
     },
   ],
 };

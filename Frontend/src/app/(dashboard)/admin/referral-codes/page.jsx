@@ -573,7 +573,7 @@ export default function ReferralCodes() {
           </div>
           <p className="text-[#64748B] text-[13px]">
             {editingCode?.used_count > 0
-              ? `Udah dipakai ${editingCode.used_count} kali -- perubahan cuma berlaku buat pemakaian selanjutnya.`
+              ? `Sudah dipakai ${editingCode.used_count} kali. Perubahan hanya berlaku untuk pemakaian berikutnya.`
               : "Ubah detail kode ini."}
           </p>
         </div>
@@ -651,7 +651,7 @@ export default function ReferralCodes() {
             {fieldErrors.quota && <p className="text-red-500 text-[11px]">{fieldErrors.quota}</p>}
             {editingCode && Number(form.quota) < editingCode.used_count && (
               <p className="text-[#DC2626] text-[11px]">
-                Kuota nggak boleh kurang dari {editingCode.used_count} (jumlah yang udah kepake).
+                Kuota tidak boleh kurang dari {editingCode.used_count} (jumlah yang sudah terpakai).
               </p>
             )}
           </div>

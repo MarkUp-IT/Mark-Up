@@ -279,7 +279,7 @@ export default function MyProducts() {
 
       {!!isRiwayat && (
         <motion.p {...sectionReveal} className="text-[#6B7280] text-[13px]">
-          Produk yang udah selesai. Klik kartunya buat lihat rekaman tiap sesi.
+          Produk yang sudah selesai. Tekan kartunya untuk melihat rekaman tiap sesi.
         </motion.p>
       )}
 

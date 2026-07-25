@@ -56,7 +56,7 @@ function ResetPasswordForm() {
       return;
     }
     if (newPassword !== confirmPassword) {
-      setFormError("Konfirmasi password baru nggak sama.");
+      setFormError("Konfirmasi kata sandi baru tidak sama.");
       return;
     }
 

@@ -413,7 +413,7 @@ export default function ProdukPage() {
                   {selectedProduct.type === "MENTORING" && selectedProduct.highlights?.length > 0 && (
                     <>
                       <p className="text-white font-semibold text-xs uppercase tracking-wide mb-2">
-                        {selectedProduct.sessionCount}x Sesi Mentoring — Yang Kamu Dapatkan
+                        {selectedProduct.sessionCount}x Sesi Mentoring: Yang Kamu Dapatkan
                       </p>
                       <ul className="flex flex-col gap-2">
                         {selectedProduct.highlights.map((point, idx) => (

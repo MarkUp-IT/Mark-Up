@@ -149,7 +149,7 @@ export default function AdminSettings() {
               Admin
             </div>
             <p className="text-[#94A3B8] text-[11px]">
-              Role admin diatur lewat Manajemen User oleh Super Admin, nggak bisa diubah sendiri di sini.
+              Peran admin diatur melalui Manajemen User oleh Super Admin dan tidak dapat diubah sendiri di sini.
             </p>
           </div>
 

@@ -146,7 +146,7 @@ export default function MentorPayouts() {
         <div>
           <h1 className="font-bold text-[22px] text-[#0F172A]">Pencairan Dana Mentor</h1>
           <p className="text-[#64748B] text-[14px] mt-1">
-            Kelola antrian honor mentor per sesi yang udah selesai diajarkan.
+            Kelola antrean honor mentor per sesi yang sudah selesai diajarkan.
           </p>
         </div>
       </div>
@@ -342,7 +342,7 @@ export default function MentorPayouts() {
                 </div>
                 <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3 flex flex-col gap-0.5">
                   <span className="text-[#1E293B] font-semibold text-[13px]">
-                    {selectedPayout?.bank_name || "-"} — {selectedPayout?.bank_account || "-"}
+                    {selectedPayout?.bank_name || "-"} · {selectedPayout?.bank_account || "-"}
                   </span>
                   <span className="text-[#64748B] text-[12px]">a.n. {selectedPayout?.bank_account_holder || "-"}</span>
                 </div>

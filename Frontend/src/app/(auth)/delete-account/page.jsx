@@ -88,10 +88,11 @@ function DeleteAccountContent() {
               <div className="flex flex-col gap-1.5">
                 <p className="font-bold text-white text-[24px] font-poppins">Konfirmasi Hapus Akun</p>
                 <p className="text-[13px] text-[#9CA3AF] leading-relaxed">
-                  Dengan mengklik tombol di bawah, akunmu langsung dinonaktifkan
-                  dan gak bisa dipakai login lagi. Riwayat transaksi &amp;
-                  sertifikat tetap tersimpan. Tindakan ini gak bisa dibatalkan
-                  sendiri &mdash; hubungi support kalau berubah pikiran.
+                  Dengan menekan tombol di bawah, akun kamu langsung
+                  dinonaktifkan dan tidak dapat digunakan untuk masuk lagi.
+                  Riwayat transaksi dan sertifikat tetap tersimpan. Tindakan ini
+                  tidak dapat dibatalkan sendiri. Hubungi tim dukungan jika kamu
+                  berubah pikiran.
                 </p>
               </div>
               <button

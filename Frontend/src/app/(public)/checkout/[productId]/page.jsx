@@ -70,7 +70,7 @@ function pickAvatarGradient(id) {
 function formatExperiencePeriod(exp) {
   const startYear = new Date(exp.start_date).getFullYear();
   const endYear = exp.end_date ? new Date(exp.end_date).getFullYear() : "Sekarang";
-  return `${startYear} — ${endYear}`;
+  return `${startYear} s.d. ${endYear}`;
 }
 
 function mapMentorFromApi(m) {
@@ -518,7 +518,7 @@ export default function CheckoutDetailPage() {
                       <p className="text-[#6B7280] text-[12px]">
                         {mentors.length === 0
                           ? "Belum ada mentor yang tersedia untuk sesi ini. Coba lagi beberapa saat lagi ya."
-                          : `Mentor "${mentorSearch}" nggak ketemu.`}
+                          : `Mentor "${mentorSearch}" tidak ditemukan.`}
                       </p>
                     </div>
                   ) : (
@@ -638,8 +638,8 @@ export default function CheckoutDetailPage() {
                     <CalendarClock size={16} className="text-[#148F89]" />
                     <h2 className="font-bold text-[15px] text-white">
                       {product.sessionCount > 1
-                        ? `Jadwal Sesi Pertama — ${selectedMentor.name}`
-                        : `Jadwal Tersedia — ${selectedMentor.name}`}
+                        ? `Jadwal Sesi Pertama untuk ${selectedMentor.name}`
+                        : `Jadwal Tersedia untuk ${selectedMentor.name}`}
                     </h2>
                   </div>
                   <div className="mentor-scroll flex flex-wrap gap-2 max-h-[220px] overflow-y-auto pr-1">
@@ -664,17 +664,17 @@ export default function CheckoutDetailPage() {
                         size={13}
                         className="shrink-0 mt-0.5 text-[#08C7E1]"
                       />
-                      Paket ini {product.sessionCount} sesi. Jadwal di atas cuma
-                      buat{" "}
+                      Paket ini {product.sessionCount} sesi. Jadwal di atas hanya
+                      untuk{" "}
                       <span className="text-white font-medium">
                         sesi pertama
-                      </span>{" "}
-                      — sisanya ({product.sessionCount - 1} sesi lagi) bisa kamu
+                      </span>
+                      . Sisanya ({product.sessionCount - 1} sesi lagi) dapat kamu
                       pilih sendiri nanti di halaman{" "}
                       <span className="text-white font-medium">
                         Produk Saya
-                      </span>
-                      , begitu pembayaran ini udah dikonfirmasi.
+                      </span>{" "}
+                      setelah pembayaran ini dikonfirmasi.
                     </p>
                   )}
                 </motion.div>

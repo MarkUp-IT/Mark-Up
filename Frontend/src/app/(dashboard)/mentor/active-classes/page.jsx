@@ -175,7 +175,7 @@ export default function MentorDashboard() {
 
       {isRiwayat && (
         <motion.p {...sectionReveal} className="text-[#6B7280] text-[13px]">
-          Kelas yang udah selesai. Klik kartunya buat lihat rekaman tiap sesi.
+          Kelas yang sudah selesai. Tekan kartunya untuk melihat rekaman tiap sesi.
         </motion.p>
       )}
 
@@ -234,7 +234,7 @@ export default function MentorDashboard() {
                 <motion.div key={item.id} {...cardReveal(index)} className="h-full">
                   <ClassCard
                     id={`mentoring-${item.id}`}
-                    title={`${item.title} — ${item.menteeName}`}
+                    title={`${item.title} · ${item.menteeName}`}
                     description={`${item.completedSessions}/${item.totalSessions} sesi selesai`}
                     imageClass="from-[#4C1D95] to-[#CA8A04]"
                     isCompleted={item.completedSessions >= item.totalSessions}

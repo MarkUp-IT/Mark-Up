@@ -349,7 +349,7 @@ export default function Products() {
               Kategori Keahlian
             </p>
             <p className="text-[#94A3B8] text-[11px] -mt-1">
-              Nentuin mentor mana aja yang bisa dipilih pembeli produk ini (harus overlap sama keahlian mentor). Kosongin kalau belum mau dibatasi.
+              Menentukan mentor mana saja yang dapat dipilih pembeli produk ini (harus sesuai dengan keahlian mentor). Kosongkan jika belum ingin dibatasi.
             </p>
             <div className="flex flex-wrap gap-2">
               {expertiseOptions.map((opt) => {
@@ -400,10 +400,10 @@ export default function Products() {
             className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
           />
           <p className="text-[#94A3B8] text-[11px]">
-            Otomatis nyiapin slot sesi kosong sejumlah ini di Kelola Pesanan
-            Bootcamp -- tinggal diisi tanggal, mentor, dan link-nya. Kalau
-            angkanya dinaikin belakangan pas edit, slot baru ditambahin;
-            kalau diturunin, slot yang udah ada gak ikut kehapus.
+            Sistem otomatis menyiapkan slot sesi kosong sejumlah ini di Kelola
+            Pesanan Bootcamp, tinggal diisi tanggal, mentor, dan tautannya. Jika
+            angkanya dinaikkan saat mengedit, slot baru akan ditambahkan; jika
+            diturunkan, slot yang sudah ada tidak ikut terhapus.
           </p>
         </div>
       );

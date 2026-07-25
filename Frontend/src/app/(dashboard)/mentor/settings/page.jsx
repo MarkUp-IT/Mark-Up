@@ -427,7 +427,7 @@ export default function MentorSettings() {
               Lengkapi dulu data wajib di bawah ini
             </p>
             <p className="text-[#FCD34D]/80 text-[12px] mt-1">
-              Sebelum lengkap, kamu cuma bisa akses halaman Pengaturan ini dan belum muncul di halaman Mentors publik. Field wajib: Foto Profil, Nama, Nomor WhatsApp, LinkedIn, Instagram, minimal 1 Keahlian, dan Rekening Bank.
+              Sebelum lengkap, kamu hanya dapat mengakses halaman Pengaturan ini dan belum muncul di halaman Mentors publik. Kolom wajib: Foto Profil, Nama, Nomor WhatsApp, LinkedIn, Instagram, minimal 1 Keahlian, dan Rekening Bank.
             </p>
           </div>
         </motion.div>

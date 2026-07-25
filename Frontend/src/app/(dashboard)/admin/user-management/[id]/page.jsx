@@ -61,7 +61,7 @@ export default function UserDetail() {
           Kembali ke Manajemen User
         </Link>
         <p className="text-[#64748B] text-[14px]">
-          Profil dengan ID &ldquo;{params?.id}&rdquo; nggak ditemukan.
+          Profil dengan ID &ldquo;{params?.id}&rdquo; tidak ditemukan.
         </p>
       </DashboardLayout>
     );
@@ -186,7 +186,7 @@ export default function UserDetail() {
                   <div key={idx} className="flex flex-col gap-0.5">
                     <p className="text-[#1E293B] font-semibold text-[13.5px]">{exp.title}</p>
                     <p className="text-[#94A3B8] text-[12px]">
-                      {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : "Sekarang"}
+                      {formatMonthYear(exp.start_date)} s.d. {exp.end_date ? formatMonthYear(exp.end_date) : "Sekarang"}
                     </p>
                   </div>
                 ))
@@ -204,7 +204,7 @@ export default function UserDetail() {
               </div>
               <div>
                 <p className="text-[#1E293B] font-semibold text-[14px]">
-                  {mentorProfile?.bank_name || "-"} — {mentorProfile?.bank_account || "-"}
+                  {mentorProfile?.bank_name || "-"} · {mentorProfile?.bank_account || "-"}
                 </p>
                 <p className="text-[#64748B] text-[12.5px]">a.n. {mentorProfile?.bank_account_holder || "-"}</p>
               </div>

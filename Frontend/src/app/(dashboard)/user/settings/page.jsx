@@ -213,10 +213,10 @@ const handleDeleteAccount = async () => {
     // Akun baru beneran dihapus setelah user klik link di email itu.
     const res = await apiRequest("/api/accounts/me/delete/", { method: "POST" });
     setShowDeleteModal(false);
-    toast.success("Cek email kamu", {
+    toast.success("Periksa email kamu", {
       description:
         res?.detail ||
-        "Link konfirmasi penghapusan akun sudah dikirim ke email kamu.",
+        "Tautan konfirmasi penghapusan akun sudah dikirim ke email kamu.",
     });
   } catch (err) {
     toast.error("Gagal mengirim konfirmasi", { description: err?.message || "Terjadi kesalahan." });
@@ -518,9 +518,10 @@ const handleDeleteAccount = async () => {
           <div>
             <p className="text-white text-[13px] font-medium">Hapus Akun</p>
             <p className="text-[#9CA3AF] text-[12px] mt-0.5">
-              Mau hapus akun? Klik tombol di samping. Kami akan kirim link
-              konfirmasi ke email kamu, dan akun baru dihapus setelah kamu klik
-              link itu. Riwayat transaksi &amp; sertifikat tetap tersimpan.
+              Ingin menghapus akun? Tekan tombol di samping. Kami akan mengirim
+              tautan konfirmasi ke email kamu, dan akun baru dihapus setelah kamu
+              membuka tautan tersebut. Riwayat transaksi dan sertifikat tetap
+              tersimpan.
             </p>
           </div>
           <button
@@ -571,13 +572,16 @@ const handleDeleteAccount = async () => {
                 </button>
               </div>
               <p className="text-[#9CA3AF] text-[13px] leading-relaxed">
-                Kami akan kirim <span className="text-white font-medium">link
-                konfirmasi</span> ke email{" "}
+                Kami akan mengirim{" "}
+                <span className="text-white font-medium">tautan konfirmasi</span>{" "}
+                ke email{" "}
                 <span className="text-white font-medium">{email || "kamu"}</span>.
-                Akunmu <span className="text-white font-medium">baru dihapus
-                setelah kamu klik link di email itu</span> -- jadi akun aman dari
-                penghapusan gak sengaja. Riwayat transaksi &amp; sertifikat tetap
-                tersimpan.
+                Akun kamu{" "}
+                <span className="text-white font-medium">
+                  baru dihapus setelah kamu membuka tautan pada email tersebut
+                </span>
+                , sehingga akun aman dari penghapusan yang tidak disengaja.
+                Riwayat transaksi dan sertifikat tetap tersimpan.
               </p>
               <div className="flex items-center gap-3 mt-1">
                 <button

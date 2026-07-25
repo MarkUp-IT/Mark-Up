@@ -72,8 +72,8 @@ def register_view(request):
 		subject="Verifikasi Email MARK-UP",
 		message=(
 			f"Halo {user.fullname},\n\n"
-			f"Terima kasih sudah mendaftar di MARK-UP. Klik link berikut buat verifikasi email kamu:\n{verify_link}\n\n"
-			"Kalau kamu nggak merasa mendaftar, abaikan email ini."
+			f"Terima kasih sudah mendaftar di MARK-UP. Buka tautan berikut untuk memverifikasi email kamu:\n{verify_link}\n\n"
+			"Jika kamu tidak merasa mendaftar, abaikan email ini."
 		),
 		from_email=settings.DEFAULT_FROM_EMAIL,
 		recipient_list=[user.email],
@@ -136,7 +136,7 @@ def login_view(request):
 	if not user.is_email_verified:
 		return JsonResponse(
 			{
-				"detail": "Email kamu belum diverifikasi. Silakan cek inbox kamu atau minta kirim ulang link verifikasi.",
+				"detail": "Email kamu belum diverifikasi. Silakan periksa kotak masuk email kamu atau minta kirim ulang tautan verifikasi.",
 				"code": "email_not_verified",
 			},
 			status=403,
@@ -144,7 +144,7 @@ def login_view(request):
 
 	if user.status == UserStatus.INACTIVE:
 		return JsonResponse(
-			{"detail": "Akun ini sudah dinonaktifkan. Hubungi tim kami kalau ini keliru."},
+			{"detail": "Akun ini sudah dinonaktifkan. Hubungi tim kami jika ini keliru."},
 			status=403,
 		)
 
@@ -234,7 +234,7 @@ def google_login_view(request):
 
 	if user.status == UserStatus.INACTIVE:
 		return JsonResponse(
-			{"detail": "Akun ini sudah dinonaktifkan. Hubungi tim kami kalau ini keliru."},
+			{"detail": "Akun ini sudah dinonaktifkan. Hubungi tim kami jika ini keliru."},
 			status=403,
 		)
 
@@ -493,11 +493,12 @@ def delete_account(request):
 		message=(
 			f"Halo {user.fullname},\n\n"
 			f"Kami menerima permintaan untuk menghapus akun MARK-UP kamu.\n\n"
-			f"Kalau ini memang kamu, klik link berikut untuk mengonfirmasi "
+			f"Jika ini memang kamu, buka tautan berikut untuk mengonfirmasi "
 			f"(berlaku 30 menit):\n{confirm_link}\n\n"
-			"Setelah dikonfirmasi, akunmu dinonaktifkan dan gak bisa dipakai "
-			"login lagi. Riwayat transaksi & sertifikat tetap tersimpan.\n\n"
-			"Kalau kamu NGGAK minta ini, abaikan aja email ini -- akunmu tetap aman."
+			"Setelah dikonfirmasi, akun kamu dinonaktifkan dan tidak dapat "
+			"digunakan untuk masuk lagi. Riwayat transaksi dan sertifikat tetap "
+			"tersimpan.\n\n"
+			"Jika kamu tidak meminta ini, abaikan saja email ini. Akun kamu tetap aman."
 		),
 		from_email=settings.DEFAULT_FROM_EMAIL,
 		recipient_list=[user.email],
@@ -577,7 +578,7 @@ def forgot_password(request):
 
 	email = (request_data.get("email") or "").strip()
 	generic_response = JsonResponse(
-		{"detail": "Kalau email itu terdaftar, link reset password sudah dikirim."},
+		{"detail": "Jika email tersebut terdaftar, tautan untuk mengatur ulang kata sandi sudah dikirim."},
 		status=200,
 	)
 
@@ -605,8 +606,8 @@ def forgot_password(request):
 		subject="Reset Password MARK-UP",
 		message=(
 			f"Halo {user.fullname},\n\n"
-			f"Klik link berikut buat bikin password baru (berlaku 30 menit):\n{reset_link}\n\n"
-			"Kalau kamu nggak minta reset password, abaikan email ini."
+			f"Buka tautan berikut untuk membuat kata sandi baru (berlaku 30 menit):\n{reset_link}\n\n"
+			"Jika kamu tidak meminta pengaturan ulang kata sandi, abaikan email ini."
 		),
 		from_email=settings.DEFAULT_FROM_EMAIL,
 		recipient_list=[user.email],
@@ -706,7 +707,7 @@ def resend_verification_email(request):
 
 	email = (request_data.get("email") or "").strip()
 	generic_response = JsonResponse(
-		{"detail": "Kalau email itu terdaftar dan belum diverifikasi, link verifikasi baru sudah dikirim."},
+		{"detail": "Jika email tersebut terdaftar dan belum diverifikasi, tautan verifikasi baru sudah dikirim."},
 		status=200,
 	)
 
@@ -733,7 +734,7 @@ def resend_verification_email(request):
 		message=(
 			f"Halo {user.fullname},\n\n"
 			f"Klik link berikut buat verifikasi email kamu:\n{verify_link}\n\n"
-			"Kalau kamu nggak merasa mendaftar, abaikan email ini."
+			"Jika kamu tidak merasa mendaftar, abaikan email ini."
 		),
 		from_email=settings.DEFAULT_FROM_EMAIL,
 		recipient_list=[user.email],

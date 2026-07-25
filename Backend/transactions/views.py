@@ -1019,7 +1019,7 @@ def update_payout_fee(request, payout_id):
         return JsonResponse({"detail": "Data pencairan tidak ditemukan."}, status=404)
 
     if payout.status == PayoutStatus.PAID:
-        return JsonResponse({"detail": "Pencairan sudah lunas, komisi gak bisa diubah."}, status=400)
+        return JsonResponse({"detail": "Pencairan sudah lunas, komisi tidak dapat diubah."}, status=400)
 
     data = get_request_data(request)
     if data is None:

@@ -719,9 +719,9 @@ export default function ProductDetail() {
                     {scheduleModal.isInitial ? "Dipilih" : "Diubah"}
                   </h3>
                   <p className="text-[#9CA3AF] text-[13px] mt-2 leading-relaxed">
-                    Jadwal langsung aktif — mentor emang udah bersedia di slot
-                    yang kamu pilih. Link sesinya bisa langsung kamu pakai pas
-                    waktunya tiba.
+                    Jadwal langsung aktif karena mentor memang sudah bersedia
+                    pada slot yang kamu pilih. Tautan sesinya bisa langsung kamu
+                    gunakan saat waktunya tiba.
                   </p>
                 </div>
                 <button
@@ -754,7 +754,7 @@ export default function ProductDetail() {
 
                 <div className="shrink-0 px-6 pt-5 pb-3">
                   <label className="text-[#E2E8F0] text-[13px] font-medium">
-                    Slot tersedia — {scheduleModal.session?.mentor}
+                    Slot tersedia dari {scheduleModal.session?.mentor}
                   </label>
                 </div>
 
@@ -874,7 +874,7 @@ export default function ProductDetail() {
                   <div className="p-6 flex flex-col gap-4">
                     <p className="flex items-start gap-2 text-[#F59E0B] text-[12px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3 leading-relaxed">
                       <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                      Refund ditutup — sesi berikutnya kurang dari 3 jam lagi.
+                      Refund ditutup karena sesi berikutnya kurang dari 3 jam lagi.
                       Coba ajukan lagi setelah sesi itu lewat.
                     </p>
                   </div>

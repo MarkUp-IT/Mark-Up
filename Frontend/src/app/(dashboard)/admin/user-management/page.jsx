@@ -271,9 +271,9 @@ export default function UserManagement() {
               <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none" />
             </div>
             <p className="text-[#94A3B8] text-[11px] leading-relaxed">
-              Semua orang daftar sebagai User biasa. Naikin ke Mentor kalau udah
-              lolos seleksi jadi pemateri (lengkapin profil mentor-nya
-              belakangan lewat halaman Mentor).
+              Semua orang mendaftar sebagai User biasa. Naikkan menjadi Mentor
+              jika sudah lolos seleksi sebagai pemateri (profil mentor dapat
+              dilengkapi kemudian melalui halaman Mentor).
             </p>
           </div>
 

@@ -486,9 +486,9 @@ export default function MentoringSchedule() {
                     </div>
                   </div>
                   <p className="text-[#6B7280] text-[11px]">
-                    Jam yang kamu pilih di bawah bakal ditambahin ke tiap
-                    tanggal dalam rentang ini (nggak ngilangin slot yang udah
-                    ada, termasuk yang udah dibooking).
+                    Jam yang kamu pilih di bawah akan ditambahkan ke tiap
+                    tanggal dalam rentang ini (tidak menghapus slot yang sudah
+                    ada, termasuk yang sudah dipesan).
                   </p>
                 </div>
               ) : (
@@ -513,8 +513,8 @@ export default function MentoringSchedule() {
                   {bookedTimes.length > 0 && (
                     <p className="flex items-start gap-2 text-[#D1D83E] text-[11px] bg-[#D1D83E]/5 border border-[#D1D83E]/20 rounded-[8px] px-3.5 py-2.5">
                       <Lock size={12} className="shrink-0 mt-0.5" />
-                      {bookedTimes.length} jam di tanggal ini udah ada mentee
-                      yang booking, jadi nggak bisa dimatiin dari sini.
+                      {bookedTimes.length} jam pada tanggal ini sudah dipesan
+                      mentee, sehingga tidak dapat dinonaktifkan dari sini.
                     </p>
                   )}
                 </div>
