@@ -588,6 +588,15 @@ def checkout_product(request):
             {"detail": "Terlalu banyak percobaan checkout. Coba lagi nanti."}, status=429
         )
 
+    # Gate profil dicek paling awal -- pesannya paling relevan buat user yang
+    # profilnya belum lengkap (sebelum diminta bukti bayar dsb). FE juga udah
+    # nge-redirect ke Pengaturan sebelum sampe sini, ini jaring pengaman.
+    if not request.user.is_profile_complete():
+        return JsonResponse(
+            {"detail": "Lengkapi dulu profil kamu di Pengaturan sebelum membeli produk."},
+            status=400,
+        )
+
     request_data = get_request_data(request)
     if request_data is None:
         return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
@@ -636,15 +645,6 @@ def checkout_product(request):
 
     if detail is None or not detail.is_active:
         return JsonResponse({"detail": "Produk tidak tersedia."}, status=400)
-
-    # Berlaku buat semua tipe produk (bukan cuma mentoring) -- frontend udah
-    # nge-redirect ke Pengaturan duluan kalau belum lengkap, ini cuma jaring
-    # pengaman terakhir di sisi server.
-    if not request.user.is_profile_complete():
-        return JsonResponse(
-            {"detail": "Lengkapi dulu profil kamu di Pengaturan sebelum membeli produk."},
-            status=400,
-        )
 
     if product.type == ProductType.MENTORING and not mentor_availability_id:
         return JsonResponse(
