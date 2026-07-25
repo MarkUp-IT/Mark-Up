@@ -241,20 +241,22 @@ export default function MyProducts() {
             </p>
           </div>
 
-          <div className="inline-flex items-center gap-1 bg-[#170F26] border border-[#2D2342] rounded-[10px] p-1 w-fit overflow-x-auto no-scrollbar">
-            {FILTERS.map((f) => (
-              <button
-                key={f}
-                onClick={() => setActiveFilter(f)}
-                className={`px-5 py-2 rounded-[8px] text-[13px] font-medium whitespace-nowrap transition-colors ${
-                  activeFilter === f
-                    ? "bg-[#2D1B4E] text-white shadow-sm"
-                    : "text-[#9CA3AF] hover:text-white"
-                }`}
-              >
-                {f}
-              </button>
-            ))}
+          <div className="max-w-full overflow-x-auto no-scrollbar">
+            <div className="inline-flex items-center gap-1 bg-[#170F26] border border-[#2D2342] rounded-[10px] p-1">
+              {FILTERS.map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setActiveFilter(f)}
+                  className={`px-5 py-2 rounded-[8px] text-[13px] font-medium whitespace-nowrap transition-colors ${
+                    activeFilter === f
+                      ? "bg-[#2D1B4E] text-white shadow-sm"
+                      : "text-[#9CA3AF] hover:text-white"
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

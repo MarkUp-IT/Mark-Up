@@ -39,6 +39,10 @@ export default function Header({
               src={avatarSrc || "/images/default-avatar.svg"}
               alt={profileName}
               className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = "/images/default-avatar.svg";
+              }}
             />
           </div>
         </div>

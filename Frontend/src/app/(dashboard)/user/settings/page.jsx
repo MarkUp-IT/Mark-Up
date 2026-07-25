@@ -277,6 +277,10 @@ const handleDeleteAccount = async () => {
               src={profileImage || "/images/default-avatar.svg"}
               alt="Foto profil"
               className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = "/images/default-avatar.svg";
+              }}
             />
           </div>
           <label

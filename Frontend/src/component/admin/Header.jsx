@@ -43,6 +43,10 @@ export default function Header({
               src={avatarSrc || "/images/default-avatar.svg"}
               alt="Avatar admin"
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = "/images/default-avatar.svg";
+              }}
             />
           </div>
         </div>

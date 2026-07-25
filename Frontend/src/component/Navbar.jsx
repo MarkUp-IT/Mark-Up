@@ -144,6 +144,10 @@ export default function Navbar({ variant = "glass" }) {
             src={profile.avatarSrc || "/images/default-avatar.svg"}
             alt={profile.profileName}
             className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "/images/default-avatar.svg";
+            }}
           />
         </div>
       </button>

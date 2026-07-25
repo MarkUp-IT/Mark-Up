@@ -798,10 +798,11 @@ def get_current_user(request):
         or user.username
     )
 
-    avatar_src = (
-		_get_profile_image_url(user, request)
-		or f"https://api.dicebear.com/7.x/notionists/svg?seed={profile_name}"
-	)
+    # avatar_src dibiarkan None kalau user belum upload foto -- frontend yang
+    # nampilin fallback stickman lokal (/images/default-avatar.svg). Dulu di
+    # sini di-fallback ke URL dicebear eksternal, tapi kalau layanan itu gagal
+    # diakses (diblokir/offline) yang muncul malah ikon gambar rusak.
+    avatar_src = _get_profile_image_url(user, request)
 
     dashboard_href_by_role = {
         UserRole.ADMIN: "/admin",
