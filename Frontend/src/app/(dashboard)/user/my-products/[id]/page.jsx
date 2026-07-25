@@ -698,10 +698,12 @@ export default function ProductDetail() {
                 </button>
               </div>
             ) : (
-              // flex-col + min-h-0 supaya daftar slot punya area scroll sendiri;
-              // header & tombol Konfirmasi tetap kelihatan (shrink-0), jadi user
-              // gak perlu scroll sampe slot terakhir cuma buat nyimpan.
-              <form onSubmit={handleSubmitSchedule} className="flex flex-col min-h-0 flex-1">
+              // Daftar slot dikasih tinggi maksimal eksplisit (max-h-[40vh]) +
+              // overflow sendiri, jadi popup TOTAL selalu pendek dan tombol
+              // Konfirmasi (footer shrink-0) selalu kelihatan di mobile walau
+              // mentor ngisi ratusan slot. Pakai tinggi eksplisit, bukan flex-1,
+              // karena flex-1 di dalam max-h kadang gak reliable di browser HP.
+              <form onSubmit={handleSubmitSchedule} className="flex flex-col overflow-hidden">
                 <div className="shrink-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
                   <h3 className="text-white font-bold text-[16px]">
                     {scheduleModal.isInitial ? "Pilih Jadwal" : "Ganti Jadwal"}
@@ -722,7 +724,7 @@ export default function ProductDetail() {
                   </label>
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-2">
+                <div className="overflow-y-auto max-h-[40vh] px-6 pb-2">
                   {slotsLoading ? (
                     <p className="text-[#9CA3AF] text-[12px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
                       Memuat jadwal mentor...

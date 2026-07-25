@@ -220,16 +220,8 @@ export default function CheckoutDetailPage() {
   };
 
   const handleProceed = () => {
-    if (
-      !buyerInfo.fullName.trim() ||
-      !buyerInfo.email.trim() ||
-      !buyerInfo.phone.trim()
-    ) {
-      setFormError(
-        "Lengkapi dulu Informasi Pembeli sebelum lanjut ke pembayaran.",
-      );
-      return;
-    }
+    // Data pembeli (nama/email/telepon) diambil dari profil, jadi gak divalidasi
+    // manual di sini lagi -- gate kelengkapan profil di atas + backend yang jaga.
     if (isMentoring && (!selectedMentorId || !selectedSlotId)) {
       setFormError(
         "Pilih mentor dan jadwal sesi dulu sebelum lanjut ke pembayaran.",
@@ -316,6 +308,14 @@ export default function CheckoutDetailPage() {
           return;
         }
 
+        // Prefill data pembeli dari profil user -- nama/email/telepon udah
+        // diisi di halaman Pengaturan, jadi gak perlu diketik ulang di checkout.
+        setBuyerInfo({
+          email: data.user?.email || "",
+          fullName: data.user?.fullname || "",
+          phone: data.user?.phone || "",
+        });
+
         const REQUIRED_FIELDS = {
           phone: "Nomor WhatsApp",
           institution: "Institusi",
@@ -347,7 +347,7 @@ export default function CheckoutDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, setBuyerInfo]);
 
 
   if (isLoadingProduct || checkingProfile) {
@@ -641,7 +641,7 @@ export default function CheckoutDetailPage() {
                         : `Jadwal Tersedia — ${selectedMentor.name}`}
                     </h2>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="mentor-scroll flex flex-wrap gap-2 max-h-[220px] overflow-y-auto pr-1">
                     {selectedMentor.slots.map((slot) => (
                       <button
                         key={slot.id}
@@ -681,59 +681,46 @@ export default function CheckoutDetailPage() {
             </>
           )}
 
-          {/* Informasi Pembeli */}
+          {/* Informasi Pembeli -- diambil otomatis dari profil (Pengaturan),
+              jadi user gak perlu ngetik ulang. Cuma ditampilin read-only + catatan. */}
           <motion.div
             {...fadeIn}
             className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-4"
           >
-            <h2 className="font-bold text-[15px] text-white">
-              Informasi Pembeli
-            </h2>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[#E2E8F0] text-[12px] font-semibold">
-                Email <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="email"
-                value={buyerInfo.email}
-                onChange={(e) =>
-                  setBuyerInfo({ ...buyerInfo, email: e.target.value })
-                }
-                className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
-              />
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col min-w-0">
+                <h2 className="font-bold text-[15px] text-white">
+                  Informasi Pembeli
+                </h2>
+                <p className="text-[#6B7280] text-[11px] mt-0.5">
+                  Diambil dari profil kamu. Ubah di{" "}
+                  <a href="/user/settings" className="text-[#148F89] hover:underline">
+                    Pengaturan
+                  </a>
+                  .
+                </p>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[#E2E8F0] text-[12px] font-semibold">
-                Nama Lengkap <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="text"
-                value={buyerInfo.fullName}
-                onChange={(e) =>
-                  setBuyerInfo({ ...buyerInfo, fullName: e.target.value })
-                }
-                className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
-              />
-              <p className="text-[#6B7280] text-[10px]">
-                Sesuai KTP/KK, dipakai buat sertifikat.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[#E2E8F0] text-[12px] font-semibold">
-                Nomor WhatsApp <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="tel"
-                value={buyerInfo.phone}
-                onChange={(e) =>
-                  setBuyerInfo({ ...buyerInfo, phone: e.target.value })
-                }
-                placeholder="+62"
-                className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white placeholder:text-[#64748B] outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
-              />
+            <div className="bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 flex flex-col gap-1.5 text-[13px]">
+              <div className="flex justify-between gap-3">
+                <span className="text-[#6B7280] shrink-0">Nama</span>
+                <span className="text-white font-medium text-right truncate">
+                  {buyerInfo.fullName || "-"}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-[#6B7280] shrink-0">Email</span>
+                <span className="text-white font-medium text-right truncate">
+                  {buyerInfo.email || "-"}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-[#6B7280] shrink-0">WhatsApp</span>
+                <span className="text-white font-medium text-right truncate">
+                  {buyerInfo.phone || "-"}
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
