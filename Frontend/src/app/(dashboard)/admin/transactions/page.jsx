@@ -435,6 +435,37 @@ export default function Transactions() {
                   </p>
                 )}
               </div>
+
+              {selectedTx?.product_type === "BOOTCAMP" && (
+                <div className="flex flex-col gap-2">
+                  <span className="text-[#1E293B] font-bold text-[13px]">
+                    Syarat Pendaftaran Bootcamp
+                  </span>
+                  <div className="grid grid-cols-1 gap-2">
+                    {[
+                      ["Bukti Follow", selectedTx.follow_proof],
+                      ["Bukti Share WhatsApp", selectedTx.wa_share_proof],
+                      ["Commitment Letter", selectedTx.commitment_letter],
+                    ].map(([label, url]) => (
+                      <div key={label} className="flex items-center justify-between gap-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-2.5">
+                        <span className="text-[#475569] text-[12px] font-medium">{label}</span>
+                        {url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#148F89] text-[12px] font-semibold hover:underline shrink-0"
+                          >
+                            Lihat
+                          </a>
+                        ) : (
+                          <span className="text-[#94A3B8] text-[11px]">Belum ada</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {selectedTx?.status === "PENDING" ? (

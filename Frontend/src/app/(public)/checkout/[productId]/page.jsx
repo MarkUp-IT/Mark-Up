@@ -241,6 +241,7 @@ export default function CheckoutDetailPage() {
     setCheckoutSummary({
       productId: product.id,
       productTitle: product.title,
+      productType: product.type,
       total,
     });
 

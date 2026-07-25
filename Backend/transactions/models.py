@@ -58,6 +58,19 @@ class Transaction(models.Model):
         default="",
         help_text="Catatan dari pembeli, misal nama-nama anggota tim buat pesanan grup.",
     )
+    # Syarat pendaftaran khusus BOOTCAMP -- diupload pembeli pas checkout.
+    follow_proof = models.FileField(
+        upload_to="bootcamp_docs/%Y/%m/", blank=True, null=True,
+        help_text="Bukti follow (foto).",
+    )
+    wa_share_proof = models.FileField(
+        upload_to="bootcamp_docs/%Y/%m/", blank=True, null=True,
+        help_text="Bukti share WhatsApp (foto).",
+    )
+    commitment_letter = models.FileField(
+        upload_to="bootcamp_docs/%Y/%m/", blank=True, null=True,
+        help_text="Commitment letter (foto atau PDF).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(blank=True, null=True)
 

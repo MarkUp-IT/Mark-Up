@@ -136,6 +136,10 @@ def get_transactions(request):
             "status": item.transaction.payment_status,
             "proof_of_payment": item.transaction.proof_of_payment.url if item.transaction.proof_of_payment else None,
             "notes": item.transaction.notes,
+            "product_type": item.product.type,
+            "follow_proof": item.transaction.follow_proof.url if item.transaction.follow_proof else None,
+            "wa_share_proof": item.transaction.wa_share_proof.url if item.transaction.wa_share_proof else None,
+            "commitment_letter": item.transaction.commitment_letter.url if item.transaction.commitment_letter else None,
         })
 
     return JsonResponse(
@@ -594,6 +598,10 @@ def checkout_product(request):
     mentor_availability_id = request_data.get("availability_slot_id")
     notes = (request_data.get("notes") or "").strip()
     proof_file = request.FILES.get("proof_of_payment")
+    # Syarat khusus bootcamp (divalidasi di bawah setelah tau tipe produk).
+    follow_proof = request.FILES.get("follow_proof")
+    wa_share_proof = request.FILES.get("wa_share_proof")
+    commitment_letter = request.FILES.get("commitment_letter")
 
     if not product_id:
         return JsonResponse({"detail": "product_id diperlukan."}, status=400)
@@ -643,6 +651,21 @@ def checkout_product(request):
             {"detail": "availability_slot_id diperlukan untuk produk mentoring."},
             status=400,
         )
+
+    # Bootcamp wajib lampirin bukti follow, bukti share WA, & commitment letter.
+    if product.type == ProductType.BOOTCAMP:
+        missing_docs = []
+        if not follow_proof:
+            missing_docs.append("bukti follow")
+        if not wa_share_proof:
+            missing_docs.append("bukti share WhatsApp")
+        if not commitment_letter:
+            missing_docs.append("commitment letter")
+        if missing_docs:
+            return JsonResponse(
+                {"detail": "Lengkapi dulu: " + ", ".join(missing_docs) + "."},
+                status=400,
+            )
 
     price = detail.new_price if getattr(detail, "new_price", None) else detail.original_price
 
@@ -717,6 +740,9 @@ def checkout_product(request):
                 proof_of_payment=proof_file,
                 payment_status=PaymentStatus.PENDING,
                 notes=notes,
+                follow_proof=follow_proof,
+                wa_share_proof=wa_share_proof,
+                commitment_letter=commitment_letter,
             )
 
             item = TransactionItem.objects.create(
