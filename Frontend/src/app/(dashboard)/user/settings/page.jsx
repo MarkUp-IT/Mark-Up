@@ -382,7 +382,7 @@ const handleDeleteAccount = async () => {
             value={linkedIn}
             onChange={setLinkedIn}
             type="url"
-            note="Format: linkedin.com/in/username"
+            note="Tempel link lengkap, contoh: https://linkedin.com/in/namamu (bukan username saja)"
           />
           {/* Akhir Tambahan Data */}
         </div>

@@ -1,6 +1,27 @@
 import json
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.cache import cache
+from django.core.validators import URLValidator
+from django.core.exceptions import ValidationError as DjangoValidationError
+
+
+def normalize_and_validate_url(value, must_contain=None):
+    """Pastikan sebuah field link beneran berupa URL (bukan username doang).
+    Nge-prepend https:// kalau user gak nulis skema, lalu validasi. Balikin
+    tuple (url_ternormalisasi, pesan_error|None). must_contain dipakai buat
+    maksa domain tertentu (mis. 'linkedin.com')."""
+    value = (value or "").strip()
+    if not value:
+        return "", None
+    if not value.startswith(("http://", "https://")):
+        value = "https://" + value
+    try:
+        URLValidator()(value)
+    except DjangoValidationError:
+        return value, "Harus berupa link yang valid, contoh: https://..."
+    if must_contain and must_contain not in value.lower():
+        return value, f"Link harus mengarah ke {must_contain}."
+    return value, None
 
 
 class EmailVerificationTokenGenerator(PasswordResetTokenGenerator):

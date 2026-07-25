@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from accounts.decorators import jwt_required, role_required
 from accounts.models import UserRole, AuditAction
-from accounts.utils import log_audit
+from accounts.utils import log_audit, normalize_and_validate_url
 from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
 from mentors.models import MentorProfile
@@ -391,7 +391,13 @@ def update_bootcamp_session_template(request, session_id):
     if "description" in request_data:
         session.description = request_data["description"]
     if "meeting_link" in request_data:
-        session.meeting_link = request_data["meeting_link"]
+        link, link_error = normalize_and_validate_url(request_data["meeting_link"])
+        if link_error:
+            return JsonResponse(
+                {"errors": {"meeting_link": ["Link Zoom/meeting harus berupa link yang valid (contoh: https://...)."]}},
+                status=400,
+            )
+        session.meeting_link = link
     if request_data.get("start_time"):
         session.start_time = parse_datetime(request_data["start_time"])
     if request_data.get("end_time"):

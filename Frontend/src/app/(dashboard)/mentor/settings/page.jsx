@@ -509,14 +509,14 @@ export default function MentorSettings() {
             value={linkedin}
             onChange={setLinkedin}
             icon={<Link2 size={16} />}
-            note="Tautan profil LinkedIn-mu."
+            note="Tempel link lengkap, contoh: https://linkedin.com/in/namamu"
           />
           <Field
             label="Instagram *"
             value={instagram}
             onChange={setInstagram}
             icon={<Instagram size={16} />}
-            note="Tautan/username Instagram-mu."
+            note="Tempel link lengkap, contoh: https://instagram.com/namamu (bukan username saja)"
           />
           <Field
             label="Headline"

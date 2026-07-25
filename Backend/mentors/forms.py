@@ -3,6 +3,7 @@ from datetime import datetime
 
 from django import forms
 from django.utils import timezone
+from accounts.utils import normalize_and_validate_url
 from .models import MentorAvailability, MentorProfile, MentorExperience
 
 
@@ -18,6 +19,26 @@ class MentorProfileForm(forms.ModelForm):
             "linkedin_url",
             "instagram_url",
         ]
+
+    def clean_linkedin_url(self):
+        url, error = normalize_and_validate_url(
+            self.cleaned_data.get("linkedin_url"), must_contain="linkedin.com"
+        )
+        if error:
+            raise forms.ValidationError(
+                "URL LinkedIn tidak valid." if "valid" in error else error
+            )
+        return url
+
+    def clean_instagram_url(self):
+        url, error = normalize_and_validate_url(
+            self.cleaned_data.get("instagram_url"), must_contain="instagram.com"
+        )
+        if error:
+            raise forms.ValidationError(
+                "URL Instagram tidak valid." if "valid" in error else error
+            )
+        return url
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

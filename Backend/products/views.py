@@ -1204,7 +1204,15 @@ def update_mentoring_order_session(request, session_id):
         return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
     if "zoom_link" in request_data:
-        session.zoom_link = request_data["zoom_link"]
+        from accounts.utils import normalize_and_validate_url
+
+        link, link_error = normalize_and_validate_url(request_data["zoom_link"])
+        if link_error:
+            return JsonResponse(
+                {"errors": {"zoom_link": ["Link Zoom harus berupa link yang valid (contoh: https://...)."]}},
+                status=400,
+            )
+        session.zoom_link = link
 
     if request_data.get("status") == "completed" and session.status != "completed":
         session.status = MentoringSession.SessionStatus.COMPLETED
