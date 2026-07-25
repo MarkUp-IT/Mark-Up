@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
+import Linkify from "@/component/Linkify";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { SearchX, FileText, Check, LogIn } from "lucide-react";
@@ -387,7 +388,9 @@ export default function ProdukPage() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar text-sm text-gray-300 leading-relaxed mb-6">
-                  <p className="mb-4">{selectedProduct.desc}</p>
+                  <p className="mb-4 whitespace-pre-line">
+                    <Linkify text={selectedProduct.desc} />
+                  </p>
 
                   {/* --- MODUL: satu file PDF --- */}
                   {selectedProduct.type === "MODULE" && selectedProduct.filePdfUrl && (

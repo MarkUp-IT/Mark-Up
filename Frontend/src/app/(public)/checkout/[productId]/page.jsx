@@ -19,6 +19,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import Navbar from "@/component/Navbar";
+import Linkify from "@/component/Linkify";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
@@ -575,8 +576,8 @@ export default function CheckoutDetailPage() {
 
                           {isExpanded && (
                             <div className="px-3 pb-3 pt-1 border-t border-[#2D2342] flex flex-col gap-2.5">
-                              <p className="text-[#E2E8F0] text-[11px] leading-relaxed pt-2.5">
-                                {mentor.bio}
+                              <p className="text-[#E2E8F0] text-[11px] leading-relaxed pt-2.5 whitespace-pre-line">
+                                <Linkify text={mentor.bio} />
                               </p>
                               <div className="flex flex-wrap gap-1.5">
                                 {mentor.expertise.map((exp) => (

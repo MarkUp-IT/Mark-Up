@@ -19,6 +19,7 @@ import {
   MoreVertical,
 } from "lucide-react";
 import { toast } from "sonner";
+import Linkify from "@/component/Linkify";
 import DashboardLayout from "@/component/user/DashboardLayout";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
@@ -500,8 +501,8 @@ export default function ProductDetail() {
         <h2 className="text-white font-bold text-[20px] sm:text-[24px]">
           {product.title}
         </h2>
-        <p className="text-white/80 text-[13px] max-w-[600px]">
-          {product.description}
+        <p className="text-white/80 text-[13px] max-w-[600px] whitespace-pre-line">
+          <Linkify text={product.description} />
         </p>
       </div>
 
