@@ -20,7 +20,13 @@ export default function CurrencyInput({
   prefix = "Rp",
   disabled,
 }) {
-  const displayValue = formatThousands(String(value ?? "").replace(/\D/g, ""));
+  // Ambil bagian INTEGER dulu (sebelum titik/koma desimal) baru buang
+  // non-digit. Backend kirim harga sebagai Decimal string "100000.00" --
+  // kalau langsung .replace(/\D/g,"") titik desimalnya kebuang & digit
+  // desimalnya nempel jadi "10000000" (100rb keliatan jadi 10jt pas edit).
+  const displayValue = formatThousands(
+    String(value ?? "").split(/[.,]/)[0].replace(/\D/g, ""),
+  );
 
   function handleChange(e) {
     const raw = e.target.value.replace(/\D/g, "");

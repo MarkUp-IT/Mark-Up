@@ -355,9 +355,9 @@ export default function ReferralCodes() {
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total Kode" value={codes.length} unit="kode" />
-        <StatCard label="Kode Aktif" value={activeCount} unit="kode" variant="success" />
-        <StatCard label="Total Terpakai" value={totalUsed} unit="kali" variant="primary" />
+        <StatCard label="Total Kode" value={codes.length} unit="kode" loading={loading} />
+        <StatCard label="Kode Aktif" value={activeCount} unit="kode" variant="success" loading={loading} />
+        <StatCard label="Total Terpakai" value={totalUsed} unit="kali" variant="primary" loading={loading} />
       </div>
 
       <div className="flex flex-col gap-4">

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError, setTokens } from "@/lib/api";
+import GoogleSignInButton from "@/component/GoogleSignInButton";
 
 // Paksa background input autofill browser tetap gelap -- browser (Chrome dkk)
 // otomatis kasih background terang ke field yang di-autofill/diinget, dan itu
@@ -245,6 +246,8 @@ export default function Login() {
           >
             {isSubmitting ? "Memproses..." : "Masuk"}
           </button>
+
+          <GoogleSignInButton />
 
           <p className="text-[13px] text-center text-[#9CA3AF]">
             Belum memiliki akun?{" "}

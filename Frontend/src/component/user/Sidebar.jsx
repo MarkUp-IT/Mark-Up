@@ -1,18 +1,31 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutGrid, ShieldCheck, Briefcase, Settings, X } from "lucide-react";
+import { api } from "@/lib/api";
+import NotifBadge from "@/component/NotifBadge";
 
+// badgeKey nyambung ke response /api/accounts/me/sidebar-badges/ -- Sertifikat
+// gak punya konsep "butuh tindakan" yang jelas, jadi gak dikasih badge.
 const menuList = [
-  { name: "My Products", url: "/user/my-products", icon: LayoutGrid },
+  { name: "My Products", url: "/user/my-products", icon: LayoutGrid, badgeKey: "my_products" },
   { name: "Sertifikat", url: "/user/certificates", icon: ShieldCheck },
-  { name: "Transaksi", url: "/user/transactions", icon: Briefcase },
-  { name: "Pengaturan Akun", url: "/user/settings", icon: Settings },
+  { name: "Transaksi", url: "/user/transactions", icon: Briefcase, badgeKey: "transactions" },
+  { name: "Pengaturan Akun", url: "/user/settings", icon: Settings, badgeKey: "settings" },
 ];
 
 export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const pathname = usePathname() || "/user/my-products";
+  const [badges, setBadges] = useState({});
+
+  useEffect(() => {
+    api
+      .get("/api/accounts/me/sidebar-badges/")
+      .then((data) => data && setBadges(data))
+      .catch(() => {});
+  }, []);
 
   return (
     <div
@@ -50,7 +63,8 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
               }`}
             >
               <Icon size={20} />
-              <span className="font-medium text-[14px]">{menu.name}</span>
+              <span className="font-medium text-[14px] flex-1">{menu.name}</span>
+              <NotifBadge count={badges[menu.badgeKey]} />
             </Link>
           );
         })}

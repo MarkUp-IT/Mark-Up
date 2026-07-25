@@ -19,6 +19,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import Navbar from "@/component/Navbar";
+import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
 
@@ -153,6 +154,9 @@ export default function CheckoutDetailPage() {
   const buyerInfo = useCheckoutFormStore((s) => s.buyerInfo);
   const setBuyerInfo = useCheckoutFormStore((s) => s.setBuyerInfo);
 
+  const notes = useCheckoutFormStore((s) => s.notes);
+  const setNotes = useCheckoutFormStore((s) => s.setNotes);
+
   const voucherCode = useCheckoutFormStore((s) => s.voucherCode);
   const setVoucherCode = useCheckoutFormStore((s) => s.setVoucherCode);
 
@@ -169,6 +173,12 @@ export default function CheckoutDetailPage() {
   const [voucherInput, setVoucherInput] = useState("");
 
   const [formError, setFormError] = useState("");
+
+  // Semua tipe produk (bukan cuma mentoring) sekarang wajib profil lengkap
+  // sebelum bisa checkout -- kalau belum, langsung diarahkan ke Pengaturan
+  // begitu halaman ini dibuka (lihat useEffect checkProfileCompleteness di
+  // bawah), jadi nggak perlu banner/nunggu tombol diklik dulu.
+  const [checkingProfile, setCheckingProfile] = useState(true);
 
   const selectedMentor = mentors.find((m) => m.id === selectedMentorId) || null;
   const selectedSlot =
@@ -231,6 +241,7 @@ export default function CheckoutDetailPage() {
     setCheckoutSummary({
       productId: product.id,
       productTitle: product.title,
+      productType: product.type,
       total,
     });
 
@@ -273,7 +284,10 @@ export default function CheckoutDetailPage() {
       setIsLoadingMentors(true);
       setMentorsError("");
       try {
-        const data = await api.get("/api/mentors/", { auth: false });
+        const data = await api.get(
+          `/api/mentors/?product_id=${params.productId}`,
+          { auth: false },
+        );
         setMentors(data.mentors.map(mapMentorFromApi));
       } catch (err) {
         setMentorsError(
@@ -285,10 +299,58 @@ export default function CheckoutDetailPage() {
     }
 
     fetchMentors();
-  }, [isMentoring]);
+  }, [isMentoring, params.productId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkProfileCompleteness() {
+      try {
+        const data = await api.get("/api/accounts/me/profile/");
+        if (cancelled) return;
+
+        if (!data) {
+          // Belum login -- biarin lanjut, nanti keblokir wajar pas submit
+          // checkout beneran (butuh token).
+          setCheckingProfile(false);
+          return;
+        }
+
+        const REQUIRED_FIELDS = {
+          phone: "Nomor WhatsApp",
+          institution: "Institusi",
+          current_status: "Status Saat Ini",
+          linkedin_url: "LinkedIn",
+        };
+        const missingFields = Object.entries(REQUIRED_FIELDS)
+          .filter(([field]) => !data.user?.[field]?.trim())
+          .map(([, label]) => label);
+        if (!data.user?.profile_image) {
+          missingFields.push("Foto Profil");
+        }
+
+        if (missingFields.length > 0) {
+          toast.error("Lengkapi profil kamu dulu", {
+            description: `Sebelum membeli produk, lengkapi dulu: ${missingFields.join(", ")}.`,
+          });
+          router.replace("/user/settings");
+          return;
+        }
+
+        setCheckingProfile(false);
+      } catch {
+        if (!cancelled) setCheckingProfile(false);
+      }
+    }
+
+    checkProfileCompleteness();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
 
-  if (isLoadingProduct) {
+  if (isLoadingProduct || checkingProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center text-white">
         Loading...
@@ -673,6 +735,22 @@ export default function CheckoutDetailPage() {
                 className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white placeholder:text-[#64748B] outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
               />
             </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[#E2E8F0] text-[12px] font-semibold">
+                Catatan <span className="text-[#6B7280] font-normal">(opsional)</span>
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                placeholder="Contoh: kalau ini pesanan tim, tulis nama-nama anggota di sini."
+                className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white placeholder:text-[#64748B] outline-none focus:border-[#148F89] transition-colors resize-none ${focusRing}`}
+              />
+              <p className="text-[#6B7280] text-[10px]">
+                Kalau produk ini dipesan buat tim/kelompok, tuliskan nama-nama anggotanya di sini biar mentor tahu.
+              </p>
+            </div>
           </motion.div>
 
           {/* Ringkasan + Voucher + CTA */}
@@ -743,7 +821,7 @@ export default function CheckoutDetailPage() {
 
             <button
               onClick={handleProceed}
-              className={`w-full bg-[#148F89] text-white text-[14px] font-bold py-3.5 rounded-[8px] hover:bg-[#117A75] transition-colors ${focusRing}`}
+              className={`w-full bg-[#148F89] text-white text-[14px] font-bold py-3.5 rounded-[8px] hover:bg-[#117A75] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#148F89] ${focusRing}`}
             >
               Lanjut ke Pembayaran
             </button>

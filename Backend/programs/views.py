@@ -233,7 +233,7 @@ def update_competition(request, competition_id):
 
 
 def _serialize_bootcamp_session_template(session):
-    assignment = session.session_mentors.select_related("mentor_profile__user").first()
+    assignments = list(session.session_mentors.select_related("mentor_profile__user").all())
     return {
         "id": str(session.id),
         "title": session.title,
@@ -241,8 +241,8 @@ def _serialize_bootcamp_session_template(session):
         "start_time": session.start_time.isoformat(),
         "end_time": session.end_time.isoformat(),
         "meeting_link": session.meeting_link or "",
-        "mentor_id": str(assignment.mentor_profile_id) if assignment else None,
-        "mentor_name": assignment.mentor_profile.user.fullname if assignment else None,
+        "mentor_ids": [str(a.mentor_profile_id) for a in assignments],
+        "mentor_names": [a.mentor_profile.user.fullname for a in assignments],
     }
 
 
@@ -271,6 +271,7 @@ def get_bootcamp_batches(request):
             "sesi": len(sessions),
             "unassigned": unassigned,
             "pending": pending_link,
+            "is_active": batch.is_active,
         })
 
     return JsonResponse({"batches": data}, status=200)
@@ -373,17 +374,19 @@ def update_bootcamp_session_template(request, session_id):
         session.end_time = parse_datetime(request_data["end_time"])
     session.save()
 
-    mentor_profile = None
-    mentor_changed = "mentor_id" in request_data
+    mentor_profiles = []
+    mentor_changed = "mentor_ids" in request_data
     if mentor_changed:
         session.session_mentors.all().delete()
-        mentor_id = request_data.get("mentor_id")
-        if mentor_id:
-            try:
-                mentor_profile = MentorProfile.objects.get(id=mentor_id)
-            except MentorProfile.DoesNotExist:
-                return JsonResponse({"errors": {"mentor_id": ["Mentor tidak ditemukan."]}}, status=404)
-            BootcampSessionMentor.objects.create(bootcamp_session=session, mentor_profile=mentor_profile)
+        mentor_ids = request_data.get("mentor_ids") or []
+        mentor_profiles = list(MentorProfile.objects.filter(id__in=mentor_ids))
+        found_ids = {str(m.id) for m in mentor_profiles}
+        missing_ids = [str(mid) for mid in mentor_ids if str(mid) not in found_ids]
+        if missing_ids:
+            return JsonResponse({"errors": {"mentor_ids": [f"Mentor tidak ditemukan: {', '.join(missing_ids)}"]}}, status=404)
+        BootcampSessionMentor.objects.bulk_create([
+            BootcampSessionMentor(bootcamp_session=session, mentor_profile=m) for m in mentor_profiles
+        ])
 
     # Sesi bootcamp itu kelas bareng -- satu link/jadwal/mentor yang sama
     # buat semua peserta yang beli batch ini (beda sama mentoring yang
@@ -392,9 +395,11 @@ def update_bootcamp_session_template(request, session_id):
     # sudah beli tapi BELUM menyelesaikan sesi itu -- yang sudah selesai
     # dibiarkan apa adanya karena riwayatnya sudah final.
     sync_fields = {"title": session.title, "start_time": session.start_time, "meeting_link": session.meeting_link}
-    if mentor_changed:
-        sync_fields["mentor"] = mentor_profile
+    active_buyer_sessions = list(session.buyer_sessions.exclude(status="completed"))
     session.buyer_sessions.exclude(status="completed").update(**sync_fields)
+    if mentor_changed:
+        for buyer_session in active_buyer_sessions:
+            buyer_session.mentors.set(mentor_profiles)
 
     log_audit(request, AuditAction.UPDATE, "bootcamp_sessions", object_id=session.id)
 

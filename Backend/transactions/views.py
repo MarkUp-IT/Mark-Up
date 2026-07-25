@@ -21,7 +21,7 @@ from programs.models import BootcampSession as BootcampSessionTemplate
 from django.utils.dateparse import parse_date
 from accounts.decorators import jwt_required, role_required
 from accounts.models import UserRole, AuditAction
-from accounts.utils import log_audit
+from accounts.utils import log_audit, notify_team, is_rate_limited
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Sum, Case, When, F, DecimalField
@@ -135,6 +135,11 @@ def get_transactions(request):
             "method": item.transaction.payment_method,
             "status": item.transaction.payment_status,
             "proof_of_payment": item.transaction.proof_of_payment.url if item.transaction.proof_of_payment else None,
+            "notes": item.transaction.notes,
+            "product_type": item.product.type,
+            "follow_proof": item.transaction.follow_proof.url if item.transaction.follow_proof else None,
+            "wa_share_proof": item.transaction.wa_share_proof.url if item.transaction.wa_share_proof else None,
+            "commitment_letter": item.transaction.commitment_letter.url if item.transaction.commitment_letter else None,
         })
 
     return JsonResponse(
@@ -270,6 +275,7 @@ def get_my_transactions(request):
                 "method": item.transaction.payment_method,
                 "status": item.transaction.payment_status,
                 "proof_of_payment": item.transaction.proof_of_payment.url if item.transaction.proof_of_payment else None,
+                "notes": item.transaction.notes,
             }
         )
 
@@ -552,23 +558,20 @@ def _create_bootcamp_sessions(user_library, product):
         .order_by("start_time")
     )
 
-    sessions = []
     for order, template in enumerate(templates, start=1):
-        first_assignment = template.session_mentors.first()
-        sessions.append(
-            BootcampSession(
-                bootcamp_id=product.id,
-                user_library=user_library,
-                template=template,
-                order=order,
-                title=template.title,
-                mentor=first_assignment.mentor_profile if first_assignment else None,
-                start_time=template.start_time,
-                status=BootcampSession.SessionStatus.SCHEDULED,
-                meeting_link=template.meeting_link or "",
-            )
+        session = BootcampSession.objects.create(
+            bootcamp_id=product.id,
+            user_library=user_library,
+            template=template,
+            order=order,
+            title=template.title,
+            start_time=template.start_time,
+            status=BootcampSession.SessionStatus.SCHEDULED,
+            meeting_link=template.meeting_link or "",
         )
-    BootcampSession.objects.bulk_create(sessions)
+        mentor_profiles = [a.mentor_profile for a in template.session_mentors.all()]
+        if mentor_profiles:
+            session.mentors.set(mentor_profiles)
 
 
 @csrf_exempt
@@ -580,6 +583,11 @@ def checkout_product(request):
     if not request.user.is_authenticated:
         return JsonResponse({"detail": "Authentication required."}, status=401)
 
+    if is_rate_limited(f"rl:checkout:user:{request.user.id}", limit=20, window_seconds=3600):
+        return JsonResponse(
+            {"detail": "Terlalu banyak percobaan checkout. Coba lagi nanti."}, status=429
+        )
+
     request_data = get_request_data(request)
     if request_data is None:
         return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
@@ -588,7 +596,12 @@ def checkout_product(request):
     voucher_code = request_data.get("voucher_code")
     buyer_phone = request_data.get("buyer_phone")
     mentor_availability_id = request_data.get("availability_slot_id")
+    notes = (request_data.get("notes") or "").strip()
     proof_file = request.FILES.get("proof_of_payment")
+    # Syarat khusus bootcamp (divalidasi di bawah setelah tau tipe produk).
+    follow_proof = request.FILES.get("follow_proof")
+    wa_share_proof = request.FILES.get("wa_share_proof")
+    commitment_letter = request.FILES.get("commitment_letter")
 
     if not product_id:
         return JsonResponse({"detail": "product_id diperlukan."}, status=400)
@@ -624,11 +637,35 @@ def checkout_product(request):
     if detail is None or not detail.is_active:
         return JsonResponse({"detail": "Produk tidak tersedia."}, status=400)
 
+    # Berlaku buat semua tipe produk (bukan cuma mentoring) -- frontend udah
+    # nge-redirect ke Pengaturan duluan kalau belum lengkap, ini cuma jaring
+    # pengaman terakhir di sisi server.
+    if not request.user.is_profile_complete():
+        return JsonResponse(
+            {"detail": "Lengkapi dulu profil kamu di Pengaturan sebelum membeli produk."},
+            status=400,
+        )
+
     if product.type == ProductType.MENTORING and not mentor_availability_id:
         return JsonResponse(
             {"detail": "availability_slot_id diperlukan untuk produk mentoring."},
             status=400,
         )
+
+    # Bootcamp wajib lampirin bukti follow, bukti share WA, & commitment letter.
+    if product.type == ProductType.BOOTCAMP:
+        missing_docs = []
+        if not follow_proof:
+            missing_docs.append("bukti follow")
+        if not wa_share_proof:
+            missing_docs.append("bukti share WhatsApp")
+        if not commitment_letter:
+            missing_docs.append("commitment letter")
+        if missing_docs:
+            return JsonResponse(
+                {"detail": "Lengkapi dulu: " + ", ".join(missing_docs) + "."},
+                status=400,
+            )
 
     price = detail.new_price if getattr(detail, "new_price", None) else detail.original_price
 
@@ -702,6 +739,10 @@ def checkout_product(request):
                 grand_total=grand_total,
                 proof_of_payment=proof_file,
                 payment_status=PaymentStatus.PENDING,
+                notes=notes,
+                follow_proof=follow_proof,
+                wa_share_proof=wa_share_proof,
+                commitment_letter=commitment_letter,
             )
 
             item = TransactionItem.objects.create(
@@ -728,6 +769,20 @@ def checkout_product(request):
 
     except Exception as e:
         return JsonResponse({"detail": f"Checkout gagal: {str(e)}"}, status=500)
+
+    # Notifikasi ke tim -- ada transaksi baru yang nunggu diverifikasi admin.
+    # Dikirim setelah DB transaction commit (di luar block atomic) biar
+    # latency email nggak nahan lock DB.
+    product_title = getattr(detail, "title", None) or "-"
+    notify_team(
+        f"Transaksi baru nunggu verifikasi ({txn.id})",
+        f"Ada transaksi baru yang butuh diverifikasi admin.\n\n"
+        f"ID Transaksi: {txn.id}\n"
+        f"Pembeli: {request.user.fullname} ({request.user.email})\n"
+        f"Produk: {product_title}\n"
+        f"Total: Rp {txn.grand_total}\n\n"
+        f"Cek & verifikasi di dashboard admin -> Transaksi.",
+    )
 
     return JsonResponse(
         {

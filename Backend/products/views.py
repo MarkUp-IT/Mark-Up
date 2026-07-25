@@ -21,7 +21,7 @@ from .models import (
 )
 from accounts.decorators import jwt_required, role_required
 from accounts.models import User, UserRole, AuditAction
-from accounts.utils import log_audit
+from accounts.utils import log_audit, notify_team, get_client_ip, is_rate_limited
 from django.db.models import Q
 from mentors.models import MentorAvailability
 from django.views.decorators.csrf import csrf_exempt
@@ -43,6 +43,19 @@ def _get_detail_attr(product_type):
     return DETAIL_FORM_MAP.get(product_type, (None, None))[1]
 
 
+def _get_product_image_url(detail):
+    """URL gambar produk. Prioritas file yang di-upload (detail.image) --
+    URL-nya di-generate fresh di sini (storage pakai presigned URL), fallback
+    ke image_url (link eksternal legacy) kalau belum ada file."""
+    img = getattr(detail, "image", None)
+    if img:
+        try:
+            return img.url
+        except Exception:
+            pass
+    return detail.image_url
+
+
 def _format_product_response(product, detail):
     response = {
         "id": str(product.id),
@@ -52,7 +65,7 @@ def _format_product_response(product, detail):
         "original_price": str(detail.original_price) if detail.original_price else None,
         "discount_percent": detail.discount_percent,
         "sold_count": detail.sold_count,
-        "image_url": detail.image_url,
+        "image_url": _get_product_image_url(detail),
         "registration_link": detail.registration_link,
         "is_active": detail.is_active,
     }
@@ -148,7 +161,7 @@ def _serialize_product_item(p):
             "title": detail.title,
             "description": detail.description,
             "explanation": detail.explanation,
-            "image_url": detail.image_url,
+            "image_url": _get_product_image_url(detail),
             "original_price": str(detail.original_price) if detail.original_price is not None else None,
             "new_price": str(detail.new_price) if detail.new_price is not None else None,
             "discount_percent": detail.discount_percent,
@@ -158,10 +171,15 @@ def _serialize_product_item(p):
         })
         if hasattr(detail, "file_pdf_url"):
             item["file_pdf_url"] = detail.file_pdf_url
+        # stock ada di Module DAN Bootcamp -- dulu cuma di-serialize buat yang
+        # punya file_pdf_url (Module doang), jadi stok Bootcamp ilang pas edit.
+        if hasattr(detail, "stock"):
             item["stock"] = detail.stock
         if p.type == ProductType.MENTORING:
             item["session_count"] = detail.session_count
             item["duration_minutes"] = detail.duration_minutes
+            item["expertise"] = list(detail.expertise.values_list("id", flat=True))
+            item["expertise_names"] = list(detail.expertise.values_list("name", flat=True))
             item["highlights"] = list(
                 detail.highlights.order_by("order").values_list("text", flat=True)
             )
@@ -202,13 +220,15 @@ def _compute_active_counts(user_libraries):
 
 
 def _serialize_bootcamp_session(session):
-    mentor = session.mentor
+    mentors = list(session.mentors.all())
     return {
         "id": str(session.id),
         "order": session.order,
         "title": session.title,
-        "mentor": mentor.user.fullname if mentor else None,
-        "mentor_id": str(mentor.id) if mentor else None,
+        "mentor": ", ".join(m.user.fullname for m in mentors) if mentors else None,
+        "mentor_id": str(mentors[0].id) if mentors else None,
+        "mentor_ids": [str(m.id) for m in mentors],
+        "mentor_names": [m.user.fullname for m in mentors],
         "start_time": session.start_time.isoformat() if session.start_time else None,
         "status": session.status,
         "meeting_link": session.meeting_link,
@@ -274,7 +294,7 @@ def get_my_products(request):
             "product__bootcamp_detail",
         )
         .prefetch_related(
-            "bootcamp_sessions__mentor__user",
+            "bootcamp_sessions__mentors__user",
             "mentoring_sessions__mentor__user",
         )
     )
@@ -342,7 +362,7 @@ def get_my_product_detail(request, product_id):
         return JsonResponse({"detail": "Detail produk tidak ditemukan."}, status=404)
 
     if product.type == ProductType.BOOTCAMP:
-        sessions = list(user_library.bootcamp_sessions.select_related("mentor__user").all())
+        sessions = list(user_library.bootcamp_sessions.prefetch_related("mentors__user").all())
         return JsonResponse(
             {
                 "type": "bootcamp",
@@ -503,6 +523,11 @@ def refund_my_product(request, product_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
 
+    if is_rate_limited(f"rl:refund:user:{request.user.id}", limit=10, window_seconds=3600):
+        return JsonResponse(
+            {"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429
+        )
+
     user_library = _get_user_library(request, product_id)
     if user_library is None:
         return JsonResponse({"detail": "Produk ini belum pernah dibeli oleh pengguna ini."}, status=404)
@@ -535,6 +560,16 @@ def refund_my_product(request, product_id):
     refund = RefundRequest.objects.create(
         user_library=user_library,
         reason=reason,
+    )
+
+    detail = _get_product_detail(user_library.product)
+    notify_team(
+        "Pengajuan refund baru",
+        f"Ada pengajuan refund baru yang butuh ditinjau admin.\n\n"
+        f"Pemohon: {request.user.fullname} ({request.user.email})\n"
+        f"Produk: {detail.title if detail else '-'}\n"
+        f"Alasan: {reason}\n\n"
+        f"Tinjau di dashboard admin -> Pengajuan Refund.",
     )
 
     return JsonResponse(
@@ -575,7 +610,13 @@ def add_product(request):
     product = Product.objects.create(type=product_type)
     detail = detail_form.save(commit=False)
     detail.product = product
+    # image_key = path file yang udah di-upload duluan lewat upload-image/.
+    # Di-assign ke ImageField (Django nyimpen string path-nya sebagai .name).
+    image_key = request_data.get("image_key")
+    if image_key:
+        detail.image = image_key
     detail.save()
+    detail_form.save_m2m()
 
     log_audit(
         request, AuditAction.CREATE, "products", object_id=product.id,
@@ -602,10 +643,19 @@ def get_products(request):
     # dari tabel admin begitu di-nonaktifkan.
     include_inactive = request.GET.get("include_inactive") == "true"
 
+    # Product tanpa detail sama sekali (baris yatim -- biasanya sisa proses
+    # tambah produk yang keputus di tengah jalan) bukan produk valid di
+    # tampilan manapun, jadi selalu dikecualikan di sini, terlepas dari flag
+    # all/include_inactive (yang bedain aktif/nonaktif, bukan ada/nggaknya
+    # detail sama sekali).
     base_qs = Product.objects.select_related(
 		"mentoring_detail", "module_detail", "bootcamp_detail"
 	).prefetch_related(
-		"mentoring_detail__highlights"
+		"mentoring_detail__highlights", "mentoring_detail__expertise"
+	).filter(
+		Q(mentoring_detail__isnull=False) |
+		Q(module_detail__isnull=False) |
+		Q(bootcamp_detail__isnull=False)
 	).order_by("-created_at")
 
     if fetch_all or include_inactive:
@@ -855,7 +905,12 @@ def update_product(request, product_id):
 		return JsonResponse({"errors": errors}, status=400)
 
 	old_data = _format_product_response(product, detail)
-	detail = detail_form.save()
+	detail = detail_form.save(commit=False)
+	image_key = request_data.get("image_key")
+	if image_key:
+		detail.image = image_key
+	detail.save()
+	detail_form.save_m2m()
 
 	log_audit(
 		request, AuditAction.UPDATE, "products", object_id=product.id,
@@ -1122,7 +1177,7 @@ def get_bootcamp_orders(request):
     libraries = (
         UserLibrary.objects.filter(product__type=ProductType.BOOTCAMP)
         .select_related("user", "product__bootcamp_detail")
-        .prefetch_related("bootcamp_sessions__mentor__user")
+        .prefetch_related("bootcamp_sessions__mentors__user")
         .order_by("-purchased_at")
     )
 
@@ -1164,7 +1219,7 @@ def get_bootcamp_order_detail(request, user_library_id):
     except UserLibrary.DoesNotExist:
         return JsonResponse({"detail": "Paket bootcamp tidak ditemukan."}, status=404)
 
-    sessions = library.bootcamp_sessions.select_related("mentor__user").order_by("order")
+    sessions = library.bootcamp_sessions.prefetch_related("mentors__user").order_by("order")
     detail = library.product.bootcamp_detail
 
     return JsonResponse(
@@ -1178,7 +1233,7 @@ def get_bootcamp_order_detail(request, user_library_id):
                     "order": s.order,
                     "title": s.title,
                     "status": s.status,
-                    "mentor_name": s.mentor.user.fullname if s.mentor else None,
+                    "mentor_name": ", ".join(m.user.fullname for m in s.mentors.all()) or None,
                     "start_time": s.start_time.isoformat() if s.start_time else None,
                     "meeting_link": s.meeting_link,
                     "recording_url": s.recording_url,
@@ -1199,8 +1254,8 @@ def update_bootcamp_order_session(request, session_id):
 
     try:
         session = BootcampSession.objects.select_related(
-            "mentor", "bootcamp", "user_library"
-        ).get(id=session_id)
+            "bootcamp", "user_library"
+        ).prefetch_related("mentors", "payouts").get(id=session_id)
     except BootcampSession.DoesNotExist:
         return JsonResponse({"detail": "Sesi tidak ditemukan."}, status=404)
 
@@ -1216,15 +1271,25 @@ def update_bootcamp_order_session(request, session_id):
 
         from transactions.models import MentorPayout, PayoutSourceType
 
-        if session.mentor_id and not hasattr(session, "payout"):
+        # Satu sesi bisa diajar >1 mentor -- tiap mentor yang ditugaskan
+        # dapat baris payout sendiri, masing-masing nominal penuh sesuai
+        # perhitungan per-sesi (bukan dibagi). Kalau perlu dibagi/disesuaikan
+        # antar-mentor, itu diatur manual di luar sistem oleh tim keuangan.
+        already_paid_out_ids = {p.mentor_profile_id for p in session.payouts.all()}
+        mentors_to_pay = [m for m in session.mentors.all() if m.id not in already_paid_out_ids]
+        if mentors_to_pay:
             gross = session.bootcamp.new_price or session.bootcamp.original_price or 0
             total_sessions = session.user_library.bootcamp_sessions.count() or 1
-            MentorPayout.objects.create(
-                mentor_profile=session.mentor,
-                source_type=PayoutSourceType.BOOTCAMP,
-                bootcamp_session=session,
-                gross_amount=(gross / total_sessions),
-            )
+            per_mentor_gross = gross / total_sessions
+            MentorPayout.objects.bulk_create([
+                MentorPayout(
+                    mentor_profile=mentor,
+                    source_type=PayoutSourceType.BOOTCAMP,
+                    bootcamp_session=session,
+                    gross_amount=per_mentor_gross,
+                )
+                for mentor in mentors_to_pay
+            ])
 
     session.save()
 
@@ -1242,6 +1307,10 @@ def get_all_reviews(request):
     reviews = Review.objects.select_related(
         "user", "product__mentoring_detail", "product__module_detail", "product__bootcamp_detail"
     ).order_by("-created_at")
+
+    # Buka daftar ini nandain semua ulasan yang belum dilihat jadi "sudah
+    # dilihat" -- sumber badge notifikasi "ulasan baru" di sidebar.
+    Review.objects.filter(is_seen_by_admin=False).update(is_seen_by_admin=True)
 
     data = []
     for r in reviews:
@@ -1286,3 +1355,40 @@ def toggle_review_visibility(request, review_id):
     )
 
     return JsonResponse({"detail": "Status ulasan berhasil diperbarui.", "is_hidden": review.is_hidden}, status=200)
+
+
+ALLOWED_PRODUCT_IMAGE_EXT = {"jpg", "jpeg", "png", "webp"}
+MAX_PRODUCT_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def upload_product_image(request):
+    """Upload gambar produk ke storage, balikin key + URL. Key-nya dipakai FE
+    buat dikirim balik di payload add/update produk (field image_key) -- baru
+    di sana di-assign ke produknya. Kepisah gini karena pas bikin produk baru,
+    produknya belum ada waktu gambar di-upload."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    from django.core.files.storage import default_storage
+
+    image = request.FILES.get("image")
+    if not image:
+        return JsonResponse({"detail": "File gambar diperlukan."}, status=400)
+
+    ext = image.name.rsplit(".", 1)[-1].lower() if "." in image.name else ""
+    if ext not in ALLOWED_PRODUCT_IMAGE_EXT:
+        return JsonResponse({"detail": "Format harus JPG, PNG, atau WEBP."}, status=400)
+
+    if image.size > MAX_PRODUCT_IMAGE_SIZE:
+        return JsonResponse({"detail": "Ukuran file maksimal 5MB."}, status=400)
+
+    now = timezone.now()
+    key = f"product_images/{now.year}/{now.month:02d}/{image.name}"
+    saved_key = default_storage.save(key, image)
+
+    return JsonResponse(
+        {"key": saved_key, "url": default_storage.url(saved_key)}, status=201
+    )

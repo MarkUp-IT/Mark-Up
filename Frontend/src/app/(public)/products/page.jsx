@@ -228,19 +228,23 @@ export default function ProdukPage() {
           <p className="text-red-400 text-sm mb-6">{error}</p>
         )}
 
-        {/* COUNTER */}
-        <div className="w-full max-w-[1050px] flex justify-start mb-6">
-          <p className="text-[#A19DAB] text-[11px] md:text-sm">
-            Menampilkan{" "}
-            <span className="text-[#00C6D1] font-bold text-sm md:text-base">
-              {filteredProducts.length}
-            </span>{" "}
-            produk
-          </p>
-        </div>
+        {/* COUNTER -- disembunyiin selagi loading/error biar nggak sempet
+            kebaca "Menampilkan 0 produk" padahal datanya belum selesai
+            di-fetch, bukan beneran kosong. */}
+        {!loading && !error && (
+          <div className="w-full max-w-[1050px] flex justify-start mb-6">
+            <p className="text-[#A19DAB] text-[11px] md:text-sm">
+              Menampilkan{" "}
+              <span className="text-[#00C6D1] font-bold text-sm md:text-base">
+                {filteredProducts.length}
+              </span>{" "}
+              produk
+            </p>
+          </div>
+        )}
 
         {/* RENDER GROUP SECTIONS -- atau empty state kalau search sama sekali nggak match apapun */}
-        {searchQuery !== "" && filteredProducts.length === 0 ? (
+        {!loading && !error && (searchQuery !== "" && filteredProducts.length === 0 ? (
           <div className="w-full max-w-[1050px] flex flex-col items-center justify-center gap-3 text-center py-16 px-6 border border-dashed border-[#3A3545] rounded-md md:rounded-lg bg-[#1A1625]/40">
             <SearchX size={32} className="text-[#A19DAB]" />
             <p className="text-[#A19DAB] text-sm max-w-[320px]">
@@ -303,7 +307,7 @@ export default function ProdukPage() {
               );
             })}
           </div>
-        )}
+        ))}
       </div>
 
       <Footer />

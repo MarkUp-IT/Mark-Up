@@ -151,20 +151,20 @@ export default function MentorDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 shrink-0">
-          <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-4 sm:px-6 py-5 flex flex-col items-center justify-center min-w-[95px] sm:min-w-[120px]">
-            <p className="text-[#148F89] font-bold text-[30px] sm:text-[34px] leading-none">
-              {activeBootcamp.length}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 shrink-0">
+          <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-3 sm:px-6 py-4 sm:py-5 flex flex-col items-center justify-center min-w-0 sm:min-w-[120px]">
+            <p className="text-[#148F89] font-bold text-[26px] sm:text-[34px] leading-none">
+              {loading ? "-" : activeBootcamp.length}
             </p>
-            <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center whitespace-nowrap">
+            <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center leading-tight">
               Bootcamp Aktif
             </p>
           </div>
-          <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-4 sm:px-6 py-5 flex flex-col items-center justify-center min-w-[95px] sm:min-w-[120px]">
-            <p className="text-[#148F89] font-bold text-[30px] sm:text-[34px] leading-none">
-              {activeMentoring.length}
+          <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-3 sm:px-6 py-4 sm:py-5 flex flex-col items-center justify-center min-w-0 sm:min-w-[120px]">
+            <p className="text-[#148F89] font-bold text-[26px] sm:text-[34px] leading-none">
+              {loading ? "-" : activeMentoring.length}
             </p>
-            <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center whitespace-nowrap">
+            <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center leading-tight">
               Mentoring Aktif
             </p>
           </div>

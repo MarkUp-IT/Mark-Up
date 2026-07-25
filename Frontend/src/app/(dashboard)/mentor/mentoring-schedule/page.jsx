@@ -272,21 +272,18 @@ export default function MentoringSchedule() {
     if (!rangeStart || !rangeEnd || selectedTimeSlots.length === 0) return;
     setSaving(true);
     try {
-      const start = new Date(`${rangeStart}T00:00:00`);
-      const end = new Date(`${rangeEnd}T00:00:00`);
-      const calls = [];
-
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const dateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-        const existingTimes = (slotsByDate[dateStr] || []).map((s) => s.time);
-        for (const time of selectedTimeSlots) {
-          if (!existingTimes.includes(time)) {
-            calls.push(addSlot(dateStr, time));
-          }
-        }
-      }
-
-      await Promise.all(calls);
+      // Satu request bulk buat SEMUA (rentang tanggal x jam) -- server yang
+      // bikin & skip yang udah ada. Sebelumnya nembak 1 request per slot;
+      // pas ngebatch rentang panjang (mis. setahun) itu ratusan request
+      // paralel yang sebagian kena rate-limit & gagal -> kalender bolong.
+      await apiRequest("/api/mentors/availability/add-bulk/", {
+        method: "POST",
+        body: {
+          start_date: rangeStart,
+          end_date: rangeEnd,
+          times: selectedTimeSlots,
+        },
+      });
       await fetchAvailability();
       closeModal();
     } catch (err) {
@@ -461,7 +458,7 @@ export default function MentoringSchedule() {
                   <h3 className="text-white font-bold text-[16px]">
                     Pilih Rentang Tanggal
                   </h3>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[#9CA3AF] text-[12px] font-semibold">
                         Tanggal Mulai

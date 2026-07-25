@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Eye, EyeOff, Check, X as XIcon, MailCheck } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
+import GoogleSignInButton from "@/component/GoogleSignInButton";
 
 const PASSWORD_REQUIREMENTS = [
   { label: "Minimal 8 karakter", test: (pw) => pw.length >= 8 },
@@ -314,6 +315,8 @@ export default function Register() {
           >
             {isSubmitting ? "Memproses..." : "Buat akun"}
           </button>
+
+          <GoogleSignInButton />
 
           <p className="text-[13px] text-center text-[#9CA3AF]">
             Sudah memiliki akun?{" "}

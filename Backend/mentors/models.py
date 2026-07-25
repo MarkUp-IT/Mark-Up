@@ -67,6 +67,23 @@ class MentorProfile(models.Model):
     def __str__(self):
         return f"{self.user.fullname}"
 
+    def is_profile_complete(self):
+        """Field wajib biar mentor lolos gate dashboard (lihat useAuthGuard
+        di FE) & muncul di /mentors publik -- foto, WhatsApp, LinkedIn,
+        Instagram, rekening, minimal 1 keahlian. Bio, headline, dan
+        pengalaman kerja sengaja dibiarkan opsional."""
+        user = self.user
+        return bool(
+            user.profile_image
+            and user.phone
+            and self.linkedin_url
+            and self.instagram_url
+            and self.bank_name
+            and self.bank_account
+            and self.bank_account_holder
+            and self.mentor_expertises.exists()
+        )
+
 
 class MentorExperience(models.Model):
     id = models.UUIDField(
@@ -117,6 +134,14 @@ class MentorAvailability(models.Model):
     end_time = models.DateTimeField()
 
     is_booked = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["mentor_profile", "start_time"],
+                name="unique_mentor_availability_slot",
+            )
+        ]
 
 
 class MentorExpertise(models.Model):

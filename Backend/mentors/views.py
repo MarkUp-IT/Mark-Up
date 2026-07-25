@@ -80,7 +80,35 @@ def get_mentors(request):
         .order_by("-rating")
     )
 
-    data = [_serialize_mentor(mentor, request) for mentor in mentors]
+    # ?product_id= dipakai widget pilih-mentor di checkout -- cuma tampilin
+    # mentor yang keahliannya overlap sama kategori produk mentoring itu.
+    # Kalau produknya belum ditandain kategori sama sekali (belum di-setting
+    # admin), jangan dibatasi dulu -- daripada checkout-nya malah kosong.
+    product_id = request.GET.get("product_id")
+    if product_id:
+        from products.models import MentoringProduct
+
+        try:
+            product = MentoringProduct.objects.prefetch_related("expertise").get(
+                product_id=product_id
+            )
+        except MentoringProduct.DoesNotExist:
+            product = None
+
+        if product is not None:
+            expertise_ids = list(product.expertise.values_list("id", flat=True))
+            if expertise_ids:
+                mentors = mentors.filter(
+                    mentor_expertises__expertise_id__in=expertise_ids
+                ).distinct()
+
+    # Mentor yang profilnya belum lengkap (lihat MentorProfile.is_profile_complete)
+    # nggak ditampilin publik -- masih nyembunyiin diri sampai data wajibnya keisi.
+    data = [
+        _serialize_mentor(mentor, request)
+        for mentor in mentors
+        if mentor.is_profile_complete()
+    ]
     return JsonResponse({"mentors": data}, status=200)
 
 
@@ -110,7 +138,19 @@ def add_availability(request):
 
     availability = form.save(commit=False)
     availability.mentor_profile = mentor_profile
-    availability.save()
+
+    # Idempoten: kalau mentor udah punya slot di jam mulai yang sama persis,
+    # jangan bikin baris baru -- balikin yang udah ada. Ini yang bikin slot
+    # kedouble/ketriple kemarin (de-dup di FE gak reliable karena beda zona
+    # waktu browser), sekarang dijamin unik di sisi server.
+    existing = MentorAvailability.objects.filter(
+        mentor_profile=mentor_profile,
+        start_time=availability.start_time,
+    ).first()
+    if existing:
+        availability = existing
+    else:
+        availability.save()
 
     return JsonResponse(
         {
@@ -461,7 +501,7 @@ def get_my_sessions(request):
         .order_by("user_library_id", "order")
     )
     bootcamp_sessions = (
-        BootcampSession.objects.filter(mentor=mentor_profile, user_library__is_revoked=False)
+        BootcampSession.objects.filter(mentors=mentor_profile, user_library__is_revoked=False)
         .select_related("bootcamp", "bootcamp__product", "user_library__user")
         .order_by("user_library_id", "order")
     )
@@ -518,7 +558,7 @@ def get_my_reviews(request):
             "mentoring__product_id", flat=True
         )
     ) | set(
-        BootcampSession.objects.filter(mentor=mentor_profile).values_list(
+        BootcampSession.objects.filter(mentors=mentor_profile).values_list(
             "bootcamp__product_id", flat=True
         )
     )
@@ -546,3 +586,169 @@ def get_my_reviews(request):
         )
 
     return JsonResponse({"reviews": data}, status=200)
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def create_expertise(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    name = (request_data.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"detail": "Nama keahlian diperlukan."}, status=400)
+
+    if Expertise.objects.filter(name__iexact=name).exists():
+        return JsonResponse({"detail": "Keahlian dengan nama ini sudah ada."}, status=400)
+
+    expertise = Expertise.objects.create(name=name)
+    return JsonResponse({"id": str(expertise.id), "name": expertise.name}, status=201)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def delete_expertise(request, expertise_id):
+    if request.method != "DELETE":
+        return HttpResponseNotAllowed(["DELETE"])
+
+    try:
+        expertise = Expertise.objects.get(id=expertise_id)
+    except Expertise.DoesNotExist:
+        return JsonResponse({"detail": "Keahlian tidak ditemukan."}, status=404)
+
+    expertise.delete()
+    return JsonResponse({"detail": "Keahlian berhasil dihapus."}, status=200)
+
+
+@jwt_required
+@role_required(UserRole.MENTOR)
+def get_mentor_sidebar_badges(request):
+    """Angka notifikasi buat sidebar dashboard mentor -- Active Classes
+    (sesi sendiri yang belum dijadwalkan/link belum dibagikan) & Settings
+    (profil belum lengkap, lihat MentorProfile.is_profile_complete)."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    from django.db.models import Q
+    from products.models import MentoringSession, BootcampSession
+
+    mentor_profile, error = _get_mentor_profile_or_404(request)
+    if error:
+        return error
+
+    active_classes_pending = (
+        MentoringSession.objects.filter(
+            mentor=mentor_profile, user_library__is_revoked=False
+        )
+        .filter(Q(status="waiting_schedule") | Q(status="scheduled", zoom_link=""))
+        .count()
+        + BootcampSession.objects.filter(
+            mentors=mentor_profile, user_library__is_revoked=False
+        )
+        .filter(Q(status="waiting_schedule") | Q(status="scheduled", meeting_link=""))
+        .count()
+    )
+
+    data = {
+        "active_classes": active_classes_pending,
+        "settings": 0 if mentor_profile.is_profile_complete() else 1,
+    }
+    return JsonResponse(data, status=200)
+
+
+MAX_BULK_AVAILABILITY_SLOTS = 800
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.MENTOR)
+def add_availability_bulk(request):
+    """Bikin banyak slot availability sekaligus (rentang tanggal x list jam)
+    dalam SATU request. Sebelumnya FE nembak 1 POST per (tanggal x jam) --
+    kalau mentor ngebatch setahun penuh (mis. 2026->2027), itu ratusan/ribuan
+    request paralel yang bikin sebagian kena rate-limit & gagal, jadi kalender
+    keliatan bolong. Di sini semuanya dibuat server-side, idempoten (skip yang
+    udah ada), dan dibatasi biar gak kebablasan."""
+    from datetime import datetime, timedelta
+
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        mentor_profile = request.user.mentor_profile
+    except MentorProfile.DoesNotExist:
+        return JsonResponse({"detail": "Mentor profile tidak ditemukan."}, status=404)
+
+    data = get_request_data(request)
+    if data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    start_date_str = data.get("start_date")
+    end_date_str = data.get("end_date")
+    times = data.get("times") or []
+
+    if not start_date_str or not end_date_str or not isinstance(times, list) or not times:
+        return JsonResponse(
+            {"detail": "start_date, end_date, dan times (list jam) diperlukan."},
+            status=400,
+        )
+
+    try:
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return JsonResponse({"detail": "Format tanggal harus YYYY-MM-DD."}, status=400)
+
+    if end_date < start_date:
+        return JsonResponse({"detail": "end_date tidak boleh sebelum start_date."}, status=400)
+
+    num_days = (end_date - start_date).days + 1
+    if num_days * len(times) > MAX_BULK_AVAILABILITY_SLOTS:
+        return JsonResponse(
+            {"detail": f"Terlalu banyak slot sekaligus (maks {MAX_BULK_AVAILABILITY_SLOTS}). Persempit rentang tanggal atau jamnya."},
+            status=400,
+        )
+
+    # Ambil dulu slot yang udah ada di rentang ini biar gak query berkali-kali.
+    range_start_dt = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+    range_end_dt = timezone.make_aware(datetime.combine(end_date + timedelta(days=1), datetime.min.time()))
+    existing = set(
+        MentorAvailability.objects.filter(
+            mentor_profile=mentor_profile,
+            start_time__gte=range_start_dt,
+            start_time__lt=range_end_dt,
+        ).values_list("start_time", flat=True)
+    )
+
+    to_create = []
+    day = start_date
+    while day <= end_date:
+        for t in times:
+            try:
+                hh, mm = str(t).split(":")
+                slot_time = datetime.min.time().replace(hour=int(hh), minute=int(mm))
+            except (ValueError, TypeError):
+                continue
+            start_dt = timezone.make_aware(datetime.combine(day, slot_time))
+            if start_dt in existing:
+                continue
+            end_dt = start_dt + timedelta(hours=1)
+            to_create.append(
+                MentorAvailability(
+                    mentor_profile=mentor_profile,
+                    start_time=start_dt,
+                    end_time=end_dt,
+                )
+            )
+            existing.add(start_dt)
+        day += timedelta(days=1)
+
+    if to_create:
+        MentorAvailability.objects.bulk_create(to_create, ignore_conflicts=True)
+
+    return JsonResponse({"detail": "Slot berhasil ditambahkan.", "created": len(to_create)}, status=201)

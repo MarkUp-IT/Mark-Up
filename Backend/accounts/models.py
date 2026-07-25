@@ -115,6 +115,20 @@ class User(AbstractUser):
     def __str__(self):
         return self.fullname
 
+    def is_profile_complete(self):
+        """Field wajib biar student bisa checkout -- nama, WhatsApp,
+        institusi, status/semester, LinkedIn, foto profil. CV/portofolio
+        sengaja dibiarkan opsional (pelengkap konteks mentoring doang,
+        bukan data inti)."""
+        return bool(
+            self.fullname
+            and (self.phone or "").strip()
+            and (self.institution or "").strip()
+            and (self.current_status or "").strip()
+            and (self.linkedin_url or "").strip()
+            and self.profile_image
+        )
+
 
 class ContactMessageStatus(models.TextChoices):
     NEW = "new", "New"

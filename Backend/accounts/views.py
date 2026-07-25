@@ -6,7 +6,7 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, get_client_ip, is_rate_limited
+from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, get_client_ip, is_rate_limited, notify_team
 from .forms import RegisterForm, UpdateProfileForm
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -159,11 +159,100 @@ def login_view(request):
 				"id": str(user.id),
 				"email": user.email,
 				"fullname": user.fullname,
-				"role": user.role, 
-				
+				"role": user.role,
+
 			},
 		},
 		status=200,
+	)
+
+
+@csrf_exempt
+def google_login_view(request):
+	"""Register/login pakai akun Google. Frontend pakai tombol custom sendiri
+	(bukan tombol bawaan Google) yang minta access token lewat popup OAuth2
+	(google.accounts.oauth2.initTokenClient) -- access token itu divalidasi
+	di sini dengan manggil userinfo endpoint Google sendiri (bukan cuma
+	dipercaya mentah-mentah), lalu user dicari/dibuat berdasarkan email yang
+	sudah pasti terverifikasi oleh Google -- dan diterbitkan JWT kita sendiri,
+	sama persis kayak alur login manual."""
+	if request.method != "POST":
+		return HttpResponseNotAllowed(["POST"])
+
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:google-login:ip:{ip}", limit=20, window_seconds=300):
+		return JsonResponse(
+			{"detail": "Terlalu banyak percobaan login dari perangkat ini. Coba lagi beberapa menit lagi."},
+			status=429,
+		)
+
+	request_data = get_request_data(request)
+	if request_data is None:
+		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+	access_token = request_data.get("access_token")
+	if not access_token:
+		return JsonResponse({"detail": "Token Google diperlukan."}, status=400)
+
+	client_id = getattr(settings, "GOOGLE_CLIENT_ID", None)
+	if not client_id:
+		return JsonResponse({"detail": "Login Google belum dikonfigurasi di server."}, status=503)
+
+	import requests as http_requests
+
+	try:
+		userinfo_res = http_requests.get(
+			"https://www.googleapis.com/oauth2/v3/userinfo",
+			headers={"Authorization": f"Bearer {access_token}"},
+			timeout=5,
+		)
+	except http_requests.RequestException:
+		return JsonResponse({"detail": "Gagal menghubungi server Google. Coba lagi."}, status=502)
+
+	if userinfo_res.status_code != 200:
+		return JsonResponse({"detail": "Token Google tidak valid atau kedaluwarsa."}, status=401)
+
+	payload = userinfo_res.json()
+
+	if not payload.get("email_verified"):
+		return JsonResponse({"detail": "Email Google kamu belum terverifikasi."}, status=401)
+
+	email = payload["email"].strip().lower()
+	fullname = payload.get("name") or email.split("@")[0]
+
+	user, created = User.objects.get_or_create(
+		email=email,
+		defaults={
+			"fullname": fullname,
+			"role": UserRole.STUDENT,
+			"is_email_verified": True,
+		},
+	)
+	if created:
+		user.set_unusable_password()
+		user.save(update_fields=["password"])
+
+	if user.status == UserStatus.INACTIVE:
+		return JsonResponse(
+			{"detail": "Akun ini sudah dinonaktifkan. Hubungi tim kami kalau ini keliru."},
+			status=403,
+		)
+
+	refresh = RefreshToken.for_user(user)
+
+	return JsonResponse(
+		{
+			"detail": "Login Google berhasil.",
+			"access": str(refresh.access_token),
+			"refresh": str(refresh),
+			"user": {
+				"id": str(user.id),
+				"email": user.email,
+				"fullname": user.fullname,
+				"role": user.role,
+			},
+		},
+		status=201 if created else 200,
 	)
 
 
@@ -552,6 +641,14 @@ def submit_contact_message(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
 
+	# Form publik tanpa login -- target spam paling gampang. Throttle per IP.
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:contact:ip:{ip}", limit=5, window_seconds=3600):
+		return JsonResponse(
+			{"detail": "Terlalu banyak pesan dikirim dari perangkat ini. Coba lagi nanti."},
+			status=429,
+		)
+
 	request_data = get_request_data(request)
 	if request_data is None:
 		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
@@ -566,6 +663,16 @@ def submit_contact_message(request):
 
 	contact_message = ContactMessage.objects.create(
 		name=name, email=email, subject=subject, message=message,
+	)
+
+	notify_team(
+		f"Pesan masuk baru dari {name}",
+		f"Ada pesan masuk baru lewat form Kontak.\n\n"
+		f"Nama: {name}\n"
+		f"Email: {email}\n"
+		f"Subjek: {subject}\n\n"
+		f"Isi pesan:\n{message}\n\n"
+		f"Cek di dashboard admin -> Pesan Masuk.",
 	)
 
 	return JsonResponse(
@@ -673,12 +780,26 @@ def get_current_user(request):
         "dashboard_href": dashboard_href_by_role.get(user.role, "/user/my-products"),
     }
 
+    if user.role == UserRole.MENTOR:
+        data["is_profile_complete"] = _is_mentor_profile_complete(user)
+    elif user.role == UserRole.STUDENT:
+        data["is_profile_complete"] = user.is_profile_complete()
+
     return JsonResponse(
         {
             "is_logged_in": True,
             "user": data,
         }
     )
+
+
+def _is_mentor_profile_complete(user):
+    from mentors.models import MentorProfile
+
+    try:
+        return user.mentor_profile.is_profile_complete()
+    except MentorProfile.DoesNotExist:
+        return False
 
 @csrf_exempt
 def logout_user(request):
@@ -900,3 +1021,87 @@ def get_audit_logs(request):
     ]
 
     return JsonResponse({"logs": data}, status=200)
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_admin_sidebar_badges(request):
+	"""Angka notifikasi buat tiap menu sidebar admin -- masing-masing hitung
+	item yang beneran butuh tindakan admin (bukan sekadar total data), biar
+	konsisten sama badge/StatCard "butuh tindakan" yang udah ada di
+	halaman-halaman terkait."""
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	from django.db.models import Q
+	from products.models import MentoringSession, RefundRequest, Review
+	from programs.models import BootcampSession as BootcampSessionTemplate
+	from transactions.models import Transaction, PaymentStatus, MentorPayout, PayoutStatus
+
+	bootcamp_pending = (
+		BootcampSessionTemplate.objects.filter(session_mentors__isnull=True).count()
+		+ BootcampSessionTemplate.objects.filter(Q(meeting_link__isnull=True) | Q(meeting_link="")).count()
+	)
+
+	mentoring_pending = (
+		MentoringSession.objects.filter(status="waiting_schedule").count()
+		+ MentoringSession.objects.filter(status="scheduled", zoom_link="").count()
+	)
+
+	data = {
+		"bootcamp": bootcamp_pending,
+		"mentoring": mentoring_pending,
+		"transactions": Transaction.objects.filter(payment_status=PaymentStatus.PENDING).count(),
+		"refund_requests": RefundRequest.objects.filter(status=RefundRequest.RefundStatus.PENDING).count(),
+		"payouts": MentorPayout.objects.filter(status=PayoutStatus.PENDING).count(),
+		"messages": ContactMessage.objects.filter(status=ContactMessageStatus.NEW).count(),
+		"reviews": Review.objects.filter(is_seen_by_admin=False).count(),
+	}
+
+	return JsonResponse(data, status=200)
+
+
+@jwt_required
+@role_required(UserRole.STUDENT)
+def get_student_sidebar_badges(request):
+	"""Angka notifikasi buat sidebar dashboard student -- My Products (produk
+	yang udah selesai tapi belum dikasih rating), Transaksi (pembayaran yang
+	ditolak admin), dan Pengaturan Akun (profil belum lengkap)."""
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	from products.models import UserLibrary, Review, ProductType
+	from transactions.models import Transaction, PaymentStatus
+
+	user_libraries = list(
+		UserLibrary.objects.filter(user=request.user, is_revoked=False)
+		.exclude(product__type=ProductType.MODULE)
+		.select_related("product")
+		.prefetch_related("bootcamp_sessions", "mentoring_sessions")
+	)
+
+	reviewed_product_ids = set(
+		Review.objects.filter(
+			user=request.user, product_id__in=[lib.product_id for lib in user_libraries]
+		).values_list("product_id", flat=True)
+	)
+
+	needs_rating = 0
+	for library in user_libraries:
+		sessions = list(
+			library.bootcamp_sessions.all()
+			if library.product.type == ProductType.BOOTCAMP
+			else library.mentoring_sessions.all()
+		)
+		is_completed = len(sessions) > 0 and all(s.status == "completed" for s in sessions)
+		if is_completed and library.product_id not in reviewed_product_ids:
+			needs_rating += 1
+
+	data = {
+		"my_products": needs_rating,
+		"transactions": Transaction.objects.filter(
+			user=request.user, payment_status=PaymentStatus.FAILED
+		).count(),
+		"settings": 0 if request.user.is_profile_complete() else 1,
+	}
+
+	return JsonResponse(data, status=200)

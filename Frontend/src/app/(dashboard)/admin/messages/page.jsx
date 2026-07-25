@@ -79,9 +79,9 @@ export default function ContactMessages() {
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total Pesan" value={messages.length} unit="pesan" />
-        <StatCard label="Belum Dibaca" value={newCount} unit="pesan" variant="warning" />
-        <StatCard label="Sudah Dibaca" value={messages.length - newCount} unit="pesan" variant="success" />
+        <StatCard label="Total Pesan" value={messages.length} unit="pesan" loading={loading} />
+        <StatCard label="Belum Dibaca" value={newCount} unit="pesan" variant="warning" loading={loading} />
+        <StatCard label="Sudah Dibaca" value={messages.length - newCount} unit="pesan" variant="success" loading={loading} />
       </div>
 
       <div className="flex flex-col gap-4">

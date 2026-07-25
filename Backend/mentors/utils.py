@@ -25,9 +25,10 @@ def get_mentors_for_product(product_id):
         )
     ) | set(
         BootcampSession.objects.filter(
-            bootcamp__product_id=product_id, mentor_id__isnull=False
-        ).values_list("mentor_id", flat=True)
+            bootcamp__product_id=product_id
+        ).values_list("mentors__id", flat=True)
     )
+    mentor_ids.discard(None)
     return MentorProfile.objects.filter(id__in=mentor_ids)
 
 
@@ -43,7 +44,7 @@ def recompute_mentor_rating(mentor_profile):
             "mentoring__product_id", flat=True
         )
     ) | set(
-        BootcampSession.objects.filter(mentor=mentor_profile).values_list(
+        BootcampSession.objects.filter(mentors=mentor_profile).values_list(
             "bootcamp__product_id", flat=True
         )
     )

@@ -94,13 +94,11 @@ export default function AdminSettings() {
             style={{ width: "72px", height: "72px" }}
             className="rounded-full overflow-hidden border border-[#E2E8F0] relative shrink-0 bg-[#F1F5F9]"
           >
-            {profileImage && (
-              <img
-                src={profileImage}
-                alt="Foto profil"
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            )}
+            <img
+              src={profileImage || "/images/default-avatar.svg"}
+              alt="Foto profil"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <p className="text-[#1E293B] font-semibold text-[14px]">Foto Profil</p>

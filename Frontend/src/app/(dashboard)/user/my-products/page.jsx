@@ -258,16 +258,16 @@ export default function MyProducts() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 shrink-0">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 shrink-0">
           {stats.map((s) => (
             <div
               key={s.label}
-              className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-4 sm:px-6 py-5 flex flex-col items-center justify-center min-w-[95px] sm:min-w-[120px]"
+              className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-2 sm:px-6 py-3 sm:py-5 flex flex-col items-center justify-center min-w-0 sm:min-w-[120px]"
             >
-              <p className="text-[#148F89] font-bold text-[30px] sm:text-[34px] leading-none">
+              <p className="text-[#148F89] font-bold text-[22px] sm:text-[34px] leading-none">
                 {s.value}
               </p>
-              <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center whitespace-nowrap">
+              <p className="text-[#9CA3AF] text-[10px] sm:text-[12px] mt-1.5 sm:mt-2 text-center leading-tight">
                 {s.label}
               </p>
             </div>

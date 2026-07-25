@@ -7,6 +7,7 @@ import CountUp from "@/component/CountUp";
 import DarkVeil from "@/component/DarkVeil";
 import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
+import { useDashboardOnlyGuard } from "@/lib/useDashboardOnlyGuard";
 
 const hashtagsRow1 = [
   "#Mentoring",
@@ -140,6 +141,7 @@ const AmbientGlow = ({ tint = "177,158,239", className = "" }) => (
 );
 
 export default function HomePage() {
+  useDashboardOnlyGuard();
   const statsRef = useRef(null);
   const isStatsInView = useInView(statsRef, { once: true, margin: "-100px" });
 
@@ -167,15 +169,40 @@ export default function HomePage() {
   return (
     <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col overflow-x-hidden">
       <Navbar />
-      <div className="absolute top-0 left-0 w-full h-[100dvh] md:h-screen flex flex-col z-0 overflow-hidden pointer-events-none">
-        <DarkVeil
-          hueShift={337}
-          noiseIntensity={0}
-          scanlineIntensity={0}
-          speed={0.5}
-          scanlineFrequency={0.5}
-          warpAmount={0}
-          className="w-full h-full object-cover"
+      {/* svh (small viewport height, statis), bukan dvh (dynamic) -- dvh ikut
+          berubah live pas address bar browser HP collapse waktu discroll,
+          bikin kontainer ini (dan render ulang shader DarkVeil di dalamnya)
+          keliatan "geser" beberapa piksel pas baru mulai scroll. Kotak luar
+          ini yang motong (overflow-hidden), ukurannya tetap selebar layar. */}
+      <div className="absolute top-0 left-0 w-full h-[70svh] landscape:h-screen md:h-screen z-0 overflow-hidden pointer-events-none">
+        {/* Kotak dalam ini 2x lebar layar & dipusatkan, khusus mode portrait --
+            shader DarkVeil dirender di kanvas yang lebih lebar biar rasio
+            tinggi:lebar-nya nggak seekstrem kalau dipas-in ke lebar layar HP
+            doang (itu penyebab pola shader keliatan ketarik vertikal). Bagian
+            yang "nembus" kiri-kanan kepotong sama overflow-hidden di kotak
+            luar. Landscape & desktop nggak butuh trik ini (rasionya udah
+            wajar), jadi balik ke lebar normal. */}
+        <div className="absolute top-0 h-full w-[200%] left-1/2 -translate-x-1/2 landscape:w-full landscape:left-0 landscape:translate-x-0 md:w-full md:left-0 md:translate-x-0">
+          <DarkVeil
+            hueShift={337}
+            noiseIntensity={0}
+            scanlineIntensity={0}
+            speed={0.5}
+            scanlineFrequency={0.5}
+            warpAmount={0}
+          />
+        </div>
+
+        {/* Gradasi di tepi bawah DarkVeil biar gak ada potongan tajam ke
+            section berikutnya -- memudar dari transparan (atas) -> ungu gelap
+            (tengah) -> warna bg halaman #060010 (bawah, biar nyambung mulus
+            tanpa garis batas baru). */}
+        <div
+          className="absolute inset-x-0 bottom-0 h-1/2"
+          style={{
+            background:
+              "linear-gradient(to bottom, rgba(6,0,16,0) 0%, rgba(22,12,50,0.55) 60%, #060010 100%)",
+          }}
         />
       </div>
       <div className="main-content flex flex-col gap-24 md:gap-32 items-center mt-24 md:mt-28 relative z-40 mb-24 w-full">

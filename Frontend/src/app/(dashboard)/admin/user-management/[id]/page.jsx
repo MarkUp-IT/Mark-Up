@@ -85,13 +85,11 @@ export default function UserDetail() {
           style={{ width: "72px", height: "72px" }}
           className="rounded-full overflow-hidden border border-[#E2E8F0] shrink-0 bg-[#F1F5F9]"
         >
-          {profile.profile_image && (
-            <img
-              src={profile.profile_image}
-              alt={profile.fullname}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          )}
+          <img
+            src={profile.profile_image || "/images/default-avatar.svg"}
+            alt={profile.fullname}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
         </div>
         <div className="flex flex-col gap-1.5 flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">

@@ -7,13 +7,16 @@ import {
   Camera,
   ChevronRight,
   Link2,
+  Instagram,
   Briefcase,
   Pencil,
   Trash2,
   Plus,
   X,
   Landmark,
+  AlertTriangle,
 } from "lucide-react";
+import { toast } from "sonner";
 import DashboardLayout from "@/component/mentor/DashboardLayout";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 
@@ -59,11 +62,21 @@ export default function MentorSettings() {
 
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
+  const [isProfileComplete, setIsProfileComplete] = useState(true);
 
-  const [initialInfo, setInitialInfo] = useState({ fullName: "", phone: "", linkedin: "", bio: "" });
+  const [initialInfo, setInitialInfo] = useState({
+    fullName: "",
+    phone: "",
+    linkedin: "",
+    instagram: "",
+    headline: "",
+    bio: "",
+  });
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [linkedin, setLinkedin] = useState("");
+  const [instagram, setInstagram] = useState("");
+  const [headline, setHeadline] = useState("");
   const [bio, setBio] = useState("");
   const [infoSaved, setInfoSaved] = useState(false);
 
@@ -97,6 +110,8 @@ export default function MentorSettings() {
     fullName !== initialInfo.fullName ||
     phone !== initialInfo.phone ||
     linkedin !== initialInfo.linkedin ||
+    instagram !== initialInfo.instagram ||
+    headline !== initialInfo.headline ||
     bio !== initialInfo.bio;
 
   const isExpertiseDirty =
@@ -127,11 +142,14 @@ export default function MentorSettings() {
     async function load() {
       setLoading(true);
       try {
-        const [profileRes, expertiseRes, meRes] = await Promise.all([
+        const [profileRes, expertiseRes, meRes, meStatusRes] = await Promise.all([
           apiRequest("/api/mentors/me/profile/"),
           apiRequest("/api/mentors/expertise/", { auth: false }),
           apiRequest("/api/accounts/me/profile/"),
+          apiRequest("/api/accounts/me/"),
         ]);
+
+        setIsProfileComplete(meStatusRes?.user?.is_profile_complete ?? true);
 
         setExpertiseOptions(expertiseRes?.expertise || []);
 
@@ -142,12 +160,16 @@ export default function MentorSettings() {
           fullName: profileRes.fullname,
           phone: profileRes.phone,
           linkedin: profileRes.linkedin_url,
+          instagram: profileRes.instagram_url || "",
+          headline: profileRes.headline || "",
           bio: profileRes.bio,
         };
         setInitialInfo(info);
         setFullName(info.fullName);
         setPhone(info.phone);
         setLinkedin(info.linkedin);
+        setInstagram(info.instagram);
+        setHeadline(info.headline);
         setBio(info.bio);
 
         setInitialExpertise(profileRes.expertise || []);
@@ -181,6 +203,18 @@ export default function MentorSettings() {
     load();
   }, []);
 
+  // Dipanggil ulang tiap kali salah satu section berhasil disimpan, biar
+  // banner "lengkapi data wajib" langsung ilang tanpa perlu refresh manual
+  // begitu semua field wajib udah keisi.
+  const refreshProfileCompleteness = async () => {
+    try {
+      const res = await apiRequest("/api/accounts/me/");
+      setIsProfileComplete(res?.user?.is_profile_complete ?? true);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const closeExpModal = () => setShowExpModal(false);
 
   const handleSaveInfo = async (e) => {
@@ -188,13 +222,23 @@ export default function MentorSettings() {
     try {
       await apiRequest("/api/mentors/me/profile/", {
         method: "PATCH",
-        body: { fullname: fullName, phone, linkedin_url: linkedin, bio },
+        body: {
+          fullname: fullName,
+          phone,
+          linkedin_url: linkedin,
+          instagram_url: instagram,
+          headline,
+          bio,
+        },
       });
-      setInitialInfo({ fullName, phone, linkedin, bio });
+      setInitialInfo({ fullName, phone, linkedin, instagram, headline, bio });
       setInfoSaved(true);
       setTimeout(() => setInfoSaved(false), 3000);
+      refreshProfileCompleteness();
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menyimpan", {
+        description: err?.message || "Coba lagi, atau cek isian kamu.",
+      });
     }
   };
 
@@ -215,8 +259,11 @@ export default function MentorSettings() {
       setInitialExpertise(selectedExpertise);
       setExpertiseSaved(true);
       setTimeout(() => setExpertiseSaved(false), 3000);
+      refreshProfileCompleteness();
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menyimpan keahlian", {
+        description: err?.message || "Coba lagi sebentar.",
+      });
     }
   };
 
@@ -234,8 +281,11 @@ export default function MentorSettings() {
       setInitialBank({ bankName, accountNumber, accountHolder });
       setBankSaved(true);
       setTimeout(() => setBankSaved(false), 3000);
+      refreshProfileCompleteness();
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menyimpan rekening", {
+        description: err?.message || "Coba lagi sebentar.",
+      });
     }
   };
 
@@ -255,6 +305,7 @@ export default function MentorSettings() {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.detail || "Gagal mengunggah foto.");
       setProfileImage(data.profile_image);
+      refreshProfileCompleteness();
     } catch (err) {
       setPhotoError(err.message || "Gagal mengunggah foto.");
     } finally {
@@ -298,7 +349,9 @@ export default function MentorSettings() {
       await apiRequest(`/api/mentors/me/experiences/${id}/`, { method: "DELETE" });
       setExperiences((prev) => prev.filter((exp) => exp.id !== id));
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menghapus pengalaman", {
+        description: err?.message || "Coba lagi sebentar.",
+      });
     }
   };
 
@@ -338,7 +391,9 @@ export default function MentorSettings() {
       }
       setShowExpModal(false);
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menyimpan pengalaman", {
+        description: err?.message || "Cek isian kamu, lalu coba lagi.",
+      });
     }
   };
 
@@ -361,6 +416,23 @@ export default function MentorSettings() {
         </p>
       </motion.div>
 
+      {!isProfileComplete && (
+        <motion.div
+          {...sectionReveal}
+          className="bg-[#F59E0B]/10 border border-[#F59E0B]/30 rounded-[12px] p-4 flex items-start gap-3"
+        >
+          <AlertTriangle size={18} className="text-[#F59E0B] shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[#F59E0B] font-semibold text-[13px]">
+              Lengkapi dulu data wajib di bawah ini
+            </p>
+            <p className="text-[#FCD34D]/80 text-[12px] mt-1">
+              Sebelum lengkap, kamu cuma bisa akses halaman Pengaturan ini dan belum muncul di halaman Mentors publik. Field wajib: Foto Profil, Nama, Nomor WhatsApp, LinkedIn, Instagram, minimal 1 Keahlian, dan Rekening Bank.
+            </p>
+          </div>
+        </motion.div>
+      )}
+
       {/* Foto Profil */}
       <motion.div
         {...sectionReveal}
@@ -368,11 +440,11 @@ export default function MentorSettings() {
       >
         <div className="relative shrink-0">
           <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#2D2342] bg-[#0F081C] flex items-center justify-center">
-            {profileImage ? (
-              <img src={profileImage} alt="Foto profil" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-[#6B7280] text-[11px]">Tidak ada foto</span>
-            )}
+            <img
+              src={profileImage || "/images/default-avatar.svg"}
+              alt="Foto profil"
+              className="w-full h-full object-cover"
+            />
           </div>
           <label
             aria-label="Ganti foto"
@@ -429,15 +501,28 @@ export default function MentorSettings() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Nama Lengkap" value={fullName} onChange={setFullName} />
+          <Field label="Nama Lengkap *" value={fullName} onChange={setFullName} />
           <Field label="Email" value={email} disabled note="Hubungi support untuk mengubah email." />
-          <Field label="Nomor WhatsApp" value={phone} onChange={setPhone} />
+          <Field label="Nomor WhatsApp *" value={phone} onChange={setPhone} />
           <Field
-            label="LinkedIn"
+            label="LinkedIn *"
             value={linkedin}
             onChange={setLinkedin}
             icon={<Link2 size={16} />}
             note="Tautan profil LinkedIn-mu."
+          />
+          <Field
+            label="Instagram *"
+            value={instagram}
+            onChange={setInstagram}
+            icon={<Instagram size={16} />}
+            note="Tautan/username Instagram-mu."
+          />
+          <Field
+            label="Headline"
+            value={headline}
+            onChange={setHeadline}
+            note="Contoh: Konsultan Bisnis, Product Manager, dsb. (opsional)"
           />
         </div>
         <Field label="Bio Singkat" value={bio} onChange={setBio} textarea />
@@ -602,11 +687,11 @@ export default function MentorSettings() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Nama Bank" value={bankName} onChange={setBankName} />
-          <Field label="Nomor Rekening" value={accountNumber} onChange={setAccountNumber} />
+          <Field label="Nama Bank *" value={bankName} onChange={setBankName} />
+          <Field label="Nomor Rekening *" value={accountNumber} onChange={setAccountNumber} />
         </div>
         <Field
-          label="Nama Pemilik Rekening"
+          label="Nama Pemilik Rekening *"
           value={accountHolder}
           onChange={setAccountHolder}
           note="Harus sama persis dengan nama di buku tabungan/rekening."
@@ -691,7 +776,7 @@ export default function MentorSettings() {
                 textarea
               />
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[#E2E8F0] text-[13px] font-medium">Mulai</label>
                   <input

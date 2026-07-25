@@ -1,23 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { SearchX, Loader2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
-
-
-const categories = [
-  "Semua",
-  "Business Case",
-  "Business Plan",
-  "Debat",
-  "LKTI",
-  "UI/UX",
-  "Hackathon",
-];
 
 // Token card konten, disamakan persis dengan yang dipakai di Homepage:
 // radius kecil (6->8px), hover cuma ganti warna border, tanpa transform apapun.
@@ -36,6 +25,16 @@ export default function InfoLombaPage() {
   const [error, setError] = useState(null);
 
   const shouldReduceMotion = useReducedMotion();
+
+  // Kategori filter ngikutin data lomba yang beneran diinput admin -- bukan
+  // list statis, biar konsisten sama apa yang ada (kalau admin belum input
+  // lomba sama sekali, filternya kosong juga).
+  const categories = useMemo(() => {
+    const unique = Array.from(
+      new Set(lombaData.map((lomba) => lomba.category).filter(Boolean)),
+    ).sort();
+    return ["Semua", ...unique];
+  }, [lombaData]);
 
   // Filter Logic
   const filteredLomba = lombaData.filter((lomba) => {
@@ -163,7 +162,9 @@ export default function InfoLombaPage() {
           />
         </div>
 
-        {/* CATEGORY FILTERS */}
+        {/* CATEGORY FILTERS -- disembunyiin kalau belum ada variasi kategori
+            buat difilter (cuma "Semua" doang) */}
+        {categories.length > 1 && (
         <div className="flex flex-wrap justify-center gap-3 mb-10 w-full max-w-[800px]">
           {categories.map((cat, index) => (
             <button
@@ -179,8 +180,9 @@ export default function InfoLombaPage() {
             </button>
           ))}
         </div>
+        )}
 
-        {/* COUNTER */}
+        {/* COUNTER + GRID LOMBA */}
         {loading ? (
           <div className="w-full max-w-[1050px] flex flex-col items-center justify-center gap-3 text-center py-16">
             <Loader2 className="animate-spin text-[#A19DAB]" size={28} />
@@ -196,23 +198,9 @@ export default function InfoLombaPage() {
             <p className="text-[#A19DAB] text-sm max-w-[320px]">
               {searchQuery
                 ? `Lomba dengan kata kunci "${searchQuery}" tidak ditemukan.`
-                : `Belum ada lomba untuk kategori "${activeCategory}".`}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-[1050px]">
-            {/* ...kode grid yang sudah ada, tidak berubah... */}
-          </div>
-        )}
-
-        {/* GRID LOMBA */}
-        {filteredLomba.length === 0 ? (
-          <div className="w-full max-w-[1050px] flex flex-col items-center justify-center gap-3 text-center py-16 px-6 border border-dashed border-[#3A3545] rounded-md md:rounded-lg bg-[#1A1625]/40">
-            <SearchX size={32} className="text-[#A19DAB]" />
-            <p className="text-[#A19DAB] text-sm max-w-[320px]">
-              {searchQuery
-                ? `Lomba dengan kata kunci "${searchQuery}" tidak ditemukan.`
-                : `Belum ada lomba untuk kategori "${activeCategory}".`}
+                : activeCategory === "Semua"
+                  ? "Belum ada lomba yang tersedia saat ini."
+                  : `Belum ada lomba untuk kategori "${activeCategory}".`}
             </p>
           </div>
         ) : (
@@ -369,7 +357,7 @@ export default function InfoLombaPage() {
                 </p>
 
                 {/* Grid 6 Box Info */}
-                <div className="grid grid-cols-2 gap-3 mb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
                   <InfoBox
                     title="Pelaksanaan"
                     value={selectedLomba.date}

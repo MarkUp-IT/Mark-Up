@@ -19,6 +19,19 @@ class MentorProfileForm(forms.ModelForm):
             "instagram_url",
         ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # bank_name/bank_account/linkedin_url di model wajib (gak ada blank=True),
+        # tapi UI Settings nyimpen per-section (Info Pribadi vs Rekening Bank
+        # kirim field yang beda-beda). Kalau field-nya tetep wajib di form,
+        # mentor BARU gak akan pernah bisa nyimpen section manapun -- section
+        # yang lagi disimpen bakal ketolak gara-gara field section LAIN masih
+        # kosong. Jadi semua field di-longgarin jadi opsional di sini;
+        # kelengkapan profil beneran tetep dijaga terpisah lewat
+        # MentorProfile.is_profile_complete() + gate useAuthGuard di FE.
+        for field in self.fields.values():
+            field.required = False
+
 
 class MentorExperienceForm(forms.ModelForm):
     class Meta:

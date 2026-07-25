@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Mail, Phone, MapPin, Send, ExternalLink } from "lucide-react";
+import { Mail, Phone, MapPin, Send } from "lucide-react";
 import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 import { apiRequest } from "@/lib/api";
@@ -181,32 +181,6 @@ export default function ContactPage() {
                   {ALAMAT}
                 </p>
               </div>
-
-              {/* Placeholder peta -- link ke pencarian Google Maps pakai teks
-                  alamat, jadi selalu akurat tanpa perlu koordinat manual */}
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ALAMAT)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="relative w-full h-[220px] rounded-md md:rounded-lg border border-[#B19EEF]/20 bg-[#1A132F] flex flex-col items-center justify-center gap-2 overflow-hidden group hover:border-[#B19EEF]/50 transition-colors"
-              >
-                <div
-                  className="absolute inset-0 opacity-30"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(rgba(177,158,239,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(177,158,239,0.15) 1px, transparent 1px)",
-                    backgroundSize: "24px 24px",
-                  }}
-                />
-                <MapPin
-                  size={28}
-                  className="text-[#B19EEF] relative z-10 group-hover:scale-110 transition-transform"
-                />
-                <span className="text-sm text-white font-semibold flex items-center gap-1.5 relative z-10">
-                  Buka di Google Maps
-                  <ExternalLink size={13} />
-                </span>
-              </a>
             </div>
           </motion.div>
 

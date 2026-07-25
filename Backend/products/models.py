@@ -4,7 +4,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 import uuid
 from django.db import models
 from accounts.models import User
-from mentors.models import MentorProfile
+from mentors.models import MentorProfile, Expertise
 
 class BaseModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
@@ -44,7 +44,12 @@ class BaseProductDetail(BaseModel):
         default=""
     )
     published_at = models.DateTimeField(blank=True, null=True)
+    # image_url = URL eksternal (legacy / kalau admin mau paste link).
+    # image = file yang di-upload admin ke storage; URL-nya di-generate fresh
+    # tiap request di serializer (storage pakai presigned URL yang expired,
+    # jadi gak boleh disimpen mentah kayak image_url).
     image_url = models.URLField(blank=True, null=True)
+    image = models.ImageField(upload_to="product_images/%Y/%m/", blank=True, null=True)
     original_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     discount_percent = models.PositiveIntegerField(null=True, blank=True)
     sold_count = models.PositiveIntegerField(default=0)
@@ -78,6 +83,14 @@ class MentoringProduct(BaseProductDetail):
 
     session_count = models.PositiveIntegerField(default=1)
     duration_minutes = models.PositiveIntegerField(default=60)
+
+    expertise = models.ManyToManyField(
+        Expertise,
+        related_name="mentoring_products",
+        blank=True,
+        help_text="Kategori mentoring (BCC, BPC, Karir, dst) -- nentuin mentor mana aja "
+                   "yang boleh dipilih pembeli produk ini (harus overlap sama keahlian mentor).",
+    )
 
     class Meta:
         verbose_name = "Mentoring Product"
@@ -167,6 +180,10 @@ class Review(BaseModel):
         null=True,
     )
     is_hidden = models.BooleanField(default=False)
+    is_seen_by_admin = models.BooleanField(
+        default=False,
+        help_text="Ke-set True begitu admin buka halaman daftar ulasan -- dipakai buat badge notifikasi 'ulasan baru' di sidebar.",
+    )
 
     class Meta:
         constraints = [
@@ -237,11 +254,9 @@ class BootcampSession(models.Model):
     )
     order = models.PositiveIntegerField(default=1)
     title = models.CharField(max_length=255)
-    mentor = models.ForeignKey(
+    mentors = models.ManyToManyField(
         MentorProfile,
-        on_delete=models.CASCADE,
         related_name="bootcamp_sessions",
-        null=True,
         blank=True,
     )
     start_time = models.DateTimeField(blank=True, null=True)

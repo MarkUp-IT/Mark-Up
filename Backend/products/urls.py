@@ -23,6 +23,7 @@ from .views import (
     update_bootcamp_order_session,
     get_all_reviews,
     toggle_review_visibility,
+    upload_product_image,
 )
 
 urlpatterns = [
@@ -42,6 +43,7 @@ urlpatterns = [
     path("reviews/<uuid:review_id>/toggle/", toggle_review_visibility, name="api_review_toggle"),
     path("summary/", get_product_summary, name="api_products_summary"),
     path("add/", add_product, name="api_products_add"),
+    path("upload-image/", upload_product_image, name="api_products_upload_image"),
     path("my-products/", get_my_products, name="api_my_products_list"),
     path("my-products/<uuid:product_id>/", get_my_product_detail, name="api_my_product_detail"),
     path("my-products/<uuid:product_id>/rate/", rate_my_product, name="api_my_product_rate"),

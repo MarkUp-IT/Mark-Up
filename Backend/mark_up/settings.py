@@ -129,6 +129,21 @@ DATABASES = {
 }
 
 
+# Cache -- dipakai rate limiter (is_rate_limited) buat throttle brute-force &
+# spam. WAJIB backend yang SHARED antar-proses di produksi: Gunicorn jalan
+# multi-worker, kalau pakai LocMemCache (default) tiap worker punya penghitung
+# sendiri -> limit efektif jadi berkali lipat lebih longgar (gampang di-bypass).
+# DatabaseCache pakai PostgreSQL yang udah ada, konsisten lintas worker, dan
+# tahan restart. Tabelnya dibuat sekali lewat `manage.py createcachetable`.
+if os.getenv("PRODUCTION", "False").lower() == "true":
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "markup_cache",
+        }
+    }
+
+
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
@@ -164,9 +179,14 @@ if os.getenv("EMAIL_HOST"):
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@markup.com")
+# Inbox tim buat notifikasi internal yang butuh tindakan cepat (transaksi baru
+# nunggu verifikasi, pesan masuk, pengajuan refund).
+TEAM_NOTIFICATION_EMAIL = os.getenv("TEAM_NOTIFICATION_EMAIL", "markup.ofc@gmail.com")
 PASSWORD_RESET_TIMEOUT = 60 * 30  # 30 menit, samain sama teks di halaman lupa password FE
 
 FRONTEND_BASE_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
@@ -204,6 +224,14 @@ S3_REGION_NAME = os.getenv("S3_REGION_NAME", "auto")
 USE_S3_STORAGE = all([S3_ENDPOINT_URL, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET_NAME])
 
 if USE_S3_STORAGE:
+    # Botocore versi baru default-nya kirim checksum (x-amz-content-sha256)
+    # yang belum semua provider S3-compatible non-AWS dukung dengan benar,
+    # bikin error "XAmzContentSHA256Mismatch" pas upload. Ini fix standarnya --
+    # balikin ke perilaku lama (checksum cuma kalau operasinya benar-benar
+    # butuh, bukan selalu).
+    os.environ.setdefault("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required")
+    os.environ.setdefault("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required")
+
     AWS_ACCESS_KEY_ID = S3_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY = S3_SECRET_ACCESS_KEY
     AWS_STORAGE_BUCKET_NAME = S3_BUCKET_NAME
@@ -218,7 +246,7 @@ if USE_S3_STORAGE:
     AWS_QUERYSTRING_EXPIRE = 3600  # 1 jam
 
     STORAGES = {
-        "default": {"BACKEND": "storages.backends.s3.S3Storage"},
+        "default": {"BACKEND": "mark_up.storage.TolerantS3Storage"},
         "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
     }
 else:

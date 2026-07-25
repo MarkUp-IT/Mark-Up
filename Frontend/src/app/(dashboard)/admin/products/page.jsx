@@ -26,7 +26,7 @@ import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import CurrencyInput from "@/component/admin/CurrencyInput";
 import { toast } from "sonner";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, getAccessToken, API_BASE } from "@/lib/api";
 import { extractErrorMessage, extractFieldErrors, fieldBorderClass as fieldBorder } from "@/lib/formErrors";
 
 const CATEGORY_FILTERS = ["Semua", "Mentoring", "Bootcamp", "Modul"];
@@ -81,6 +81,7 @@ export default function Products() {
       image_url: "",
       file_pdf_url: "",
       stock: "",
+      expertise: [],
     });
 
     const [editFormData, setEditFormData] = useState({
@@ -94,7 +95,38 @@ export default function Products() {
     duration_minutes: 60,
     stock: "",
     is_active: true,
+    expertise: [],
   });
+
+  const [expertiseOptions, setExpertiseOptions] = useState([]);
+  const [newExpertiseName, setNewExpertiseName] = useState("");
+  const [isSavingExpertise, setIsSavingExpertise] = useState(false);
+
+  // Upload gambar produk: key = path storage yg dikirim ke payload add/update,
+  // preview = URL buat ditampilin. Kepisah antara add & edit modal.
+  const [addImage, setAddImage] = useState({ key: "", preview: "", uploading: false });
+  const [editImage, setEditImage] = useState({ key: "", preview: "", uploading: false });
+
+  const uploadProductImage = async (file, setImageState) => {
+    if (!file) return;
+    setImageState((s) => ({ ...s, uploading: true }));
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const token = getAccessToken();
+      const res = await fetch(`${API_BASE}/api/products/upload-image/`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail || "Gagal mengunggah gambar.");
+      setImageState({ key: data.key, preview: data.url, uploading: false });
+    } catch (err) {
+      showToast("error", "Gagal unggah gambar", err?.message || "Coba lagi.");
+      setImageState((s) => ({ ...s, uploading: false }));
+    }
+  };
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -137,6 +169,45 @@ export default function Products() {
 
     fetchSummary();
   }, []);
+
+  const fetchExpertiseOptions = async () => {
+    try {
+      const res = await api.get("/api/mentors/expertise/", { auth: false });
+      setExpertiseOptions(res?.expertise || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchExpertiseOptions();
+  }, []);
+
+  const handleAddExpertise = async () => {
+    const name = newExpertiseName.trim();
+    if (!name) return;
+    setIsSavingExpertise(true);
+    try {
+      await api.post("/api/mentors/expertise/create/", { name });
+      setNewExpertiseName("");
+      await fetchExpertiseOptions();
+    } catch (err) {
+      showToast("error", "Gagal menambah keahlian", extractErrorMessage(err));
+    } finally {
+      setIsSavingExpertise(false);
+    }
+  };
+
+  const handleDeleteExpertise = async (id) => {
+    try {
+      await api.delete(`/api/mentors/expertise/${id}/delete/`);
+      await fetchExpertiseOptions();
+      setFormData((prev) => ({ ...prev, expertise: prev.expertise.filter((x) => x !== id) }));
+      setEditFormData((prev) => ({ ...prev, expertise: prev.expertise.filter((x) => x !== id) }));
+    } catch (err) {
+      showToast("error", "Gagal menghapus keahlian", extractErrorMessage(err));
+    }
+  };
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -259,44 +330,115 @@ export default function Products() {
   const renderCategorySpecificFields = (data, setData, category) => {
     if (category === "Mentoring") {
       return (
-        <div className="flex gap-4 w-full">
-          <div className="flex flex-col gap-2 flex-1">
-            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-              Jumlah Sesi
-            </p>
-            <input
-              type="number"
-              min="1"
-              value={data.session_count}
-              onChange={(e) =>
-                setData((prev) => ({
-                  ...prev,
-                  session_count: e.target.value,
-                }))
-              }
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
-            />
-            <p className="text-[#94A3B8] text-[11px]">
-              Sesi pertama dipilih user pas checkout, sisanya dipilih sendiri dari
-              halaman Produk Saya setelah pembayaran dikonfirmasi.
-            </p>
+        <div className="flex flex-col gap-4 w-full">
+          <div className="flex gap-4 w-full">
+            <div className="flex flex-col gap-2 flex-1">
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Jumlah Sesi
+              </p>
+              <input
+                type="number"
+                min="1"
+                value={data.session_count}
+                onChange={(e) =>
+                  setData((prev) => ({
+                    ...prev,
+                    session_count: e.target.value,
+                  }))
+                }
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              />
+              <p className="text-[#94A3B8] text-[11px]">
+                Sesi pertama dipilih user pas checkout, sisanya dipilih sendiri dari
+                halaman Produk Saya setelah pembayaran dikonfirmasi.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 flex-1">
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Durasi per Sesi (menit)
+              </p>
+              <input
+                type="number"
+                min="1"
+                value={data.duration_minutes}
+                onChange={(e) =>
+                  setData((prev) => ({
+                    ...prev,
+                    duration_minutes: e.target.value,
+                  }))
+                }
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              />
+            </div>
           </div>
-          <div className="flex flex-col gap-2 flex-1">
+
+          <div className="flex flex-col gap-2 w-full">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-              Durasi per Sesi (menit)
+              Kategori Keahlian
             </p>
-            <input
-              type="number"
-              min="1"
-              value={data.duration_minutes}
-              onChange={(e) =>
-                setData((prev) => ({
-                  ...prev,
-                  duration_minutes: e.target.value,
-                }))
-              }
-              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
-            />
+            <p className="text-[#94A3B8] text-[11px] -mt-1">
+              Nentuin mentor mana aja yang bisa dipilih pembeli produk ini (harus overlap sama keahlian mentor). Kosongin kalau belum mau dibatasi.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {expertiseOptions.map((opt) => {
+                const isSelected = data.expertise.includes(opt.id);
+                return (
+                  <div key={opt.id} className="relative group">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setData((prev) => ({
+                          ...prev,
+                          expertise: isSelected
+                            ? prev.expertise.filter((x) => x !== opt.id)
+                            : [...prev.expertise, opt.id],
+                        }))
+                      }
+                      className={`px-3.5 py-2 pr-7 rounded-[8px] text-[12.5px] font-medium border transition-colors ${
+                        isSelected
+                          ? "bg-[#148F89]/10 border-[#148F89] text-[#148F89]"
+                          : "bg-[#F8FAFC] border-[#E2E8F0] text-[#64748B] hover:border-[#94A3B8]"
+                      }`}
+                    >
+                      {opt.name}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteExpertise(opt.id);
+                      }}
+                      aria-label={`Hapus keahlian ${opt.name}`}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+              {expertiseOptions.length === 0 && (
+                <p className="text-[#94A3B8] text-[12px] italic">
+                  Belum ada kategori keahlian, tambahin di bawah.
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2 mt-1">
+              <input
+                type="text"
+                value={newExpertiseName}
+                onChange={(e) => setNewExpertiseName(e.target.value)}
+                placeholder="Tambah kategori baru, mis. BCC"
+                className="flex-1 adm-h-42 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-3.5 text-[13px] outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              />
+              <button
+                type="button"
+                onClick={handleAddExpertise}
+                disabled={!newExpertiseName.trim() || isSavingExpertise}
+                className="px-4 adm-h-42 rounded-[8px] bg-[#148F89] text-white text-[12.5px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+              >
+                Tambah
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -336,6 +478,7 @@ export default function Products() {
         session_count: Number(formData.session_count) || 1,
         duration_minutes: Number(formData.duration_minutes) || 60,
         stock: formData.stock === "" ? null : Number(formData.stock),
+        image_key: addImage.key || undefined,
       };
 
       const res = await api.post("/api/products/add/", payload);
@@ -385,6 +528,7 @@ export default function Products() {
         stock:
           editFormData.stock === "" ? null : Number(editFormData.stock),
         is_active: editFormData.is_active,
+        image_key: editImage.key || undefined,
       };
 
       const res = await api.patch(
@@ -433,7 +577,10 @@ export default function Products() {
           </p>
         </div>
         <button
-          onClick={() => setIsAddOpen(true)}
+          onClick={() => {
+            setAddImage({ key: "", preview: "", uploading: false });
+            setIsAddOpen(true);
+          }}
           className="adm-h-42 flex items-center gap-2 px-5 rounded-[8px] bg-[#148F89] text-white text-[13px] font-semibold hover:bg-[#117A75] transition-colors"
         >
           <Plus size={16} />
@@ -729,7 +876,9 @@ export default function Products() {
                                 duration_minutes: item.duration_minutes ?? 60,
                                 stock: item.stock ?? "",
                                 is_active: item.is_active,
+                                expertise: item.expertise ?? [],
                               });
+                              setEditImage({ key: "", preview: item.image_url || "", uploading: false });
                               setIsEditOpen(true);
                             }}
                             className="cursor-pointer text-[#94A3B8] hover:text-[#148F89] transition-colors"
@@ -800,16 +949,28 @@ export default function Products() {
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
               Thumbnail Produk
             </p>
-            <div
+            <label
               style={{ height: "160px" }}
-              className="bg-[#F8FAFC] w-full rounded-[8px] flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:bg-[#F1F5F9] transition-all cursor-pointer"
+              className="relative bg-[#F8FAFC] w-full rounded-[8px] flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:bg-[#F1F5F9] transition-all cursor-pointer overflow-hidden"
             >
-              <CloudUpload size={22} className="text-[#148F89] mb-2" />
-              <p className="text-[#1E293B] font-semibold text-[14px]">
-                Klik untuk unggah gambar
-              </p>
-              <p className="text-[#94A3B8] text-[12px]">Maks. 5MB</p>
-            </div>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => uploadProductImage(e.target.files?.[0], setAddImage)}
+              />
+              {addImage.preview ? (
+                <img src={addImage.preview} alt="Preview" className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <>
+                  <CloudUpload size={22} className="text-[#148F89] mb-2" />
+                  <p className="text-[#1E293B] font-semibold text-[14px]">
+                    {addImage.uploading ? "Mengunggah..." : "Klik untuk unggah gambar"}
+                  </p>
+                  <p className="text-[#94A3B8] text-[12px]">JPG/PNG/WEBP, maks. 5MB</p>
+                </>
+              )}
+            </label>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -1016,6 +1177,34 @@ export default function Products() {
         </div>
 
         <div className="px-8 py-6 flex flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Thumbnail Produk
+            </p>
+            <label
+              style={{ height: "160px" }}
+              className="relative bg-[#F8FAFC] w-full rounded-[8px] flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:bg-[#F1F5F9] transition-all cursor-pointer overflow-hidden"
+            >
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => uploadProductImage(e.target.files?.[0], setEditImage)}
+              />
+              {editImage.preview ? (
+                <img src={editImage.preview} alt="Preview" className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <>
+                  <CloudUpload size={22} className="text-[#148F89] mb-2" />
+                  <p className="text-[#1E293B] font-semibold text-[14px]">
+                    {editImage.uploading ? "Mengunggah..." : "Klik untuk ganti gambar"}
+                  </p>
+                  <p className="text-[#94A3B8] text-[12px]">JPG/PNG/WEBP, maks. 5MB</p>
+                </>
+              )}
+            </label>
+          </div>
+
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
               Judul
@@ -1345,6 +1534,24 @@ export default function Products() {
               )}
             </div>
 
+            {viewProduct.expertise_names?.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                  Kategori Keahlian
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {viewProduct.expertise_names.map((name, idx) => (
+                    <span
+                      key={idx}
+                      className="px-3 py-1.5 rounded-full text-[12px] font-medium bg-[#148F89]/10 text-[#148F89] border border-[#148F89]/20"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {viewProduct.highlights?.length > 0 && (
               <div className="flex flex-col gap-2">
                 <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
@@ -1392,7 +1599,9 @@ export default function Products() {
                 duration_minutes: viewProduct.duration_minutes ?? 60,
                 stock: viewProduct.stock ?? "",
                 is_active: viewProduct.is_active,
+                expertise: viewProduct.expertise ?? [],
               });
+              setEditImage({ key: "", preview: viewProduct.image_url || "", uploading: false });
               setIsEditOpen(true);
             }}
             className="flex-1 py-3 bg-[#148F89] text-white font-bold rounded-[8px] hover:bg-[#117A75] transition-colors"

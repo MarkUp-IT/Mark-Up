@@ -7,7 +7,7 @@ export default function Header({
   onMenuClick = () => {},
   profileName = "Mentor",
   email = "",
-  avatarSrc = "/images/pp.png",
+  avatarSrc,
 }) {
   return (
     <div className="sticky top-0 z-30 w-full h-[72px] bg-[#1A1128] border-b border-white/5 flex flex-row items-center justify-between px-4 sm:px-6 lg:px-10 shadow-sm">
@@ -36,7 +36,7 @@ export default function Header({
         <div className="rounded-full bg-gradient-to-tr from-[#06B6D4] to-[#3B82F6] p-[2px] shadow-sm flex items-center justify-center">
           <div className="bg-[#1A1128] w-[32px] h-[32px] rounded-full overflow-hidden">
             <img
-              src={avatarSrc}
+              src={avatarSrc || "/images/default-avatar.svg"}
               alt={profileName}
               className="w-full h-full object-cover"
             />

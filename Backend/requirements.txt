@@ -11,3 +11,4 @@ django-cors-headers
 Pillow
 django-storages
 boto3
+google-auth
