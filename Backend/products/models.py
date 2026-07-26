@@ -205,6 +205,13 @@ class BootcampPackage(models.Model):
     is_active = models.BooleanField(default=True)
     registration_opens_at = models.DateTimeField(blank=True, null=True)
     registration_closes_at = models.DateTimeField(blank=True, null=True)
+    payment_deadline_at = models.DateTimeField(
+        blank=True, null=True,
+        help_text="Batas waktu bayar buat pendaftar yang sudah Diterima (mis. jendela "
+                   "bayar Mentee di timeline). Kosong = gak ada batas waktu otomatis -- "
+                   "admin urus manual. Kalau lewat, tombol bayar terkunci sampai admin "
+                   "ubah keputusan/tenggat.",
+    )
     min_attendance_sessions = models.PositiveIntegerField(
         default=0,
         help_text="Minimal jumlah sesi bootcamp berstatus selesai (per peserta) buat "
@@ -491,6 +498,52 @@ class BootcampQuizAnswer(models.Model):
 
     def __str__(self) -> str:
         return f"{self.attempt_id} -> {self.question_id} = {self.selected_choice}"
+
+
+class BootcampTeam(models.Model):
+    """Tim buat benefit Team Pairing -- dibuat & diisi manual oleh admin
+    (atau lewat tombol acak), per batch bootcamp."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct, on_delete=models.CASCADE, related_name="teams",
+    )
+    name = models.CharField(max_length=100)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Team"
+        verbose_name_plural = "Bootcamp Teams"
+        ordering = ["order", "created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.bootcamp_id})"
+
+
+class BootcampTeamMember(models.Model):
+    """Satu peserta di dalam satu tim -- OneToOneField ke UserLibrary
+    (bukan ke User langsung) supaya otomatis kegate: cuma peserta yang udah
+    beneran beli/lunas bootcamp ini yang bisa dimasukkin tim, dan satu
+    peserta cuma bisa ada di SATU tim per bootcamp (constraint di level DB,
+    bukan cuma dicek di kode)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    team = models.ForeignKey(
+        BootcampTeam, on_delete=models.CASCADE, related_name="members",
+    )
+    user_library = models.OneToOneField(
+        "UserLibrary", on_delete=models.CASCADE, related_name="team_membership",
+    )
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Team Member"
+        verbose_name_plural = "Bootcamp Team Members"
+        ordering = ["joined_at"]
+
+    def __str__(self) -> str:
+        return f"{self.user_library} -> {self.team}"
 
 
 class Review(BaseModel):

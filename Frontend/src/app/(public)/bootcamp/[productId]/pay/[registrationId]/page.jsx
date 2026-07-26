@@ -84,7 +84,11 @@ export default function BootcampPaymentPage() {
 
   const total = registration ? Number(registration.package.price) + Number(registration.package.commitment_fee) : 0;
   const payment = registration?.payment;
-  const showForm = registration && registration.status === "accepted" && (!payment || payment.status === "FAILED");
+  const showForm =
+    registration
+    && registration.status === "accepted"
+    && !registration.payment_deadline_passed
+    && (!payment || payment.status === "FAILED");
 
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white">
@@ -108,6 +112,14 @@ export default function BootcampPaymentPage() {
             <p className="text-[#E2E8F0] text-[14px]">
               Pembayaran cuma bisa dilakukan setelah pendaftaran kamu dinyatakan Diterima.
             </p>
+          </div>
+        ) : registration.payment_deadline_passed && payment?.status !== "PAID" ? (
+          <div className="bg-[#170F26] border border-[#EF4444]/30 rounded-[12px] p-6 flex flex-col items-center gap-3 text-center">
+            <AlertTriangle size={28} className="text-[#EF4444]" />
+            <p className="text-[#E2E8F0] text-[14px]">
+              Batas waktu pembayaran untuk paket {registration.package.name} sudah lewat.
+            </p>
+            <p className="text-[#9CA3AF] text-[12px]">Hubungi admin kalau kamu merasa ini keliru.</p>
           </div>
         ) : (
           <>

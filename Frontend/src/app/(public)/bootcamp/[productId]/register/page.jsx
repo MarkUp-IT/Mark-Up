@@ -199,31 +199,34 @@ export default function BootcampRegisterPage() {
                       )}
                       {canPay && (
                         <>
-                          {!r.payment && (
-                            <Link
-                              href={`/bootcamp/${productId}/pay/${r.id}`}
-                              className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#148F89] text-white text-[12.5px] font-semibold hover:bg-[#117A75] transition-colors"
-                            >
-                              Bayar Sekarang ({formatIDR(Number(r.package.price) + Number(r.package.commitment_fee))})
-                            </Link>
-                          )}
-                          {r.payment?.status === "PENDING" && (
-                            <span className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#F59E0B]/10 text-[#F59E0B] text-[12.5px] font-semibold border border-[#F59E0B]/30">
-                              <Clock size={14} /> Menunggu Verifikasi Pembayaran
-                            </span>
-                          )}
-                          {r.payment?.status === "PAID" && (
+                          {r.payment?.status === "PAID" ? (
                             <span className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#148F89]/10 text-[#148F89] text-[12.5px] font-semibold border border-[#148F89]/30">
                               <Check size={14} /> Lunas
                             </span>
-                          )}
-                          {r.payment?.status === "FAILED" && (
+                          ) : r.payment_deadline_passed ? (
+                            <span className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#EF4444]/10 text-[#EF4444] text-[12.5px] font-semibold border border-[#EF4444]/30">
+                              <AlertCircle size={14} /> Batas Waktu Bayar Sudah Lewat
+                            </span>
+                          ) : r.payment?.status === "PENDING" ? (
+                            <span className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#F59E0B]/10 text-[#F59E0B] text-[12.5px] font-semibold border border-[#F59E0B]/30">
+                              <Clock size={14} /> Menunggu Verifikasi Pembayaran
+                            </span>
+                          ) : (
                             <Link
                               href={`/bootcamp/${productId}/pay/${r.id}`}
-                              className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#EF4444] text-white text-[12.5px] font-semibold hover:bg-[#DC2626] transition-colors"
+                              className={`self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] text-white text-[12.5px] font-semibold transition-colors ${
+                                r.payment?.status === "FAILED" ? "bg-[#EF4444] hover:bg-[#DC2626]" : "bg-[#148F89] hover:bg-[#117A75]"
+                              }`}
                             >
-                              Bayar Ulang
+                              {r.payment?.status === "FAILED"
+                                ? "Bayar Ulang"
+                                : `Bayar Sekarang (${formatIDR(Number(r.package.price) + Number(r.package.commitment_fee))})`}
                             </Link>
+                          )}
+                          {!r.payment_deadline_passed && r.payment?.status !== "PAID" && r.package.payment_deadline_at && (
+                            <span className="text-[#9CA3AF] text-[11px]">
+                              Bayar sebelum {formatFullDate(r.package.payment_deadline_at)}
+                            </span>
                           )}
                         </>
                       )}
