@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 import Linkify from "@/component/Linkify";
+import BootcampTimeline from "@/component/BootcampTimeline";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { SearchX, FileText, Check, LogIn } from "lucide-react";
@@ -80,6 +81,7 @@ export default function ProdukPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [selectedTimeline, setSelectedTimeline] = useState([]);
 
   const shouldReduceMotion = useReducedMotion();
 
@@ -102,7 +104,19 @@ export default function ProdukPage() {
       router.push(`/checkout/${productId}`);
     }
   };
-  
+
+  // Timeline utama cuma relevan buat Bootcamp -- di-fetch begitu modal detail
+  // produk bootcamp dibuka, bukan di-preload semua produk sekaligus.
+  useEffect(() => {
+    if (!selectedProduct || selectedProduct.type !== "BOOTCAMP") {
+      setSelectedTimeline([]);
+      return;
+    }
+    api
+      .get(`/api/products/${selectedProduct.id}/timeline/`, { auth: false })
+      .then((res) => setSelectedTimeline(res?.timeline || []))
+      .catch(() => setSelectedTimeline([]));
+  }, [selectedProduct]);
 
   useEffect(() => {
     async function fetchProducts() {
@@ -397,6 +411,18 @@ export default function ProdukPage() {
                   <p className="mb-4 whitespace-pre-line">
                     <Linkify text={selectedProduct.desc} />
                   </p>
+
+                  {/* --- BOOTCAMP: timeline utama ringkas --- */}
+                  {selectedProduct.type === "BOOTCAMP" && selectedTimeline.length > 0 && (
+                    <>
+                      <p className="text-white font-semibold text-xs uppercase tracking-wide mb-2">
+                        Timeline Utama
+                      </p>
+                      <div className="mb-5">
+                        <BootcampTimeline items={selectedTimeline} compact />
+                      </div>
+                    </>
+                  )}
 
                   {/* --- MODUL: satu file PDF --- */}
                   {selectedProduct.type === "MODULE" && selectedProduct.filePdfUrl && (

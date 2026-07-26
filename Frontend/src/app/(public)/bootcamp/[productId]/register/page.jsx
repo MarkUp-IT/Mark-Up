@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Check, X, Upload, ShieldCheck, Clock, FileText, AlertCircle } from "lucide-react";
+import { Check, X, Upload, ShieldCheck, Clock, FileText, AlertCircle, Lock } from "lucide-react";
 import Navbar from "@/component/Navbar";
+import Linkify from "@/component/Linkify";
+import BootcampTimeline from "@/component/BootcampTimeline";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -19,6 +21,11 @@ const REQUIREMENTS = [
 const formatIDR = (val) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(val));
 
+function formatFullDate(dateStr) {
+  if (!dateStr) return "";
+  return new Date(dateStr).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+}
+
 const STATUS_META = {
   registered: { label: "Menunggu Ditinjau", cls: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" },
   accepted: { label: "Diterima", cls: "bg-[#148F89]/10 text-[#148F89] border-[#148F89]/30" },
@@ -29,7 +36,9 @@ export default function BootcampRegisterPage() {
   const params = useParams();
   const productId = params.productId;
 
+  const [product, setProduct] = useState(null);
   const [packages, setPackages] = useState([]);
+  const [timeline, setTimeline] = useState([]);
   const [loading, setLoading] = useState(true);
   const [myRegs, setMyRegs] = useState([]);
   const [selectedPackageId, setSelectedPackageId] = useState("");
@@ -39,8 +48,14 @@ export default function BootcampRegisterPage() {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const pkgRes = await apiRequest(`/api/products/${productId}/packages/`, { auth: false });
+      const [productRes, pkgRes, timelineRes] = await Promise.all([
+        apiRequest(`/api/products/${productId}/`, { auth: false }),
+        apiRequest(`/api/products/${productId}/packages/`, { auth: false }),
+        apiRequest(`/api/products/${productId}/timeline/`, { auth: false }),
+      ]);
+      setProduct(productRes);
       setPackages(pkgRes?.packages || []);
+      setTimeline(timelineRes?.timeline || []);
       if (getAccessToken()) {
         const regRes = await apiRequest("/api/products/bootcamp-registrations/me/");
         setMyRegs((regRes?.registrations || []).filter((r) => r.bootcamp_id === productId));
@@ -96,22 +111,46 @@ export default function BootcampRegisterPage() {
       <Navbar variant="solid" />
 
       <div className="max-w-[860px] mx-auto px-4 pt-32 pb-16 flex flex-col gap-8">
-        <div className="flex flex-col gap-1">
-          <Link href="/products" className="text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit">
-            ← Kembali ke Produk
-          </Link>
-          <h1 className="text-[26px] sm:text-[30px] font-bold mt-2">Pendaftaran Bootcamp</h1>
-          <p className="text-[#9CA3AF] text-[14px]">
-            Pilih paket, lalu unggah satu dokumen PDF berisi semua bukti syarat. Pendaftaran akan ditinjau admin.
-          </p>
-        </div>
+        <Link href="/products" className="text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit">
+          ← Kembali ke Produk
+        </Link>
 
         {loading ? (
-          <p className="text-[#9CA3AF] text-[14px]">Memuat paket...</p>
-        ) : packages.length === 0 ? (
-          <p className="text-[#9CA3AF] text-[14px]">Belum ada paket untuk bootcamp ini.</p>
+          <p className="text-[#9CA3AF] text-[14px]">Memuat...</p>
+        ) : !product ? (
+          <p className="text-[#9CA3AF] text-[14px]">Produk tidak ditemukan.</p>
         ) : (
           <>
+            {/* Hero produk: gambar, judul, deskripsi */}
+            <div className="rounded-[16px] overflow-hidden border border-[#2D2342] bg-[#170F26]">
+              {product.image_url && (
+                <div className="w-full h-[220px] sm:h-[280px] overflow-hidden">
+                  <img
+                    src={product.image_url}
+                    alt={product.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+              <div className="p-6 flex flex-col gap-2">
+                <span className="self-start px-3 py-1 rounded-full text-[10px] font-bold bg-[#0A4A5C] text-[#00C6D1] tracking-wider">
+                  BOOTCAMP
+                </span>
+                <h1 className="text-[24px] sm:text-[28px] font-bold leading-tight">{product.title}</h1>
+                <p className="text-[#9CA3AF] text-[14px] leading-relaxed whitespace-pre-line">
+                  <Linkify text={product.description} />
+                </p>
+              </div>
+            </div>
+
+            {/* Timeline utama */}
+            {timeline.length > 0 && (
+              <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5">
+                <h2 className="font-bold text-[15px] mb-4">Timeline Utama</h2>
+                <BootcampTimeline items={timeline} />
+              </div>
+            )}
+
             {/* Status pendaftaran yang sudah ada */}
             {myRegs.length > 0 && (
               <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-3">
@@ -139,15 +178,17 @@ export default function BootcampRegisterPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {packages.map((pkg) => {
                 const alreadyReg = registeredPackageIds.has(pkg.id);
+                const locked = pkg.registration_status !== "open";
+                const disabled = alreadyReg || locked;
                 const selected = selectedPackageId === pkg.id;
                 return (
                   <button
                     key={pkg.id}
                     type="button"
-                    disabled={alreadyReg}
+                    disabled={disabled}
                     onClick={() => setSelectedPackageId(pkg.id)}
                     className={`text-left rounded-[14px] border p-5 flex flex-col gap-3 transition-colors ${
-                      alreadyReg
+                      disabled
                         ? "border-[#2D2342] bg-[#170F26]/50 opacity-60 cursor-not-allowed"
                         : selected
                           ? "border-[#148F89] bg-[#148F89]/10"
@@ -163,7 +204,8 @@ export default function BootcampRegisterPage() {
                           </span>
                         )}
                       </div>
-                      {selected && !alreadyReg && <Check size={18} className="text-[#148F89] shrink-0" />}
+                      {selected && !disabled && <Check size={18} className="text-[#148F89] shrink-0" />}
+                      {locked && <Lock size={16} className="text-[#6B7280] shrink-0" />}
                     </div>
 
                     <div className="flex items-baseline gap-2">
@@ -191,6 +233,14 @@ export default function BootcampRegisterPage() {
 
                     {alreadyReg && (
                       <span className="text-[11px] text-[#9CA3AF] italic mt-1">Kamu sudah mendaftar paket ini.</span>
+                    )}
+                    {!alreadyReg && pkg.registration_status === "not_open_yet" && (
+                      <span className="text-[11px] text-[#F59E0B] italic mt-1">
+                        Pendaftaran dibuka mulai {formatFullDate(pkg.registration_opens_at)}.
+                      </span>
+                    )}
+                    {!alreadyReg && pkg.registration_status === "closed" && (
+                      <span className="text-[11px] text-[#EF4444] italic mt-1">Pendaftaran paket ini sudah ditutup.</span>
                     )}
                   </button>
                 );

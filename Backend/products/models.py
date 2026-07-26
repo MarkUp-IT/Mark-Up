@@ -255,6 +255,34 @@ def create_default_bootcamp_packages(bootcamp):
         )
 
 
+class BootcampTimelineItem(models.Model):
+    """Milestone utama program bootcamp (bukan jadwal sesi kelas) --
+    ditampilkan sebagai garis waktu ringkas di halaman produk & pendaftaran.
+    Diisi manual oleh admin per batch bootcamp, beda-beda tiap batch."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct,
+        on_delete=models.CASCADE,
+        related_name="timeline_items",
+    )
+    title = models.CharField(max_length=255)
+    start_date = models.DateField()
+    end_date = models.DateField(
+        blank=True, null=True,
+        help_text="Kosongkan kalau cuma satu hari (mis. hari pengumuman).",
+    )
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Bootcamp Timeline Item"
+        verbose_name_plural = "Bootcamp Timeline Items"
+        ordering = ["order", "start_date"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.bootcamp_id})"
+
+
 class BootcampRegistration(models.Model):
     """Pendaftaran user ke sebuah paket bootcamp. Terpisah dari pembelian
     (Transaction) -- user daftar dulu (upload 1 PDF gabungan syarat), baru

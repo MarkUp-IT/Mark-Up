@@ -12,6 +12,7 @@ from .models import (
     BootcampSession,
     BootcampPackage,
     BootcampRegistration,
+    BootcampTimelineItem,
     Certificate,
     CertificateType,
     MentoringSession,
@@ -1502,6 +1503,17 @@ _BENEFIT_LABELS = [
 ]
 
 
+def _package_registration_status(pkg):
+    """'not_open_yet' | 'open' | 'closed' -- dibanding sama waktu sekarang.
+    Paket tanpa jendela (opens/closes kosong) dianggap selalu 'open'."""
+    now = timezone.now()
+    if pkg.registration_opens_at and now < pkg.registration_opens_at:
+        return "not_open_yet"
+    if pkg.registration_closes_at and now > pkg.registration_closes_at:
+        return "closed"
+    return "open"
+
+
 def _serialize_package(pkg):
     return {
         "id": str(pkg.id),
@@ -1514,10 +1526,21 @@ def _serialize_package(pkg):
         "is_active": pkg.is_active,
         "registration_opens_at": pkg.registration_opens_at.isoformat() if pkg.registration_opens_at else None,
         "registration_closes_at": pkg.registration_closes_at.isoformat() if pkg.registration_closes_at else None,
+        "registration_status": _package_registration_status(pkg),
         "benefits": [
             {"label": label, "included": getattr(pkg, field)}
             for field, label in _BENEFIT_LABELS
         ],
+    }
+
+
+def _serialize_timeline_item(item):
+    return {
+        "id": str(item.id),
+        "title": item.title,
+        "start_date": item.start_date.isoformat(),
+        "end_date": item.end_date.isoformat() if item.end_date else None,
+        "order": item.order,
     }
 
 
@@ -1592,6 +1615,18 @@ def register_bootcamp(request):
         package = BootcampPackage.objects.select_related("bootcamp").get(id=package_id, is_active=True)
     except BootcampPackage.DoesNotExist:
         return JsonResponse({"errors": {"package_id": ["Paket tidak ditemukan."]}}, status=404)
+
+    reg_status = _package_registration_status(package)
+    if reg_status == "not_open_yet":
+        opens_local = timezone.localtime(package.registration_opens_at).strftime("%d %B %Y")
+        return JsonResponse(
+            {"detail": f"Pendaftaran paket {package.name} belum dibuka. Dibuka mulai {opens_local}."},
+            status=400,
+        )
+    if reg_status == "closed":
+        return JsonResponse(
+            {"detail": f"Pendaftaran paket {package.name} sudah ditutup."}, status=400,
+        )
 
     if BootcampRegistration.objects.filter(user=request.user, package=package).exists():
         return JsonResponse(
@@ -1689,5 +1724,125 @@ def review_bootcamp_registration(request, registration_id):
 
     return JsonResponse(
         {"detail": "Pendaftaran berhasil diperbarui.", "registration": _serialize_registration(reg)},
+        status=200,
+    )
+
+
+# ---------- Timeline utama program (milestone, bukan jadwal sesi kelas) ----------
+
+def get_bootcamp_timeline(request, product_id):
+    """Garis waktu utama sebuah bootcamp (publik)."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    items = BootcampTimelineItem.objects.filter(bootcamp_id=product_id).order_by("order", "start_date")
+    return JsonResponse(
+        {"timeline": [_serialize_timeline_item(i) for i in items]}, status=200
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def add_bootcamp_timeline_item(request, product_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    title = (request_data.get("title") or "").strip()
+    start_date = request_data.get("start_date")
+    end_date = request_data.get("end_date") or None
+
+    errors = {}
+    if not title:
+        errors["title"] = ["Judul milestone wajib diisi."]
+    if not start_date:
+        errors["start_date"] = ["Tanggal mulai wajib diisi."]
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    try:
+        BootcampProduct.objects.get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Produk bootcamp tidak ditemukan."}, status=404)
+
+    next_order = BootcampTimelineItem.objects.filter(bootcamp_id=product_id).count() + 1
+    item = BootcampTimelineItem.objects.create(
+        bootcamp_id=product_id, title=title, start_date=start_date,
+        end_date=end_date, order=next_order,
+    )
+
+    return JsonResponse(
+        {"detail": "Milestone berhasil ditambahkan.", "item": _serialize_timeline_item(item)},
+        status=201,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_bootcamp_timeline_item(request, item_id):
+    if request.method not in ["PATCH", "PUT", "DELETE"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT", "DELETE"])
+
+    try:
+        item = BootcampTimelineItem.objects.get(id=item_id)
+    except BootcampTimelineItem.DoesNotExist:
+        return JsonResponse({"detail": "Milestone tidak ditemukan."}, status=404)
+
+    if request.method == "DELETE":
+        item.delete()
+        return JsonResponse({"detail": "Milestone berhasil dihapus."}, status=200)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    if "title" in request_data:
+        item.title = request_data["title"]
+    if "start_date" in request_data:
+        item.start_date = request_data["start_date"]
+    if "end_date" in request_data:
+        item.end_date = request_data["end_date"] or None
+    if "order" in request_data:
+        item.order = request_data["order"]
+    item.save()
+
+    return JsonResponse(
+        {"detail": "Milestone berhasil diperbarui.", "item": _serialize_timeline_item(item)},
+        status=200,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_bootcamp_package(request, package_id):
+    """Admin atur jendela pendaftaran (& aktif/nonaktif) satu paket."""
+    if request.method not in ["PATCH", "PUT"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT"])
+
+    try:
+        package = BootcampPackage.objects.get(id=package_id)
+    except BootcampPackage.DoesNotExist:
+        return JsonResponse({"detail": "Paket tidak ditemukan."}, status=404)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    if "registration_opens_at" in request_data:
+        package.registration_opens_at = request_data["registration_opens_at"] or None
+    if "registration_closes_at" in request_data:
+        package.registration_closes_at = request_data["registration_closes_at"] or None
+    if "is_active" in request_data:
+        package.is_active = bool(request_data["is_active"])
+    package.save()
+
+    return JsonResponse(
+        {"detail": "Paket berhasil diperbarui.", "package": _serialize_package(package)},
         status=200,
     )

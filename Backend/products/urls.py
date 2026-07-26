@@ -29,6 +29,10 @@ from .views import (
     get_my_bootcamp_registrations,
     get_bootcamp_registrations,
     review_bootcamp_registration,
+    get_bootcamp_timeline,
+    add_bootcamp_timeline_item,
+    update_bootcamp_timeline_item,
+    update_bootcamp_package,
 )
 
 urlpatterns = [
@@ -50,6 +54,8 @@ urlpatterns = [
     path("bootcamp-registrations/", get_bootcamp_registrations, name="api_bootcamp_registrations_list"),
     path("bootcamp-registrations/me/", get_my_bootcamp_registrations, name="api_my_bootcamp_registrations"),
     path("bootcamp-registrations/<uuid:registration_id>/review/", review_bootcamp_registration, name="api_bootcamp_registration_review"),
+    path("bootcamp-packages/<uuid:package_id>/", update_bootcamp_package, name="api_bootcamp_package_update"),
+    path("bootcamp-timeline/<uuid:item_id>/", update_bootcamp_timeline_item, name="api_bootcamp_timeline_item_update"),
     path("summary/", get_product_summary, name="api_products_summary"),
     path("add/", add_product, name="api_products_add"),
     path("upload-image/", upload_product_image, name="api_products_upload_image"),
@@ -59,5 +65,7 @@ urlpatterns = [
     path("my-products/<uuid:product_id>/refund/", refund_my_product, name="api_my_product_refund"),
     path("my-products/sessions/<uuid:session_id>/schedule/", schedule_my_product_session, name="api_my_product_schedule"),
     path("<uuid:product_id>/packages/", get_bootcamp_packages, name="api_bootcamp_packages"),
+    path("<uuid:product_id>/timeline/", get_bootcamp_timeline, name="api_bootcamp_timeline"),
+    path("<uuid:product_id>/timeline/add/", add_bootcamp_timeline_item, name="api_bootcamp_timeline_add"),
     path("<uuid:product_id>/", product_detail_view, name="api_product_detail"),
 ]

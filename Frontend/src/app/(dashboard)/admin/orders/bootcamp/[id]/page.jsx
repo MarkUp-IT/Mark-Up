@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import EmptyState from "@/component/admin/EmptyState";
+import BootcampTimelinePanel from "@/component/admin/BootcampTimelinePanel";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
@@ -365,6 +366,8 @@ export default function BootcampOrderDetail() {
           </button>
         )}
       </div>
+
+      {params?.id && <BootcampTimelinePanel productId={params.id} />}
 
       {!loading && sessions.length === 0 ? (
         <EmptyState message="Belum ada sesi untuk bootcamp ini." />
