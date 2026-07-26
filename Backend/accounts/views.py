@@ -1142,7 +1142,7 @@ def get_admin_sidebar_badges(request):
 		return HttpResponseNotAllowed(["GET"])
 
 	from django.db.models import Q
-	from products.models import MentoringSession, RefundRequest, Review
+	from products.models import MentoringSession, RefundRequest, Review, BootcampRegistration
 	from programs.models import BootcampSession as BootcampSessionTemplate
 	from transactions.models import Transaction, PaymentStatus, MentorPayout, PayoutStatus
 
@@ -1158,6 +1158,9 @@ def get_admin_sidebar_badges(request):
 
 	data = {
 		"bootcamp": bootcamp_pending,
+		"bootcamp_registrations": BootcampRegistration.objects.filter(
+			status=BootcampRegistration.Status.REGISTERED
+		).count(),
 		"mentoring": mentoring_pending,
 		"transactions": Transaction.objects.filter(payment_status=PaymentStatus.PENDING).count(),
 		"refund_requests": RefundRequest.objects.filter(status=RefundRequest.RefundStatus.PENDING).count(),

@@ -10,6 +10,8 @@ from .utils import get_request_data
 from .forms import MentoringProductForm, ModuleProductForm, BootcampProductForm
 from .models import (
     BootcampSession,
+    BootcampPackage,
+    BootcampRegistration,
     Certificate,
     CertificateType,
     MentoringSession,
@@ -18,6 +20,7 @@ from .models import (
     RefundRequest,
     Review,
     UserLibrary,
+    create_default_bootcamp_packages,
 )
 from accounts.decorators import jwt_required, role_required
 from accounts.models import User, UserRole, AuditAction
@@ -674,6 +677,8 @@ def add_product(request):
 
     if product_type == ProductType.BOOTCAMP:
         _sync_bootcamp_session_slots(detail)
+        # Langsung siapkan 4 paket standar (Mentee/Basic/Premium/Elite).
+        create_default_bootcamp_packages(detail)
 
     log_audit(
         request, AuditAction.CREATE, "products", object_id=product.id,
@@ -1477,4 +1482,212 @@ def upload_product_image(request):
 
     return JsonResponse(
         {"key": saved_key, "url": default_storage.url(saved_key)}, status=201
+    )
+
+
+# ==================== BOOTCAMP: PAKET & PENDAFTARAN ====================
+
+MAX_REGISTRATION_DOC_SIZE = 10 * 1024 * 1024  # 10MB (PDF gabungan bisa agak besar)
+
+_BENEFIT_LABELS = [
+    ("benefit_session_material", "Sesi & Materi Bootcamp"),
+    ("benefit_record_incubation", "Record Incubation"),
+    ("benefit_framework_template", "Framework Template"),
+    ("benefit_winning_deck", "Winning Deck"),
+    ("benefit_mentoring_case", "Mentoring Case Competition"),
+    ("benefit_career_coaching", "Career Coaching"),
+    ("benefit_team_pairing", "Team Pairing"),
+    ("benefit_networking", "Networking Session"),
+    ("benefit_ecertificate", "E-Certificate"),
+]
+
+
+def _serialize_package(pkg):
+    return {
+        "id": str(pkg.id),
+        "slug": pkg.slug,
+        "name": pkg.name,
+        "price": str(pkg.price),
+        "commitment_fee": str(pkg.commitment_fee),
+        "total_price": str(pkg.price + pkg.commitment_fee),
+        "requires_selection": pkg.requires_selection,
+        "is_active": pkg.is_active,
+        "registration_opens_at": pkg.registration_opens_at.isoformat() if pkg.registration_opens_at else None,
+        "registration_closes_at": pkg.registration_closes_at.isoformat() if pkg.registration_closes_at else None,
+        "benefits": [
+            {"label": label, "included": getattr(pkg, field)}
+            for field, label in _BENEFIT_LABELS
+        ],
+    }
+
+
+def get_bootcamp_packages(request, product_id):
+    """Daftar paket sebuah produk bootcamp (publik)."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    packages = BootcampPackage.objects.filter(
+        bootcamp_id=product_id, is_active=True
+    ).order_by("order")
+    return JsonResponse(
+        {"packages": [_serialize_package(p) for p in packages]}, status=200
+    )
+
+
+def _serialize_registration(reg, request=None):
+    doc_url = None
+    if reg.requirement_doc:
+        try:
+            doc_url = reg.requirement_doc.url
+        except Exception:
+            doc_url = None
+    return {
+        "id": str(reg.id),
+        "status": reg.status,
+        "status_label": reg.get_status_display(),
+        "created_at": reg.created_at.isoformat(),
+        "reviewed_at": reg.reviewed_at.isoformat() if reg.reviewed_at else None,
+        "admin_notes": reg.admin_notes,
+        "requirement_doc": doc_url,
+        "package": {
+            "id": str(reg.package_id),
+            "slug": reg.package.slug,
+            "name": reg.package.name,
+            "requires_selection": reg.package.requires_selection,
+        },
+        "bootcamp_id": str(reg.package.bootcamp_id),
+        "bootcamp_title": reg.package.bootcamp.title,
+    }
+
+
+@csrf_exempt
+@jwt_required
+def register_bootcamp(request):
+    """Daftar ke sebuah paket bootcamp (upload 1 PDF gabungan syarat).
+    Belum bayar -- nunggu diseleksi (Mentee) / di-ACC admin (paket lain)."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    if is_rate_limited(f"rl:bootcamp-register:user:{request.user.id}", limit=20, window_seconds=3600):
+        return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
+
+    package_id = request.POST.get("package_id")
+    doc = request.FILES.get("requirement_doc")
+
+    errors = {}
+    if not package_id:
+        errors["package_id"] = ["Paket wajib dipilih."]
+    if not doc:
+        errors["requirement_doc"] = ["Dokumen syarat (PDF) wajib diunggah."]
+    else:
+        ext = doc.name.rsplit(".", 1)[-1].lower() if "." in doc.name else ""
+        if ext != "pdf":
+            errors["requirement_doc"] = ["Dokumen harus berformat PDF (gabungkan semua bukti jadi satu PDF)."]
+        elif doc.size > MAX_REGISTRATION_DOC_SIZE:
+            errors["requirement_doc"] = ["Ukuran file maksimal 10MB."]
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    try:
+        package = BootcampPackage.objects.select_related("bootcamp").get(id=package_id, is_active=True)
+    except BootcampPackage.DoesNotExist:
+        return JsonResponse({"errors": {"package_id": ["Paket tidak ditemukan."]}}, status=404)
+
+    if BootcampRegistration.objects.filter(user=request.user, package=package).exists():
+        return JsonResponse(
+            {"detail": "Kamu sudah mendaftar untuk paket ini."}, status=400
+        )
+
+    reg = BootcampRegistration.objects.create(
+        user=request.user, package=package, requirement_doc=doc,
+    )
+
+    notify_team(
+        "Pendaftaran bootcamp baru",
+        f"Ada pendaftaran bootcamp baru yang perlu ditinjau admin.\n\n"
+        f"Pendaftar: {request.user.fullname} ({request.user.email})\n"
+        f"Bootcamp: {package.bootcamp.title}\n"
+        f"Paket: {package.name}\n\n"
+        f"Tinjau di dashboard admin -> Pendaftaran Bootcamp.",
+    )
+
+    return JsonResponse(
+        {"detail": "Pendaftaran berhasil dikirim. Menunggu ditinjau admin.",
+         "registration": _serialize_registration(reg)},
+        status=201,
+    )
+
+
+@jwt_required
+def get_my_bootcamp_registrations(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    regs = (
+        BootcampRegistration.objects.filter(user=request.user)
+        .select_related("package__bootcamp")
+        .order_by("-created_at")
+    )
+    return JsonResponse(
+        {"registrations": [_serialize_registration(r) for r in regs]}, status=200
+    )
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_bootcamp_registrations(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    regs = (
+        BootcampRegistration.objects.select_related("package__bootcamp", "user")
+        .order_by("-created_at")
+    )
+    status_filter = request.GET.get("status")
+    if status_filter:
+        regs = regs.filter(status=status_filter)
+
+    data = []
+    for r in regs:
+        item = _serialize_registration(r)
+        item["user_name"] = r.user.fullname
+        item["user_email"] = r.user.email
+        data.append(item)
+    return JsonResponse({"registrations": data}, status=200)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def review_bootcamp_registration(request, registration_id):
+    """Admin terima/tolak pendaftaran (hasil seleksi Mentee / ACC paket lain)."""
+    if request.method not in ["PATCH", "PUT"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT"])
+
+    try:
+        reg = BootcampRegistration.objects.select_related("package").get(id=registration_id)
+    except BootcampRegistration.DoesNotExist:
+        return JsonResponse({"detail": "Pendaftaran tidak ditemukan."}, status=404)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    decision = request_data.get("decision")
+    if decision not in ("accepted", "rejected"):
+        return JsonResponse({"detail": "decision harus 'accepted' atau 'rejected'."}, status=400)
+
+    reg.status = decision
+    reg.admin_notes = request_data.get("admin_notes", "")
+    reg.reviewed_at = timezone.now()
+    reg.save(update_fields=["status", "admin_notes", "reviewed_at"])
+
+    log_audit(
+        request, AuditAction.UPDATE, "bootcamp_registrations", object_id=reg.id,
+        new_data={"status": reg.status},
+    )
+
+    return JsonResponse(
+        {"detail": "Pendaftaran berhasil diperbarui.", "registration": _serialize_registration(reg)},
+        status=200,
     )

@@ -160,6 +160,144 @@ class BootcampProduct(BaseProductDetail):
         return self.title
 
 
+class BootcampPackage(models.Model):
+    """Satu produk Bootcamp punya beberapa paket (Mentee/Basic/Premium/Elite)
+    dengan harga, benefit, dan ketentuan berbeda. Paket Mentee butuh seleksi &
+    ada commitment fee; paket lain langsung (tetap perlu ACC admin)."""
+
+    class PackageSlug(models.TextChoices):
+        MENTEE = "mentee", "Mentee"
+        BASIC = "basic", "Basic/Beginner"
+        PREMIUM = "premium", "Premium/Intermediate"
+        ELITE = "elite", "Elite/Advanced"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct,
+        on_delete=models.CASCADE,
+        related_name="packages",
+    )
+    slug = models.CharField(max_length=20, choices=PackageSlug.choices)
+    name = models.CharField(max_length=100)
+    price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    commitment_fee = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        help_text="Biaya komitmen yang dikembalikan di akhir program. Hanya "
+                   "paket Mentee yang punya (150k). Total bayar = price + commitment_fee.",
+    )
+    requires_selection = models.BooleanField(
+        default=False,
+        help_text="True untuk Mentee: pendaftar wajib lolos seleksi (BCC test) "
+                   "dulu sebelum boleh bayar. Paket lain cukup di-ACC admin.",
+    )
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    registration_opens_at = models.DateTimeField(blank=True, null=True)
+    registration_closes_at = models.DateTimeField(blank=True, null=True)
+
+    # Benefit per paket (sesuai tabel "Class Scheme and Benefits" di PDF).
+    benefit_session_material = models.BooleanField(default=True)
+    benefit_record_incubation = models.BooleanField(default=False)
+    benefit_framework_template = models.BooleanField(default=False)
+    benefit_winning_deck = models.BooleanField(default=False)
+    benefit_mentoring_case = models.BooleanField(default=False)
+    benefit_career_coaching = models.BooleanField(default=False)
+    benefit_team_pairing = models.BooleanField(default=False)
+    benefit_networking = models.BooleanField(default=False)
+    benefit_ecertificate = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Package"
+        verbose_name_plural = "Bootcamp Packages"
+        ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bootcamp", "slug"],
+                name="unique_bootcamp_package_slug",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.bootcamp_id})"
+
+
+# Nilai default 4 paket standar -- dipakai saat produk bootcamp dibuat, biar
+# admin gak perlu isi satu-satu. (session_material & ecertificate default True.)
+DEFAULT_BOOTCAMP_PACKAGES = [
+    {
+        "slug": "mentee", "name": "Mentee", "price": 210000, "commitment_fee": 150000,
+        "requires_selection": True, "order": 1,
+        "benefit_record_incubation": True, "benefit_framework_template": True,
+        "benefit_winning_deck": True, "benefit_mentoring_case": True,
+        "benefit_career_coaching": True, "benefit_team_pairing": True,
+        "benefit_networking": True,
+    },
+    {
+        "slug": "basic", "name": "Basic/Beginner", "price": 100000, "order": 2,
+    },
+    {
+        "slug": "premium", "name": "Premium/Intermediate", "price": 220000, "order": 3,
+        "benefit_record_incubation": True, "benefit_framework_template": True,
+    },
+    {
+        "slug": "elite", "name": "Elite/Advanced", "price": 240000, "order": 4,
+        "benefit_record_incubation": True, "benefit_framework_template": True,
+        "benefit_winning_deck": True,
+    },
+]
+
+
+def create_default_bootcamp_packages(bootcamp):
+    """Buat 4 paket standar untuk sebuah BootcampProduct kalau belum ada."""
+    for cfg in DEFAULT_BOOTCAMP_PACKAGES:
+        BootcampPackage.objects.get_or_create(
+            bootcamp=bootcamp, slug=cfg["slug"], defaults=cfg,
+        )
+
+
+class BootcampRegistration(models.Model):
+    """Pendaftaran user ke sebuah paket bootcamp. Terpisah dari pembelian
+    (Transaction) -- user daftar dulu (upload 1 PDF gabungan syarat), baru
+    setelah diterima/di-ACC admin bisa lanjut bayar."""
+
+    class Status(models.TextChoices):
+        REGISTERED = "registered", "Menunggu Ditinjau"
+        ACCEPTED = "accepted", "Diterima"
+        REJECTED = "rejected", "Ditolak"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="bootcamp_registrations",
+    )
+    package = models.ForeignKey(
+        BootcampPackage, on_delete=models.CASCADE, related_name="registrations",
+    )
+    requirement_doc = models.FileField(
+        upload_to="bootcamp_registrations/%Y/%m/",
+        help_text="Satu PDF gabungan berisi 5 bukti syarat pendaftaran.",
+    )
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.REGISTERED,
+    )
+    admin_notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Registration"
+        verbose_name_plural = "Bootcamp Registrations"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "package"],
+                name="unique_user_bootcamp_package_registration",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} -> {self.package} ({self.status})"
+
+
 class Review(BaseModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(

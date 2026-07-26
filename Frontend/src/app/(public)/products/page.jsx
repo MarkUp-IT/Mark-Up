@@ -88,13 +88,19 @@ export default function ProdukPage() {
   const [error, setError] = useState(null);
 
   const router = useRouter();
-  const handleBuyClick = (productId) => {
+  const handleBuyClick = (productId, type) => {
     const token = getAccessToken();
     if (!token) {
       setShowLoginModal(true);
       return;
     }
-    router.push(`/checkout/${productId}`);
+    // Bootcamp lewat alur pendaftaran (pilih paket + upload syarat + seleksi/ACC),
+    // bukan checkout langsung seperti produk lain.
+    if (type === "BOOTCAMP") {
+      router.push(`/bootcamp/${productId}/register`);
+    } else {
+      router.push(`/checkout/${productId}`);
+    }
   };
   
 
@@ -428,10 +434,10 @@ export default function ProdukPage() {
                 </div>
 
                 <button
-                  onClick={() => handleBuyClick(selectedProduct.id)}
+                  onClick={() => handleBuyClick(selectedProduct.id, selectedProduct.type)}
                   className={`w-full bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold py-3 rounded-full transition-colors mt-auto text-center shrink-0 ${focusRing}`}
                 >
-                  Beli Sekarang
+                  {selectedProduct.type === "BOOTCAMP" ? "Daftar Bootcamp" : "Beli Sekarang"}
                 </button>
               </div>
             </motion.div>

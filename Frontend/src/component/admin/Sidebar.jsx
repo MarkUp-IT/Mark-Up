@@ -13,6 +13,7 @@ import {
   Ticket,
   Presentation,
   GraduationCap,
+  ClipboardList,
   FileText,
   ReceiptText,
   RotateCcw,
@@ -38,6 +39,7 @@ const menuList = [
 // tanpa badgeKey (Modul, Manajemen User, dst) memang gak punya konsep
 // "butuh tindakan" yang jelas, jadi gak dikasih buletan notifikasi.
 const orderMenuList = [
+  { name: "Pendaftaran Bootcamp", url: "/admin/bootcamp-registrations", icon: ClipboardList, badgeKey: "bootcamp_registrations" },
   { name: "Bootcamp", url: "/admin/orders/bootcamp", icon: Presentation, badgeKey: "bootcamp" },
   { name: "Mentoring", url: "/admin/orders/mentoring", icon: GraduationCap, badgeKey: "mentoring" },
   { name: "Modul", url: "/admin/orders/module", icon: FileText },
