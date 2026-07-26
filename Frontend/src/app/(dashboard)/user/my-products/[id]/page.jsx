@@ -217,8 +217,13 @@ export default function ProductDetail() {
 
   const hasSessions =
     product.type === "bootcamp" || product.type === "mentoring";
+  // Sesi yang jadwalnya udah lewat ikut kehitung progress juga, gak perlu
+  // nunggu admin/mentor nge-klik "Tandai Selesai" manual dulu -- itu cuma
+  // buat trigger pencairan payout mentor, beda urusan sama progres belajar
+  // yang dilihat peserta di sini.
+  const isSessionDone = (s) => s.status === "completed" || (s.startTime && new Date(s.startTime) < new Date());
   const completedCount = hasSessions
-    ? product.sessions.filter((s) => s.status === "completed").length
+    ? product.sessions.filter(isSessionDone).length
     : 0;
   const totalSessions = hasSessions ? product.sessions.length : 0;
   const progressPercent =
