@@ -132,8 +132,18 @@ def _get_product_detail(product):
 
 
 def _get_session_progress(sessions):
+    """Sesi yang jadwalnya udah lewat dihitung progress-nya juga di sini
+    walau admin/mentor belum sempat nge-klik "Tandai Selesai" manual --
+    murni buat tampilan progres belajar peserta, BUKAN ngubah status asli
+    di DB (status completed yang beneran tetap keputusan manual admin/
+    mentor, karena itu yang men-trigger pencairan payout mentor)."""
     total_sessions = len(sessions)
-    completed_sessions = sum(1 for session in sessions if session.status == session.SessionStatus.COMPLETED)
+    now = timezone.now()
+    completed_sessions = sum(
+        1 for session in sessions
+        if session.status == session.SessionStatus.COMPLETED
+        or (session.start_time is not None and session.start_time < now)
+    )
     status = "completed" if total_sessions > 0 and completed_sessions == total_sessions else "active"
     return {
         "current_session": completed_sessions,
