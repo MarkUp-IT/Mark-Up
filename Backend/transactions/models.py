@@ -71,6 +71,19 @@ class Transaction(models.Model):
         upload_to="bootcamp_docs/%Y/%m/", blank=True, null=True,
         help_text="Commitment letter (foto atau PDF).",
     )
+    # Dipakai buat alur bayar-setelah-diterima paket Bootcamp (beda dari
+    # checkout_product biasa) -- link balik ke pendaftaran yang dibayar, dan
+    # snapshot commitment fee-nya sendiri (constant di titik ini) supaya
+    # nanti gampang dipisah lagi buat fitur pengembalian commitment fee,
+    # walau package.commitment_fee-nya berubah di kemudian hari.
+    bootcamp_registration = models.ForeignKey(
+        "products.BootcampRegistration",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_transactions",
+    )
+    commitment_fee_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(blank=True, null=True)
 
