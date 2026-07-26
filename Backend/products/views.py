@@ -9,6 +9,7 @@ from django.core.mail import send_mail
 from django.db import IntegrityError, transaction as db_transaction
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from .utils import get_request_data
 from .forms import MentoringProductForm, ModuleProductForm, BootcampProductForm
@@ -24,6 +25,8 @@ from .models import (
     QuizChoiceKey,
     BootcampResource,
     BootcampResourceType,
+    BootcampTeam,
+    BootcampTeamMember,
     Certificate,
     CertificateType,
     MentoringSession,
@@ -306,6 +309,22 @@ def _serialize_unlocked_bootcamp_resources(user_library):
     ]
 
 
+def _serialize_my_team(user_library):
+    """Info tim peserta ini (kalau paketnya punya benefit Team Pairing & udah
+    di-assign admin) -- termasuk nama-nama rekan setim, gak termasuk dirinya
+    sendiri di daftar teammates."""
+    membership = getattr(user_library, "team_membership", None)
+    if membership is None:
+        return None
+
+    teammates = [
+        m.user_library.user.fullname
+        for m in membership.team.members.select_related("user_library__user")
+        if m.id != membership.id
+    ]
+    return {"team_name": membership.team.name, "teammates": teammates}
+
+
 def _serialize_mentoring_session(session):
     mentor = session.mentor
     return {
@@ -440,6 +459,7 @@ def get_my_product_detail(request, product_id):
                 "description": detail.description,
                 "sessions": [_serialize_bootcamp_session(session) for session in sessions],
                 "resources": _serialize_unlocked_bootcamp_resources(user_library),
+                "team": _serialize_my_team(user_library),
             },
             status=200,
         )
@@ -1547,6 +1567,25 @@ _BENEFIT_LABELS = [
 ]
 
 
+def _parse_wib_datetime_or_none(value):
+    """Parse string datetime dari request (JSON ISO string ATAU nilai mentah
+    <input type=datetime-local> yang gak punya info timezone) jadi objek
+    datetime aware. String naive (tanpa offset, mis. dari datetime-local)
+    diasumsikan WIB, konsisten sama TIME_ZONE='Asia/Jakarta' -- assignment
+    string mentah ke field model TIDAK di-parse otomatis oleh Django, jadi
+    ini wajib dipanggil sebelum diassign supaya serialize_package's
+    .isoformat() gak crash pas dipanggil di response yang sama (belum
+    sempat refresh dari DB)."""
+    if not value:
+        return None
+    dt = parse_datetime(value)
+    if dt is None:
+        return None
+    if timezone.is_naive(dt):
+        dt = timezone.make_aware(dt)
+    return dt
+
+
 def _package_registration_status(pkg):
     """'not_open_yet' | 'open' | 'closed' -- dibanding sama waktu sekarang.
     Paket tanpa jendela (opens/closes kosong) dianggap selalu 'open'."""
@@ -1570,6 +1609,7 @@ def _serialize_package(pkg):
         "is_active": pkg.is_active,
         "registration_opens_at": pkg.registration_opens_at.isoformat() if pkg.registration_opens_at else None,
         "registration_closes_at": pkg.registration_closes_at.isoformat() if pkg.registration_closes_at else None,
+        "payment_deadline_at": pkg.payment_deadline_at.isoformat() if pkg.payment_deadline_at else None,
         "registration_status": _package_registration_status(pkg),
         "quiz_duration_minutes": pkg.quiz_duration_minutes,
         "quiz_passing_score_percent": pkg.quiz_passing_score_percent,
@@ -1651,6 +1691,19 @@ def _serialize_registration(reg, for_admin=False):
             "paid_at": txn.paid_at.isoformat() if txn.paid_at else None,
         }
 
+    # Batas waktu bayar (kalau diatur admin di paket) -- cuma relevan buat
+    # pendaftaran yang sudah Diterima & belum lunas. Dihitung on-the-fly,
+    # gak nyimpen status "expired" terpisah di DB -- endpoint bayar
+    # (create_bootcamp_payment) yang beneran nolak kalau ini True.
+    payment_deadline_passed = False
+    if (
+        reg.status == BootcampRegistration.Status.ACCEPTED
+        and reg.package.payment_deadline_at
+        and (payment is None or payment["status"] != "PAID")
+        and timezone.now() > reg.package.payment_deadline_at
+    ):
+        payment_deadline_passed = True
+
     return {
         "id": str(reg.id),
         "status": reg.status,
@@ -1666,7 +1719,9 @@ def _serialize_registration(reg, for_admin=False):
             "requires_selection": reg.package.requires_selection,
             "price": str(reg.package.price),
             "commitment_fee": str(reg.package.commitment_fee),
+            "payment_deadline_at": reg.package.payment_deadline_at.isoformat() if reg.package.payment_deadline_at else None,
         },
+        "payment_deadline_passed": payment_deadline_passed,
         "bootcamp_id": str(reg.package.bootcamp_id),
         "bootcamp_title": reg.package.bootcamp.title,
         "quiz": quiz,
@@ -1972,9 +2027,11 @@ def update_bootcamp_package(request, package_id):
         return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
     if "registration_opens_at" in request_data:
-        package.registration_opens_at = request_data["registration_opens_at"] or None
+        package.registration_opens_at = _parse_wib_datetime_or_none(request_data["registration_opens_at"])
     if "registration_closes_at" in request_data:
-        package.registration_closes_at = request_data["registration_closes_at"] or None
+        package.registration_closes_at = _parse_wib_datetime_or_none(request_data["registration_closes_at"])
+    if "payment_deadline_at" in request_data:
+        package.payment_deadline_at = _parse_wib_datetime_or_none(request_data["payment_deadline_at"])
     if "is_active" in request_data:
         package.is_active = bool(request_data["is_active"])
 
@@ -2518,6 +2575,12 @@ def create_bootcamp_payment(request, registration_id):
             {"detail": "Pembayaran cuma bisa dilakukan setelah pendaftaran Diterima."}, status=400
         )
 
+    deadline = registration.package.payment_deadline_at
+    if deadline and timezone.now() > deadline:
+        return JsonResponse(
+            {"detail": "Batas waktu pembayaran sudah lewat. Hubungi admin kalau ini keliru."}, status=400
+        )
+
     existing = registration.payment_transactions.filter(
         payment_status__in=[PaymentStatus.PENDING, PaymentStatus.PAID]
     ).exists()
@@ -2592,4 +2655,229 @@ def create_bootcamp_payment(request, registration_id):
             "registration": _serialize_registration(registration),
         },
         status=201,
+    )
+
+
+# ---------- Team Pairing ----------
+
+def _serialize_team_member(member):
+    user = member.user_library.user
+    return {
+        "member_id": str(member.id),
+        "user_library_id": str(member.user_library_id),
+        "user_name": user.fullname,
+        "user_email": user.email,
+    }
+
+
+def _serialize_team(team):
+    return {
+        "id": str(team.id),
+        "name": team.name,
+        "order": team.order,
+        "members": [_serialize_team_member(m) for m in team.members.all()],
+    }
+
+
+def _eligible_team_libraries(bootcamp_product_id):
+    return UserLibrary.objects.filter(
+        product_id=bootcamp_product_id, package__benefit_team_pairing=True,
+    ).select_related("user")
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_bootcamp_teams(request, product_id):
+    """Daftar tim + anggotanya, plus daftar peserta berhak Team Pairing
+    yang belum masuk tim mana pun."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    teams = (
+        BootcampTeam.objects.filter(bootcamp_id=product_id)
+        .prefetch_related("members__user_library__user")
+        .order_by("order", "created_at")
+    )
+    assigned_library_ids = set(
+        BootcampTeamMember.objects.filter(team__bootcamp_id=product_id)
+        .values_list("user_library_id", flat=True)
+    )
+    unassigned = [
+        {"user_library_id": str(lib.id), "user_name": lib.user.fullname, "user_email": lib.user.email}
+        for lib in _eligible_team_libraries(product_id)
+        if lib.id not in assigned_library_ids
+    ]
+
+    return JsonResponse(
+        {"teams": [_serialize_team(t) for t in teams], "unassigned": unassigned}, status=200
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def add_bootcamp_team(request, product_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        BootcampProduct.objects.get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Produk bootcamp tidak ditemukan."}, status=404)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    next_order = BootcampTeam.objects.filter(bootcamp_id=product_id).count() + 1
+    name = (request_data.get("name") or "").strip() or f"Tim {next_order}"
+    team = BootcampTeam.objects.create(bootcamp_id=product_id, name=name, order=next_order)
+
+    return JsonResponse(
+        {"detail": "Tim berhasil dibuat.", "team": _serialize_team(team)}, status=201
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_bootcamp_team(request, team_id):
+    if request.method not in ["PATCH", "PUT", "DELETE"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT", "DELETE"])
+
+    try:
+        team = BootcampTeam.objects.get(id=team_id)
+    except BootcampTeam.DoesNotExist:
+        return JsonResponse({"detail": "Tim tidak ditemukan."}, status=404)
+
+    if request.method == "DELETE":
+        team.delete()
+        return JsonResponse({"detail": "Tim berhasil dihapus."}, status=200)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    if "name" in request_data:
+        name = (request_data["name"] or "").strip()
+        if not name:
+            return JsonResponse({"errors": {"name": ["Nama tim wajib diisi."]}}, status=400)
+        team.name = name
+        team.save(update_fields=["name"])
+
+    return JsonResponse(
+        {"detail": "Tim berhasil diperbarui.", "team": _serialize_team(team)}, status=200
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def assign_bootcamp_team_member(request, team_id):
+    """Masukkin/pindahin satu peserta ke tim ini. user_library OneToOneField
+    di model yang jaminan cuma satu tim per peserta -- assign ulang otomatis
+    mindah dari tim lama, gak perlu unassign manual dulu."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        team = BootcampTeam.objects.get(id=team_id)
+    except BootcampTeam.DoesNotExist:
+        return JsonResponse({"detail": "Tim tidak ditemukan."}, status=404)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    try:
+        library = UserLibrary.objects.get(id=request_data.get("user_library_id"), product_id=team.bootcamp_id)
+    except UserLibrary.DoesNotExist:
+        return JsonResponse({"detail": "Peserta tidak ditemukan di bootcamp ini."}, status=404)
+
+    if not (library.package and library.package.benefit_team_pairing):
+        return JsonResponse(
+            {"detail": "Peserta ini paketnya gak punya benefit Team Pairing."}, status=400
+        )
+
+    BootcampTeamMember.objects.update_or_create(user_library=library, defaults={"team": team})
+
+    return JsonResponse(
+        {"detail": "Peserta berhasil dimasukkan ke tim.", "team": _serialize_team(team)}, status=200
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def remove_bootcamp_team_member(request, member_id):
+    if request.method != "DELETE":
+        return HttpResponseNotAllowed(["DELETE"])
+
+    try:
+        member = BootcampTeamMember.objects.get(id=member_id)
+    except BootcampTeamMember.DoesNotExist:
+        return JsonResponse({"detail": "Anggota tim tidak ditemukan."}, status=404)
+
+    member.delete()
+    return JsonResponse({"detail": "Peserta dikeluarkan dari tim."}, status=200)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def randomize_bootcamp_teams(request, product_id):
+    """Reset total: hapus semua tim yang ada di bootcamp ini, bikin
+    team_count tim baru, lalu sebar SEMUA peserta yang berhak (paketnya
+    punya benefit Team Pairing) secara acak & merata (round-robin setelah
+    di-shuffle). Admin masih bisa tweak manual satu-satu sesudahnya lewat
+    assign/remove member."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        BootcampProduct.objects.get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Produk bootcamp tidak ditemukan."}, status=404)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    try:
+        team_count = int(request_data.get("team_count"))
+        if team_count < 1:
+            raise ValueError
+    except (TypeError, ValueError):
+        return JsonResponse({"errors": {"team_count": ["Jumlah tim harus angka >= 1."]}}, status=400)
+
+    eligible = list(_eligible_team_libraries(product_id))
+    if not eligible:
+        return JsonResponse(
+            {"detail": "Belum ada peserta yang berhak Team Pairing di bootcamp ini."}, status=400
+        )
+
+    random.shuffle(eligible)
+
+    with db_transaction.atomic():
+        BootcampTeam.objects.filter(bootcamp_id=product_id).delete()
+        teams = [
+            BootcampTeam.objects.create(bootcamp_id=product_id, name=f"Tim {i + 1}", order=i + 1)
+            for i in range(team_count)
+        ]
+        BootcampTeamMember.objects.bulk_create([
+            BootcampTeamMember(team=teams[i % team_count], user_library=lib)
+            for i, lib in enumerate(eligible)
+        ])
+
+    result_teams = (
+        BootcampTeam.objects.filter(bootcamp_id=product_id)
+        .prefetch_related("members__user_library__user")
+        .order_by("order")
+    )
+    return JsonResponse(
+        {
+            "detail": f"{len(eligible)} peserta berhasil diacak ke {team_count} tim.",
+            "teams": [_serialize_team(t) for t in result_teams],
+        },
+        status=200,
     )

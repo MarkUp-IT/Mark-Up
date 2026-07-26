@@ -48,7 +48,7 @@ export default function BootcampTimelinePanel({ productId }) {
 
   const [editingPackageId, setEditingPackageId] = useState(null);
   const [packageForm, setPackageForm] = useState({
-    registration_opens_at: "", registration_closes_at: "",
+    registration_opens_at: "", registration_closes_at: "", payment_deadline_at: "",
     quiz_duration_minutes: "", quiz_passing_score_percent: "",
     name: "", price: "", commitment_fee: "", min_attendance_sessions: "",
     benefits: {},
@@ -129,6 +129,7 @@ export default function BootcampTimelinePanel({ productId }) {
     setPackageForm({
       registration_opens_at: toWIBLocalInputValue(pkg.registration_opens_at),
       registration_closes_at: toWIBLocalInputValue(pkg.registration_closes_at),
+      payment_deadline_at: toWIBLocalInputValue(pkg.payment_deadline_at),
       quiz_duration_minutes: pkg.quiz_duration_minutes ?? 30,
       quiz_passing_score_percent: pkg.quiz_passing_score_percent ?? 70,
       name: pkg.name || "",
@@ -151,6 +152,7 @@ export default function BootcampTimelinePanel({ productId }) {
       const body = {
         registration_opens_at: packageForm.registration_opens_at || null,
         registration_closes_at: packageForm.registration_closes_at || null,
+        payment_deadline_at: packageForm.payment_deadline_at || null,
         name: packageForm.name.trim(),
         price: Number(packageForm.price) || 0,
         commitment_fee: Number(packageForm.commitment_fee) || 0,
@@ -301,6 +303,11 @@ export default function BootcampTimelinePanel({ productId }) {
                           Tes BCC: {pkg.quiz_duration_minutes} menit, lulus ≥ {pkg.quiz_passing_score_percent}%
                         </p>
                       )}
+                      {pkg.payment_deadline_at && (
+                        <p className="text-[#64748B] text-[11.5px]">
+                          Batas bayar: {formatDateTimeWIB(pkg.payment_deadline_at)}
+                        </p>
+                      )}
                     </>
                   ) : (
                     <div className="flex flex-col gap-2">
@@ -354,6 +361,17 @@ export default function BootcampTimelinePanel({ productId }) {
                           style={{ colorScheme: "light" }}
                           className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                         />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Batas Waktu Bayar (setelah Diterima)</label>
+                        <input
+                          type="datetime-local"
+                          value={packageForm.payment_deadline_at}
+                          onChange={(e) => setPackageForm((f) => ({ ...f, payment_deadline_at: e.target.value }))}
+                          style={{ colorScheme: "light" }}
+                          className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                        />
+                        <span className="text-[#94A3B8] text-[10.5px]">Kosongkan kalau gak ada batas waktu otomatis.</span>
                       </div>
                       {pkg.requires_selection && (
                         <div className="flex gap-2">

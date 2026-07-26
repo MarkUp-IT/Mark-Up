@@ -19,6 +19,7 @@ import EmptyState from "@/component/admin/EmptyState";
 import BootcampTimelinePanel from "@/component/admin/BootcampTimelinePanel";
 import BootcampQuizPanel from "@/component/admin/BootcampQuizPanel";
 import BootcampResourcePanel from "@/component/admin/BootcampResourcePanel";
+import BootcampTeamPanel from "@/component/admin/BootcampTeamPanel";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
@@ -389,6 +390,8 @@ export default function BootcampOrderDetail() {
       {params?.id && <BootcampQuizPanel productId={params.id} />}
 
       {params?.id && <BootcampResourcePanel productId={params.id} />}
+
+      {params?.id && <BootcampTeamPanel productId={params.id} />}
 
       {!loading && sessions.length === 0 ? (
         <EmptyState message="Belum ada sesi untuk bootcamp ini." />

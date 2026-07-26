@@ -43,6 +43,12 @@ from .views import (
     get_bootcamp_resources,
     add_bootcamp_resource,
     update_bootcamp_resource,
+    get_bootcamp_teams,
+    add_bootcamp_team,
+    update_bootcamp_team,
+    assign_bootcamp_team_member,
+    remove_bootcamp_team_member,
+    randomize_bootcamp_teams,
 )
 
 urlpatterns = [
@@ -72,6 +78,9 @@ urlpatterns = [
     path("bootcamp-quiz-attempts/<uuid:attempt_id>/submit/", submit_bootcamp_quiz, name="api_bootcamp_quiz_submit"),
     path("bootcamp-registrations/<uuid:registration_id>/pay/", create_bootcamp_payment, name="api_bootcamp_registration_pay"),
     path("bootcamp-resources/<uuid:resource_id>/", update_bootcamp_resource, name="api_bootcamp_resource_update"),
+    path("bootcamp-teams/<uuid:team_id>/", update_bootcamp_team, name="api_bootcamp_team_update"),
+    path("bootcamp-teams/<uuid:team_id>/members/", assign_bootcamp_team_member, name="api_bootcamp_team_member_assign"),
+    path("bootcamp-team-members/<uuid:member_id>/", remove_bootcamp_team_member, name="api_bootcamp_team_member_remove"),
     path("summary/", get_product_summary, name="api_products_summary"),
     path("add/", add_product, name="api_products_add"),
     path("upload-image/", upload_product_image, name="api_products_upload_image"),
@@ -87,5 +96,8 @@ urlpatterns = [
     path("<uuid:product_id>/quiz-questions/add/", add_bootcamp_quiz_question, name="api_bootcamp_quiz_question_add"),
     path("<uuid:product_id>/resources/", get_bootcamp_resources, name="api_bootcamp_resources"),
     path("<uuid:product_id>/resources/add/", add_bootcamp_resource, name="api_bootcamp_resource_add"),
+    path("<uuid:product_id>/teams/", get_bootcamp_teams, name="api_bootcamp_teams"),
+    path("<uuid:product_id>/teams/add/", add_bootcamp_team, name="api_bootcamp_team_add"),
+    path("<uuid:product_id>/teams/randomize/", randomize_bootcamp_teams, name="api_bootcamp_teams_randomize"),
     path("<uuid:product_id>/", product_detail_view, name="api_product_detail"),
 ]

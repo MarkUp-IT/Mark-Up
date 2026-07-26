@@ -96,6 +96,7 @@ function mapProductDetail(raw) {
     fileUrl: raw.file_url,
     resources: raw.resources,
     chapters: raw.chapters,
+    team: raw.team,
   };
 }
 
@@ -646,6 +647,29 @@ export default function ProductDetail() {
                   </a>
                 ))}
               </div>
+            </motion.div>
+          )}
+
+          {product.type === "bootcamp" && product.team && (
+            <motion.div
+              {...sectionReveal}
+              className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col gap-3"
+            >
+              <h3 className="text-white font-semibold text-[15px] flex items-center gap-2">
+                <Users size={16} className="text-[#148F89]" /> {product.team.team_name}
+              </h3>
+              {product.team.teammates.length > 0 ? (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-[#9CA3AF] text-[12px]">Rekan setim:</p>
+                  <ul className="flex flex-col gap-1.5">
+                    {product.team.teammates.map((name, idx) => (
+                      <li key={idx} className="text-[#E2E8F0] text-[13px]">{name}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-[#9CA3AF] text-[12px]">Belum ada rekan setim lain.</p>
+              )}
             </motion.div>
           )}
         </>
