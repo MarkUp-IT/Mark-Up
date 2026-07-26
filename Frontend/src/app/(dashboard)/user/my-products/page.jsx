@@ -18,6 +18,7 @@ function ProductCard({
   id,
   title,
   description,
+  imageUrl,
   imageClass,
   badge,
   isCompleted,
@@ -38,11 +39,21 @@ function ProductCard({
       >
         <div
           className={`h-[140px] shrink-0 relative ${
-            isCompleted
-              ? "bg-gradient-to-br from-[#2D2342] to-[#1A1128]"
-              : `bg-gradient-to-br ${imageClass || ""}`
+            imageUrl
+              ? "bg-[#1A1128]"
+              : isCompleted
+                ? "bg-gradient-to-br from-[#2D2342] to-[#1A1128]"
+                : `bg-gradient-to-br ${imageClass || ""}`
           }`}
         >
+          {imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageUrl}
+              alt={title}
+              className={`w-full h-full object-cover ${isCompleted ? "opacity-70" : ""}`}
+            />
+          )}
           <div className="absolute top-3 right-3 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 flex items-center gap-1.5">
             {isCompleted ? (
               <>
@@ -314,6 +325,7 @@ export default function MyProducts() {
                     id={item.id}
                     title={item.title}
                     description={item.description}
+                    imageUrl={item.image_url}
                     imageClass={item.imageClass}
                     isCompleted={item.status === "completed"}
                     hasRating={!!item.hasRating || ratedIds.includes(item.id)}
@@ -321,7 +333,7 @@ export default function MyProducts() {
                     badge={
                       item.status !== "completed" ? (
                         <p className="text-[11px] font-bold text-white tracking-wider">
-                          SESSION {item.currentSession}/{item.totalSessions}
+                          SESSION {item.current_session}/{item.total_sessions}
                         </p>
                       ) : null
                     }
@@ -364,6 +376,7 @@ export default function MyProducts() {
                     id={item.id}
                     title={item.title}
                     description={item.description}
+                    imageUrl={item.image_url}
                     imageClass={item.imageClass}
                     isCompleted={item.status === "completed"}
                     hasRating={!!item.hasRating || ratedIds.includes(item.id)}
@@ -371,7 +384,7 @@ export default function MyProducts() {
                     badge={
                       item.status !== "completed" ? (
                         <p className="text-[11px] font-bold text-white tracking-wider">
-                          SESI {item.currentSession}/{item.totalSessions}
+                          SESI {item.current_session}/{item.total_sessions}
                         </p>
                       ) : null
                     }
@@ -408,6 +421,7 @@ export default function MyProducts() {
                     id={item.id}
                     title={item.title}
                     description={item.description}
+                    imageUrl={item.image_url}
                     imageClass={item.imageClass}
                     badge={
                       <>

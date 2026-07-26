@@ -155,6 +155,7 @@ def _serialize_user_product_card(user_library, reviewed_product_ids):
             "id": str(product.id),
             "title": detail.title,
             "description": detail.description,
+            "image_url": _get_product_image_url(detail),
             "current_session": progress["current_session"],
             "total_sessions": progress["total_sessions"],
             "status": progress["status"],
@@ -168,6 +169,7 @@ def _serialize_user_product_card(user_library, reviewed_product_ids):
             "id": str(product.id),
             "title": detail.title,
             "description": detail.description,
+            "image_url": _get_product_image_url(detail),
             "current_session": progress["current_session"],
             "total_sessions": progress["total_sessions"],
             "status": progress["status"],
@@ -179,6 +181,7 @@ def _serialize_user_product_card(user_library, reviewed_product_ids):
             "id": str(product.id),
             "title": detail.title,
             "description": detail.description,
+            "image_url": _get_product_image_url(detail),
         }
 
     return None
@@ -457,6 +460,7 @@ def get_my_product_detail(request, product_id):
                 "type": "bootcamp",
                 "title": detail.title,
                 "description": detail.description,
+                "image_url": _get_product_image_url(detail),
                 "sessions": [_serialize_bootcamp_session(session) for session in sessions],
                 "resources": _serialize_unlocked_bootcamp_resources(user_library),
                 "team": _serialize_my_team(user_library),
@@ -471,6 +475,7 @@ def get_my_product_detail(request, product_id):
                 "type": "mentoring",
                 "title": detail.title,
                 "description": detail.description,
+                "image_url": _get_product_image_url(detail),
                 "sessions": [_serialize_mentoring_session(session) for session in sessions],
             },
             status=200,
@@ -482,6 +487,7 @@ def get_my_product_detail(request, product_id):
                 "type": "modul",
                 "title": detail.title,
                 "description": detail.description,
+                "image_url": _get_product_image_url(detail),
                 "file_url": detail.file_pdf_url,
                 "resources": [],  # TODO: backend belum menyediakan model resource terpisah
                 "chapters": [],  # TODO: backend belum menyediakan chapters
