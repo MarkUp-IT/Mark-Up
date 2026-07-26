@@ -9,7 +9,7 @@ from django.core.mail import send_mail
 from django.db import IntegrityError, transaction as db_transaction
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
+from django.utils.dateparse import parse_date, parse_datetime
 
 from .utils import get_request_data
 from .forms import MentoringProductForm, ModuleProductForm, BootcampProductForm
@@ -761,11 +761,14 @@ def get_products(request):
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])
 
+    # `all` cuma matiin paginasi (dipakai storefront publik buat ambil
+    # seluruh katalog sekaligus) -- BUKAN izin buat liat produk nonaktif,
+    # dua hal itu sengaja dipisah. Cuma `include_inactive` (dikirim admin,
+    # selalu bareng all=true di halaman manajemen produk) yang boleh
+    # nge-bypass filter aktif; storefront publik yang cuma kirim all=true
+    # doang harus tetap kefilter, kalau nggak produk yang baru dinonaktifkan
+    # admin bakal tetap nongol ke pengunjung biasa.
     fetch_all = request.GET.get("all") == "true"
-    # Storefront publik cuma boleh liat produk aktif; admin (list manajemen
-    # produk) butuh liat SEMUA produk termasuk yang di-nonaktifkan, jadi bisa
-    # dikelola/diaktifkan lagi -- tanpa flag ini produk nonaktif hilang total
-    # dari tabel admin begitu di-nonaktifkan.
     include_inactive = request.GET.get("include_inactive") == "true"
 
     # Product tanpa detail sama sekali (baris yatim -- biasanya sisa proses
@@ -783,7 +786,7 @@ def get_products(request):
 		Q(bootcamp_detail__isnull=False)
 	).order_by("-created_at")
 
-    if fetch_all or include_inactive:
+    if include_inactive:
         products = base_qs
     else:
         products = base_qs.filter(
@@ -1945,14 +1948,22 @@ def add_bootcamp_timeline_item(request, product_id):
         return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
     title = (request_data.get("title") or "").strip()
-    start_date = request_data.get("start_date")
-    end_date = request_data.get("end_date") or None
+    raw_start_date = request_data.get("start_date")
+    raw_end_date = request_data.get("end_date") or None
 
     errors = {}
     if not title:
         errors["title"] = ["Judul milestone wajib diisi."]
-    if not start_date:
+    start_date = parse_date(raw_start_date) if raw_start_date else None
+    if not raw_start_date:
         errors["start_date"] = ["Tanggal mulai wajib diisi."]
+    elif start_date is None:
+        errors["start_date"] = ["Format tanggal mulai tidak valid (YYYY-MM-DD)."]
+    end_date = None
+    if raw_end_date:
+        end_date = parse_date(raw_end_date)
+        if end_date is None:
+            errors["end_date"] = ["Format tanggal selesai tidak valid (YYYY-MM-DD)."]
     if errors:
         return JsonResponse({"errors": errors}, status=400)
 
@@ -1993,14 +2004,33 @@ def update_bootcamp_timeline_item(request, item_id):
     if request_data is None:
         return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
+    errors = {}
     if "title" in request_data:
         item.title = request_data["title"]
     if "start_date" in request_data:
-        item.start_date = request_data["start_date"]
+        raw_start_date = request_data["start_date"]
+        if not raw_start_date:
+            errors["start_date"] = ["Tanggal mulai wajib diisi."]
+        else:
+            parsed = parse_date(raw_start_date)
+            if parsed is None:
+                errors["start_date"] = ["Format tanggal mulai tidak valid (YYYY-MM-DD)."]
+            else:
+                item.start_date = parsed
     if "end_date" in request_data:
-        item.end_date = request_data["end_date"] or None
+        raw_end_date = request_data["end_date"] or None
+        if raw_end_date is None:
+            item.end_date = None
+        else:
+            parsed = parse_date(raw_end_date)
+            if parsed is None:
+                errors["end_date"] = ["Format tanggal selesai tidak valid (YYYY-MM-DD)."]
+            else:
+                item.end_date = parsed
     if "order" in request_data:
         item.order = request_data["order"]
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
     item.save()
 
     return JsonResponse(
