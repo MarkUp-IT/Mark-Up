@@ -4,7 +4,9 @@ from datetime import timedelta
 from zoneinfo import ZoneInfo
 import random
 
-from django.db import IntegrityError
+from django.conf import settings
+from django.core.mail import send_mail
+from django.db import IntegrityError, transaction as db_transaction
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 
@@ -35,6 +37,7 @@ from accounts.models import User, UserRole, AuditAction
 from accounts.utils import log_audit, notify_team, get_client_ip, is_rate_limited
 from django.db.models import Q
 from mentors.models import MentorAvailability
+from transactions.models import Transaction, TransactionItem, PaymentStatus
 from django.views.decorators.csrf import csrf_exempt
 
 MAX_CERTIFICATE_SIZE = 5 * 1024 * 1024  # 5MB
@@ -1496,6 +1499,8 @@ def upload_product_image(request):
 # ==================== BOOTCAMP: PAKET & PENDAFTARAN ====================
 
 MAX_REGISTRATION_DOC_SIZE = 10 * 1024 * 1024  # 10MB (PDF gabungan bisa agak besar)
+MAX_PAYMENT_PROOF_SIZE = 5 * 1024 * 1024  # 5MB, sama kayak checkout_product biasa
+ALLOWED_PAYMENT_PROOF_EXTENSIONS = {"jpg", "jpeg", "png", "pdf"}
 
 _BENEFIT_LABELS = [
     ("benefit_session_material", "Sesi & Materi Bootcamp"),
@@ -1590,6 +1595,29 @@ def _serialize_registration(reg, for_admin=False):
                 quiz["passed"] = attempt.passed
                 quiz["submitted_at"] = attempt.submitted_at.isoformat() if attempt.submitted_at else None
 
+    # Pembayaran (kalau ada) -- beda dari quiz, ini boleh dilihat peserta
+    # sendiri (bukan info yang perlu disembunyikan), makanya gak digerbang
+    # for_admin. Ambil transaksi terbaru yang terhubung ke pendaftaran ini.
+    payment = None
+    txn = reg.payment_transactions.order_by("-created_at").first()
+    if txn is not None:
+        proof_url = None
+        if txn.proof_of_payment:
+            try:
+                proof_url = txn.proof_of_payment.url
+            except Exception:
+                proof_url = None
+        payment = {
+            "transaction_id": txn.id,
+            "status": txn.payment_status,
+            "sub_total": str(txn.sub_total),
+            "commitment_fee_amount": str(txn.commitment_fee_amount),
+            "grand_total": str(txn.grand_total),
+            "proof_of_payment": proof_url,
+            "created_at": txn.created_at.isoformat(),
+            "paid_at": txn.paid_at.isoformat() if txn.paid_at else None,
+        }
+
     return {
         "id": str(reg.id),
         "status": reg.status,
@@ -1603,10 +1631,13 @@ def _serialize_registration(reg, for_admin=False):
             "slug": reg.package.slug,
             "name": reg.package.name,
             "requires_selection": reg.package.requires_selection,
+            "price": str(reg.package.price),
+            "commitment_fee": str(reg.package.commitment_fee),
         },
         "bootcamp_id": str(reg.package.bootcamp_id),
         "bootcamp_title": reg.package.bootcamp.title,
         "quiz": quiz,
+        "payment": payment,
     }
 
 
@@ -1688,6 +1719,7 @@ def get_my_bootcamp_registrations(request):
     regs = (
         BootcampRegistration.objects.filter(user=request.user)
         .select_related("package__bootcamp", "quiz_attempt")
+        .prefetch_related("payment_transactions")
         .order_by("-created_at")
     )
     return JsonResponse(
@@ -1703,6 +1735,7 @@ def get_bootcamp_registrations(request):
 
     regs = (
         BootcampRegistration.objects.select_related("package__bootcamp", "user", "quiz_attempt")
+        .prefetch_related("payment_transactions")
         .order_by("-created_at")
     )
     status_filter = request.GET.get("status")
@@ -1727,7 +1760,7 @@ def review_bootcamp_registration(request, registration_id):
         return HttpResponseNotAllowed(["PATCH", "PUT"])
 
     try:
-        reg = BootcampRegistration.objects.select_related("package").get(id=registration_id)
+        reg = BootcampRegistration.objects.select_related("package__bootcamp", "user").get(id=registration_id)
     except BootcampRegistration.DoesNotExist:
         return JsonResponse({"detail": "Pendaftaran tidak ditemukan."}, status=404)
 
@@ -1749,9 +1782,53 @@ def review_bootcamp_registration(request, registration_id):
         new_data={"status": reg.status},
     )
 
+    _send_bootcamp_review_email(reg)
+
     return JsonResponse(
         {"detail": "Pendaftaran berhasil diperbarui.", "registration": _serialize_registration(reg)},
         status=200,
+    )
+
+
+def _send_bootcamp_review_email(reg):
+    """Email ke PENDAFTAR sendiri (bukan cuma notify_team ke admin) begitu
+    statusnya diputuskan -- sebelumnya cuma admin yang dapat notifikasi,
+    pendaftar harus buka web sendiri buat tau hasilnya."""
+    package = reg.package
+    bootcamp_title = package.bootcamp.title
+
+    if reg.status == BootcampRegistration.Status.ACCEPTED:
+        total = package.price + package.commitment_fee
+        pay_link = f"{settings.FRONTEND_BASE_URL}/bootcamp/{package.bootcamp_id}/pay/{reg.id}"
+        commitment_line = (
+            f" (termasuk commitment fee Rp{package.commitment_fee:,.0f} yang dikembalikan penuh di akhir program)"
+            if package.commitment_fee > 0 else ""
+        )
+        subject = f"Pendaftaran Bootcamp Diterima -- {bootcamp_title}"
+        message = (
+            f"Halo {reg.user.fullname},\n\n"
+            f"Selamat! Pendaftaran kamu untuk paket {package.name} di {bootcamp_title} DITERIMA.\n\n"
+            f"Langkah selanjutnya, lakukan pembayaran sebesar Rp{total:,.0f}{commitment_line} lewat tautan berikut:\n{pay_link}\n\n"
+            "Setelah bukti transfer kamu unggah, tim admin akan memverifikasi dalam waktu 1x24 jam.\n\n"
+            "Sampai jumpa di kelas!"
+        )
+    else:
+        subject = f"Update Pendaftaran Bootcamp -- {bootcamp_title}"
+        reason_line = f"\n\nCatatan dari admin: {reg.admin_notes}" if reg.admin_notes else ""
+        message = (
+            f"Halo {reg.user.fullname},\n\n"
+            f"Mohon maaf, pendaftaran kamu untuk paket {package.name} di {bootcamp_title} belum bisa kami terima kali ini."
+            f"{reason_line}\n\n"
+            "Kamu tetap bisa mendaftar paket lain yang masih terbuka di bootcamp ini kalau tersedia. "
+            "Terima kasih sudah mendaftar di MARK-UP."
+        )
+
+    send_mail(
+        subject=subject,
+        message=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[reg.user.email],
+        fail_silently=True,
     )
 
 
@@ -2232,4 +2309,111 @@ def submit_bootcamp_quiz(request, attempt_id):
         {"detail": "Tes berhasil dikumpulkan.",
          "attempt": _serialize_quiz_attempt_for_participant(attempt)},
         status=200,
+    )
+
+
+# ---------- Pembayaran setelah pendaftaran Diterima ----------
+
+@csrf_exempt
+@jwt_required
+def create_bootcamp_payment(request, registration_id):
+    """Bikin Transaction buat pendaftaran yang sudah Diterima -- beda dari
+    checkout_product biasa (yang harganya per-Product, bukan per-paket, dan
+    minta 3 dokumen lama yang sekarang udah digantiin requirement_doc di
+    BootcampRegistration). verify_transaction admin yang sudah ada TETAP
+    dipakai apa adanya buat verifikasi & bikin UserLibrary + sesi -- endpoint
+    ini cuma bikin Transaction+TransactionItem dalam bentuk yang sama persis
+    yang dikenali verify_transaction, gak ada logic verifikasi baru di sini."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    if is_rate_limited(f"rl:bootcamp-pay:user:{request.user.id}", limit=10, window_seconds=3600):
+        return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
+
+    try:
+        registration = BootcampRegistration.objects.select_related("package__bootcamp").get(
+            id=registration_id, user=request.user,
+        )
+    except BootcampRegistration.DoesNotExist:
+        return JsonResponse({"detail": "Pendaftaran tidak ditemukan."}, status=404)
+
+    if registration.status != BootcampRegistration.Status.ACCEPTED:
+        return JsonResponse(
+            {"detail": "Pembayaran cuma bisa dilakukan setelah pendaftaran Diterima."}, status=400
+        )
+
+    existing = registration.payment_transactions.filter(
+        payment_status__in=[PaymentStatus.PENDING, PaymentStatus.PAID]
+    ).exists()
+    if existing:
+        return JsonResponse(
+            {"detail": "Sudah ada pembayaran yang sedang diproses/lunas untuk pendaftaran ini."}, status=400
+        )
+
+    proof_file = request.FILES.get("proof_of_payment")
+    if not proof_file:
+        return JsonResponse({"detail": "Bukti pembayaran diperlukan."}, status=400)
+
+    ext = proof_file.name.rsplit(".", 1)[-1].lower() if "." in proof_file.name else ""
+    if ext not in ALLOWED_PAYMENT_PROOF_EXTENSIONS:
+        return JsonResponse({"detail": "Format file tidak didukung."}, status=400)
+    if proof_file.size > MAX_PAYMENT_PROOF_SIZE:
+        return JsonResponse({"detail": "Ukuran file maksimal 5MB."}, status=400)
+
+    package = registration.package
+    bootcamp_product = package.bootcamp
+    sub_total = package.price
+    commitment_fee_amount = package.commitment_fee
+    grand_total = sub_total + commitment_fee_amount
+
+    try:
+        with db_transaction.atomic():
+            # Stok di-reserve begitu bayar, sama pola-nya kayak checkout_product
+            # biasa buat MODULE/BOOTCAMP -- sold_count baru nambah pas admin approve.
+            detail_locked = BootcampProduct.objects.select_for_update().get(
+                product_id=bootcamp_product.product_id
+            )
+            if detail_locked.stock <= 0:
+                return JsonResponse({"detail": "Stok produk habis."}, status=400)
+            detail_locked.stock -= 1
+            detail_locked.save(update_fields=["stock"])
+
+            txn = Transaction.objects.create(
+                user=request.user,
+                buyer_phone=request.user.phone or "",
+                sub_total=sub_total,
+                discount_amount=0,
+                tax=0,
+                grand_total=grand_total,
+                payment_status=PaymentStatus.PENDING,
+                proof_of_payment=proof_file,
+                bootcamp_registration=registration,
+                commitment_fee_amount=commitment_fee_amount,
+            )
+            TransactionItem.objects.create(
+                transaction=txn,
+                product=bootcamp_product.product,
+                price_at_checkout=grand_total,
+                quantity=1,
+            )
+    except Exception as e:
+        return JsonResponse({"detail": f"Gagal membuat pembayaran: {str(e)}"}, status=500)
+
+    notify_team(
+        f"Pembayaran bootcamp baru nunggu verifikasi ({txn.id})",
+        f"Ada pembayaran pendaftaran bootcamp yang perlu diverifikasi admin.\n\n"
+        f"ID Transaksi: {txn.id}\n"
+        f"Pembeli: {request.user.fullname} ({request.user.email})\n"
+        f"Bootcamp: {bootcamp_product.title}\n"
+        f"Paket: {package.name}\n"
+        f"Total: Rp {txn.grand_total}\n\n"
+        f"Cek & verifikasi di dashboard admin -> Transaksi.",
+    )
+
+    return JsonResponse(
+        {
+            "detail": "Pembayaran berhasil dikirim, menunggu verifikasi admin.",
+            "registration": _serialize_registration(registration),
+        },
+        status=201,
     )

@@ -32,6 +32,17 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
 }
 
+const formatIDR = (val) =>
+  new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(val));
+
+const PAYMENT_STATUS_LABEL = {
+  PENDING: "Menunggu Verifikasi",
+  PAID: "Lunas",
+  FAILED: "Ditolak",
+  EXPIRED: "Kedaluwarsa",
+  REFUNDED: "Dikembalikan",
+};
+
 export default function AdminBootcampRegistrations() {
   const [registrations, setRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -201,6 +212,20 @@ export default function AdminBootcampRegistrations() {
                       </div>
                     </>
                   )}
+                </div>
+              )}
+
+              {selected.status === "accepted" && selected.payment && (
+                <div className="flex flex-col gap-1 text-[13px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-3.5 py-3">
+                  <div className="text-[#0F172A] font-semibold text-[12.5px] mb-1">Pembayaran</div>
+                  <div className="flex justify-between"><span className="text-[#64748B]">Status</span><span className="text-[#1E293B] font-medium">{PAYMENT_STATUS_LABEL[selected.payment.status] || selected.payment.status}</span></div>
+                  <div className="flex justify-between"><span className="text-[#64748B]">Total</span><span className="text-[#1E293B] font-medium">{formatIDR(selected.payment.grand_total)}</span></div>
+                  {selected.payment.proof_of_payment && (
+                    <a href={selected.payment.proof_of_payment} target="_blank" rel="noopener noreferrer" className="text-[#148F89] font-semibold hover:underline mt-1">
+                      Lihat Bukti Transfer
+                    </a>
+                  )}
+                  <p className="text-[#94A3B8] text-[11px] italic mt-1">Verifikasi pembayaran dilakukan di menu Transaksi.</p>
                 </div>
               )}
 

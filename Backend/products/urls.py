@@ -39,6 +39,7 @@ from .views import (
     start_or_resume_bootcamp_quiz,
     save_bootcamp_quiz_answer,
     submit_bootcamp_quiz,
+    create_bootcamp_payment,
 )
 
 urlpatterns = [
@@ -66,6 +67,7 @@ urlpatterns = [
     path("bootcamp-registrations/<uuid:registration_id>/quiz/start/", start_or_resume_bootcamp_quiz, name="api_bootcamp_quiz_start"),
     path("bootcamp-quiz-attempts/<uuid:attempt_id>/answer/", save_bootcamp_quiz_answer, name="api_bootcamp_quiz_answer"),
     path("bootcamp-quiz-attempts/<uuid:attempt_id>/submit/", submit_bootcamp_quiz, name="api_bootcamp_quiz_submit"),
+    path("bootcamp-registrations/<uuid:registration_id>/pay/", create_bootcamp_payment, name="api_bootcamp_registration_pay"),
     path("summary/", get_product_summary, name="api_products_summary"),
     path("add/", add_product, name="api_products_add"),
     path("upload-image/", upload_product_image, name="api_products_upload_image"),

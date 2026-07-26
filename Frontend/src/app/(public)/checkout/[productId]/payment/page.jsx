@@ -18,6 +18,7 @@ import {
 import Navbar from "@/component/Navbar";
 import { getAccessToken, API_BASE } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
+import { BANK_INFO } from "@/lib/bankInfo";
 import { toast } from "sonner";
 
 const NAVBAR_CLEARANCE = 150;
@@ -53,12 +54,6 @@ const getInitials = (name) =>
     .map((w) => w[0])
     .join("")
     .toUpperCase();
-
-const mockBank = {
-  name: "Mandiri",
-  account: "4616 9948 8411 4788",
-  holder: "Ahmad Reva Dany Fawwaz",
-};
 
 function StepPill({ current }) {
   return (
@@ -168,7 +163,7 @@ export default function CheckoutPaymentPage() {
   }, []);
 
   const handleCopyBank = () => {
-    navigator.clipboard.writeText(mockBank.account.replace(/\s/g, ""));
+    navigator.clipboard.writeText(BANK_INFO.account.replace(/\s/g, ""));
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
@@ -398,13 +393,13 @@ export default function CheckoutPaymentPage() {
                   <div className="bg-[#0F081C] border border-[#2D2342] rounded-[8px] p-4 flex flex-col gap-3">
                     <div className="flex flex-col gap-1">
                       <span className="text-[#9CA3AF] text-[11px] font-semibold">
-                        {mockBank.name}
+                        {BANK_INFO.name}
                       </span>
                       <span className="text-white font-bold text-[19px] tracking-widest font-mono">
-                        {mockBank.account}
+                        {BANK_INFO.account}
                       </span>
                       <span className="text-[#E2E8F0] text-[12px] mt-0.5">
-                        a.n <span className="font-bold">{mockBank.holder}</span>
+                        a.n <span className="font-bold">{BANK_INFO.holder}</span>
                       </span>
                     </div>
                     <button

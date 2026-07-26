@@ -158,6 +158,7 @@ export default function BootcampRegisterPage() {
                 {myRegs.map((r) => {
                   const meta = STATUS_META[r.status] || STATUS_META.registered;
                   const canTakeQuiz = r.package.requires_selection && r.status === "registered" && r.quiz;
+                  const canPay = r.status === "accepted";
                   return (
                     <div key={r.id} className="flex flex-col gap-2.5 border-b border-[#2D2342] last:border-0 pb-3 last:pb-0">
                       <div className="flex items-center justify-between gap-3">
@@ -193,6 +194,36 @@ export default function BootcampRegisterPage() {
                             <span className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#148F89]/10 text-[#148F89] text-[12.5px] font-semibold border border-[#148F89]/30">
                               <Check size={14} /> Tes Sudah Dikumpulkan
                             </span>
+                          )}
+                        </>
+                      )}
+                      {canPay && (
+                        <>
+                          {!r.payment && (
+                            <Link
+                              href={`/bootcamp/${productId}/pay/${r.id}`}
+                              className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#148F89] text-white text-[12.5px] font-semibold hover:bg-[#117A75] transition-colors"
+                            >
+                              Bayar Sekarang ({formatIDR(Number(r.package.price) + Number(r.package.commitment_fee))})
+                            </Link>
+                          )}
+                          {r.payment?.status === "PENDING" && (
+                            <span className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#F59E0B]/10 text-[#F59E0B] text-[12.5px] font-semibold border border-[#F59E0B]/30">
+                              <Clock size={14} /> Menunggu Verifikasi Pembayaran
+                            </span>
+                          )}
+                          {r.payment?.status === "PAID" && (
+                            <span className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#148F89]/10 text-[#148F89] text-[12.5px] font-semibold border border-[#148F89]/30">
+                              <Check size={14} /> Lunas
+                            </span>
+                          )}
+                          {r.payment?.status === "FAILED" && (
+                            <Link
+                              href={`/bootcamp/${productId}/pay/${r.id}`}
+                              className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#EF4444] text-white text-[12.5px] font-semibold hover:bg-[#DC2626] transition-colors"
+                            >
+                              Bayar Ulang
+                            </Link>
                           )}
                         </>
                       )}
