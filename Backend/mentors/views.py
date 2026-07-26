@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.decorators import jwt_required, role_required
-from accounts.models import UserRole
+from accounts.models import UserRole, UserStatus
 
 from .models import (
     MentorProfile,
@@ -77,6 +77,11 @@ def get_mentors(request):
             "mentor_experiences",
             "mentor_availabilities",
         )
+        # Mentor yang akunnya dinonaktifkan admin (User.status=INACTIVE) gak
+        # boleh nongol di direktori publik -- sebelumnya query ini cuma
+        # nyaring profil belum lengkap, gak pernah ngecek status akun sama
+        # sekali.
+        .filter(user__status=UserStatus.ACTIVE)
         .order_by("-rating")
     )
 
