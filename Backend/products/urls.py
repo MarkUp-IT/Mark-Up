@@ -40,6 +40,9 @@ from .views import (
     save_bootcamp_quiz_answer,
     submit_bootcamp_quiz,
     create_bootcamp_payment,
+    get_bootcamp_resources,
+    add_bootcamp_resource,
+    update_bootcamp_resource,
 )
 
 urlpatterns = [
@@ -68,6 +71,7 @@ urlpatterns = [
     path("bootcamp-quiz-attempts/<uuid:attempt_id>/answer/", save_bootcamp_quiz_answer, name="api_bootcamp_quiz_answer"),
     path("bootcamp-quiz-attempts/<uuid:attempt_id>/submit/", submit_bootcamp_quiz, name="api_bootcamp_quiz_submit"),
     path("bootcamp-registrations/<uuid:registration_id>/pay/", create_bootcamp_payment, name="api_bootcamp_registration_pay"),
+    path("bootcamp-resources/<uuid:resource_id>/", update_bootcamp_resource, name="api_bootcamp_resource_update"),
     path("summary/", get_product_summary, name="api_products_summary"),
     path("add/", add_product, name="api_products_add"),
     path("upload-image/", upload_product_image, name="api_products_upload_image"),
@@ -81,5 +85,7 @@ urlpatterns = [
     path("<uuid:product_id>/timeline/add/", add_bootcamp_timeline_item, name="api_bootcamp_timeline_add"),
     path("<uuid:product_id>/quiz-questions/", get_bootcamp_quiz_questions, name="api_bootcamp_quiz_questions"),
     path("<uuid:product_id>/quiz-questions/add/", add_bootcamp_quiz_question, name="api_bootcamp_quiz_question_add"),
+    path("<uuid:product_id>/resources/", get_bootcamp_resources, name="api_bootcamp_resources"),
+    path("<uuid:product_id>/resources/add/", add_bootcamp_resource, name="api_bootcamp_resource_add"),
     path("<uuid:product_id>/", product_detail_view, name="api_product_detail"),
 ]

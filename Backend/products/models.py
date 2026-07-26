@@ -294,6 +294,42 @@ class BootcampTimelineItem(models.Model):
         return f"{self.title} ({self.bootcamp_id})"
 
 
+class BootcampResourceType(models.TextChoices):
+    """Cuma benefit berbentuk FILE -- benefit berbentuk sesi (mentoring_case/
+    career_coaching/networking) ditegakkan lewat BootcampSession.required_benefit
+    di app programs, bukan lewat model ini. team_pairing sengaja belum
+    diaktifkan (bukan sekadar file/sesi, butuh fitur matching tim sendiri)."""
+    RECORD_INCUBATION = "record_incubation", "Record Incubation"
+    FRAMEWORK_TEMPLATE = "framework_template", "Framework Template"
+    WINNING_DECK = "winning_deck", "Winning Deck"
+
+
+class BootcampResource(models.Model):
+    """File/materi eksklusif per bootcamp, dikunci per paket lewat
+    BootcampPackage.benefit_<resource_type> -- diunggah admin, cuma bisa
+    diunduh peserta yang paketnya punya benefit itu (lihat _get_user_library
+    di views.py buat logic gate-nya)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct,
+        on_delete=models.CASCADE,
+        related_name="resources",
+    )
+    resource_type = models.CharField(max_length=30, choices=BootcampResourceType.choices)
+    title = models.CharField(max_length=255)
+    file = models.FileField(upload_to="bootcamp_resources/%Y/%m/")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Resource"
+        verbose_name_plural = "Bootcamp Resources"
+        ordering = ["resource_type", "-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.get_resource_type_display()})"
+
+
 class BootcampRegistration(models.Model):
     """Pendaftaran user ke sebuah paket bootcamp. Terpisah dari pembelian
     (Transaction) -- user daftar dulu (upload 1 PDF gabungan syarat), baru
@@ -501,6 +537,20 @@ class UserLibrary(models.Model):
     product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE,
+        related_name="user_libraries",
+    )
+    # Cuma keisi buat produk BOOTCAMP yang dibeli lewat alur
+    # daftar->seleksi/ACC->bayar (BootcampRegistration) -- diisi otomatis di
+    # verify_transaction dari Transaction.bootcamp_registration.package.
+    # Null buat produk non-bootcamp atau pembelian bootcamp lewat checkout
+    # lama yang gak lewat alur paket. Dipakai buat nge-gate benefit per
+    # paket (resource/sesi eksklusif) -- lihat BootcampResource &
+    # BootcampSession.required_benefit.
+    package = models.ForeignKey(
+        BootcampPackage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="user_libraries",
     )
     purchased_at = models.DateTimeField(auto_now_add=True)

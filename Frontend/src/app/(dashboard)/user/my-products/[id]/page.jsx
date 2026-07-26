@@ -617,6 +617,37 @@ export default function ProductDetail() {
                 );
               })}
           </div>
+
+          {product.type === "bootcamp" && product.resources?.length > 0 && (
+            <motion.div
+              {...sectionReveal}
+              className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col gap-3"
+            >
+              <h3 className="text-white font-semibold text-[15px]">
+                Resource Eksklusif Paketmu
+              </h3>
+              <div className="flex flex-col gap-2">
+                {product.resources.map((res) => (
+                  <a
+                    key={res.id}
+                    href={res.file}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between gap-3 bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 hover:border-[#148F89]/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <FileText size={16} className="text-[#148F89] shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-white text-[13px] font-medium truncate">{res.title}</span>
+                        <span className="text-[#9CA3AF] text-[11px]">{res.resource_type_label}</span>
+                      </div>
+                    </div>
+                    <Download size={15} className="text-[#9CA3AF] shrink-0" />
+                  </a>
+                ))}
+              </div>
+            </motion.div>
+          )}
         </>
       ) : (
         <>

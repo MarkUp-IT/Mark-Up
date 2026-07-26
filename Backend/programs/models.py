@@ -66,6 +66,15 @@ class Competition(models.Model):
         return self.title
 
 
+class BootcampSessionRequiredBenefit(models.TextChoices):
+    """Subset benefit BootcampPackage yang bentuknya sesi terjadwal (bukan
+    file) -- dipetakan ke field benefit_<value> di BootcampPackage. Kosong
+    ("") berarti sesi inti/materi utama, kelihatan buat semua paket."""
+    MENTORING_CASE = "mentoring_case", "Mentoring Case Competition"
+    CAREER_COACHING = "career_coaching", "Career Coaching"
+    NETWORKING = "networking", "Networking Session"
+
+
 class BootcampSession(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     bootcamp = models.ForeignKey(
@@ -84,6 +93,13 @@ class BootcampSession(models.Model):
     # Urutan tampil (Sesi 1, 2, 3, ...) -- gak bisa ngandelin start_time
     # doang buat sorting karena slot kosong belum punya tanggal.
     order = models.PositiveIntegerField(default=1)
+    # Kosong ("", default) = sesi inti, di-clone ke SEMUA pembeli bootcamp
+    # ini (perilaku lama, gak berubah). Keisi = cuma di-clone ke pembeli
+    # yang benefit_<value> paketnya True -- lihat _create_bootcamp_sessions
+    # di transactions/views.py.
+    required_benefit = models.CharField(
+        max_length=30, choices=BootcampSessionRequiredBenefit.choices, blank=True, default="",
+    )
 
     class Meta:
         db_table = "bootcamp_sessions"
