@@ -22,6 +22,8 @@ from .models import (
     BootcampQuizAttempt,
     BootcampQuizAnswer,
     QuizChoiceKey,
+    BootcampResource,
+    BootcampResourceType,
     Certificate,
     CertificateType,
     MentoringSession,
@@ -275,6 +277,35 @@ def _serialize_bootcamp_session(session):
     }
 
 
+def _serialize_unlocked_bootcamp_resources(user_library):
+    """Resource (file) yang paket pembeli ini berhak akses -- kalau
+    user_library.package kosong (mis. beli lewat checkout lama tanpa alur
+    paket), gak dapat resource eksklusif apa pun."""
+    package = user_library.package
+    if package is None:
+        return []
+
+    unlocked_types = [
+        rt for rt in BootcampResourceType.values if getattr(package, f"benefit_{rt}", False)
+    ]
+    if not unlocked_types:
+        return []
+
+    resources = BootcampResource.objects.filter(
+        bootcamp_id=user_library.product_id, resource_type__in=unlocked_types
+    )
+    return [
+        {
+            "id": str(r.id),
+            "resource_type": r.resource_type,
+            "resource_type_label": r.get_resource_type_display(),
+            "title": r.title,
+            "file": r.file.url if r.file else None,
+        }
+        for r in resources
+    ]
+
+
 def _serialize_mentoring_session(session):
     mentor = session.mentor
     return {
@@ -408,6 +439,7 @@ def get_my_product_detail(request, product_id):
                 "title": detail.title,
                 "description": detail.description,
                 "sessions": [_serialize_bootcamp_session(session) for session in sessions],
+                "resources": _serialize_unlocked_bootcamp_resources(user_library),
             },
             status=200,
         )
@@ -1969,6 +2001,111 @@ def update_bootcamp_package(request, package_id):
 
     return JsonResponse(
         {"detail": "Paket berhasil diperbarui.", "package": _serialize_package(package)},
+        status=200,
+    )
+
+
+# ---------- Resource (file) benefit eksklusif per paket ----------
+
+MAX_BOOTCAMP_RESOURCE_SIZE = 20 * 1024 * 1024  # 20MB
+
+
+def _serialize_bootcamp_resource(resource):
+    return {
+        "id": str(resource.id),
+        "resource_type": resource.resource_type,
+        "resource_type_label": resource.get_resource_type_display(),
+        "title": resource.title,
+        "file": resource.file.url if resource.file else None,
+        "created_at": resource.created_at.isoformat(),
+    }
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_bootcamp_resources(request, product_id):
+    """Admin: daftar semua resource sebuah bootcamp (semua jenis)."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    resources = BootcampResource.objects.filter(bootcamp_id=product_id)
+    return JsonResponse(
+        {"resources": [_serialize_bootcamp_resource(r) for r in resources]}, status=200
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def add_bootcamp_resource(request, product_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    title = (request.POST.get("title") or "").strip()
+    resource_type = (request.POST.get("resource_type") or "").strip()
+    file = request.FILES.get("file")
+
+    errors = {}
+    if not title:
+        errors["title"] = ["Judul wajib diisi."]
+    if resource_type not in BootcampResourceType.values:
+        errors["resource_type"] = ["Jenis benefit tidak valid."]
+    if not file:
+        errors["file"] = ["File wajib diunggah."]
+    elif file.size > MAX_BOOTCAMP_RESOURCE_SIZE:
+        errors["file"] = ["Ukuran file maksimal 20MB."]
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    try:
+        BootcampProduct.objects.get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Produk bootcamp tidak ditemukan."}, status=404)
+
+    resource = BootcampResource.objects.create(
+        bootcamp_id=product_id, resource_type=resource_type, title=title, file=file,
+    )
+
+    return JsonResponse(
+        {"detail": "Resource berhasil ditambahkan.", "resource": _serialize_bootcamp_resource(resource)},
+        status=201,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_bootcamp_resource(request, resource_id):
+    """PATCH/PUT cuma buat ganti judul/jenis benefit (JSON) -- ganti file
+    lewat hapus lalu tambah baru lagi, biar gak perlu parsing multipart di
+    PATCH/PUT (Django gak nge-parse request.FILES otomatis di method itu)."""
+    if request.method not in ["PATCH", "PUT", "DELETE"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT", "DELETE"])
+
+    try:
+        resource = BootcampResource.objects.get(id=resource_id)
+    except BootcampResource.DoesNotExist:
+        return JsonResponse({"detail": "Resource tidak ditemukan."}, status=404)
+
+    if request.method == "DELETE":
+        resource.delete()
+        return JsonResponse({"detail": "Resource berhasil dihapus."}, status=200)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    if "resource_type" in request_data:
+        resource_type = request_data["resource_type"]
+        if resource_type not in BootcampResourceType.values:
+            return JsonResponse({"errors": {"resource_type": ["Jenis benefit tidak valid."]}}, status=400)
+        resource.resource_type = resource_type
+    if "title" in request_data:
+        resource.title = request_data["title"]
+    resource.save()
+
+    return JsonResponse(
+        {"detail": "Resource berhasil diperbarui.", "resource": _serialize_bootcamp_resource(resource)},
         status=200,
     )
 

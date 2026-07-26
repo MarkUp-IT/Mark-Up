@@ -1,7 +1,13 @@
 from django.http import JsonResponse, HttpResponseNotAllowed
 from .utils import get_request_data
 from .forms import CompetitionForm
-from .models import Competition, CompetitionCategory, BootcampSession, BootcampSessionMentor
+from .models import (
+    Competition,
+    CompetitionCategory,
+    BootcampSession,
+    BootcampSessionMentor,
+    BootcampSessionRequiredBenefit,
+)
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from accounts.decorators import jwt_required, role_required
@@ -263,6 +269,7 @@ def _serialize_bootcamp_session_template(session):
         "meeting_link": session.meeting_link or "",
         "mentor_ids": [str(a.mentor_profile_id) for a in assignments],
         "mentor_names": [a.mentor_profile.user.fullname for a in assignments],
+        "required_benefit": session.required_benefit,
     }
 
 
@@ -344,6 +351,12 @@ def add_bootcamp_session_template(request, product_id):
             status=400,
         )
 
+    required_benefit = request_data.get("required_benefit") or ""
+    if required_benefit and required_benefit not in BootcampSessionRequiredBenefit.values:
+        return JsonResponse(
+            {"errors": {"required_benefit": ["Pilihan benefit tidak valid."]}}, status=400,
+        )
+
     next_order = (
         BootcampSession.objects.filter(bootcamp_id=product_id).count() + 1
     )
@@ -355,6 +368,7 @@ def add_bootcamp_session_template(request, product_id):
         end_time=end_time,
         meeting_link=request_data.get("meeting_link", ""),
         order=next_order,
+        required_benefit=required_benefit,
     )
 
     log_audit(request, AuditAction.CREATE, "bootcamp_sessions", object_id=session.id)
@@ -402,6 +416,13 @@ def update_bootcamp_session_template(request, session_id):
         session.start_time = parse_datetime(request_data["start_time"])
     if request_data.get("end_time"):
         session.end_time = parse_datetime(request_data["end_time"])
+    if "required_benefit" in request_data:
+        required_benefit = request_data["required_benefit"] or ""
+        if required_benefit and required_benefit not in BootcampSessionRequiredBenefit.values:
+            return JsonResponse(
+                {"errors": {"required_benefit": ["Pilihan benefit tidak valid."]}}, status=400,
+            )
+        session.required_benefit = required_benefit
     session.save()
 
     mentor_profiles = []

@@ -201,6 +201,17 @@ def verify_transaction(request, transaction_id):
                     user=txn.user, product=product,
                 )
 
+                # Catat paket yang dibeli (kalau ada) -- dipakai buat nge-gate
+                # benefit per paket (resource/sesi eksklusif). Cuma keisi
+                # buat pembayaran yang lewat alur BootcampRegistration; beli
+                # langsung lewat checkout_product lama gak punya info paket.
+                if (
+                    txn.bootcamp_registration_id
+                    and user_library.package_id != txn.bootcamp_registration.package_id
+                ):
+                    user_library.package = txn.bootcamp_registration.package
+                    user_library.save(update_fields=["package"])
+
                 if product.type == ProductType.MENTORING and item.mentor_availability:
                     _create_mentoring_sessions(user_library, detail, item.mentor_availability)
                 elif product.type == ProductType.BOOTCAMP:
@@ -551,14 +562,23 @@ def _create_mentoring_sessions(user_library, mentoring_detail, first_slot):
 
 def _create_bootcamp_sessions(user_library, product):
     """Clone template sesi bootcamp (dikelola admin di app programs) jadi
-    baris progress per-pembeli di products.BootcampSession."""
+    baris progress per-pembeli di products.BootcampSession. Template dengan
+    required_benefit terisi cuma di-clone kalau paket pembeli (user_library.package)
+    punya benefit_<required_benefit> True -- template kosong (sesi inti) tetap
+    di-clone ke semua pembeli, sama kayak perilaku sebelumnya."""
     templates = (
         BootcampSessionTemplate.objects.filter(bootcamp=product.id)
         .prefetch_related("session_mentors__mentor_profile")
         .order_by("start_time")
     )
+    package = user_library.package
 
-    for order, template in enumerate(templates, start=1):
+    order = 0
+    for template in templates:
+        if template.required_benefit:
+            if not package or not getattr(package, f"benefit_{template.required_benefit}", False):
+                continue
+        order += 1
         session = BootcampSession.objects.create(
             bootcamp_id=product.id,
             user_library=user_library,
