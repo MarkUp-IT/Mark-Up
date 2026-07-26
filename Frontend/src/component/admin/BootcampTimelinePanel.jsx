@@ -50,6 +50,8 @@ export default function BootcampTimelinePanel({ productId }) {
   const [packageForm, setPackageForm] = useState({
     registration_opens_at: "", registration_closes_at: "",
     quiz_duration_minutes: "", quiz_passing_score_percent: "",
+    name: "", price: "", commitment_fee: "", min_attendance_sessions: "",
+    benefits: {},
   });
   const [savingPackage, setSavingPackage] = useState(false);
 
@@ -122,12 +124,23 @@ export default function BootcampTimelinePanel({ productId }) {
 
   const openEditPackage = (pkg) => {
     setEditingPackageId(pkg.id);
+    const benefits = {};
+    (pkg.benefits || []).forEach((b) => { benefits[b.key] = b.included; });
     setPackageForm({
       registration_opens_at: toWIBLocalInputValue(pkg.registration_opens_at),
       registration_closes_at: toWIBLocalInputValue(pkg.registration_closes_at),
       quiz_duration_minutes: pkg.quiz_duration_minutes ?? 30,
       quiz_passing_score_percent: pkg.quiz_passing_score_percent ?? 70,
+      name: pkg.name || "",
+      price: pkg.price ?? "",
+      commitment_fee: pkg.commitment_fee ?? "",
+      min_attendance_sessions: pkg.min_attendance_sessions ?? 0,
+      benefits,
     });
+  };
+
+  const toggleBenefit = (key) => {
+    setPackageForm((f) => ({ ...f, benefits: { ...f.benefits, [key]: !f.benefits[key] } }));
   };
 
   const handleSavePackage = async () => {
@@ -138,16 +151,23 @@ export default function BootcampTimelinePanel({ productId }) {
       const body = {
         registration_opens_at: packageForm.registration_opens_at || null,
         registration_closes_at: packageForm.registration_closes_at || null,
+        name: packageForm.name.trim(),
+        price: Number(packageForm.price) || 0,
+        commitment_fee: Number(packageForm.commitment_fee) || 0,
+        benefits: packageForm.benefits,
       };
       if (editingPkg?.requires_selection) {
         body.quiz_duration_minutes = Number(packageForm.quiz_duration_minutes) || 30;
         body.quiz_passing_score_percent = Number(packageForm.quiz_passing_score_percent) || 0;
       }
+      if (Number(packageForm.commitment_fee) > 0) {
+        body.min_attendance_sessions = Number(packageForm.min_attendance_sessions) || 0;
+      }
       await apiRequest(`/api/products/bootcamp-packages/${editingPackageId}/`, {
         method: "PATCH",
         body,
       });
-      toast.success("Jendela Pendaftaran Tersimpan");
+      toast.success("Paket Tersimpan");
       setEditingPackageId(null);
       fetchData();
     } catch (err) {
@@ -285,6 +305,37 @@ export default function BootcampTimelinePanel({ productId }) {
                   ) : (
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-col gap-1">
+                        <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Nama Paket</label>
+                        <input
+                          type="text"
+                          value={packageForm.name}
+                          onChange={(e) => setPackageForm((f) => ({ ...f, name: e.target.value }))}
+                          className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Harga (Rp)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={packageForm.price}
+                            onChange={(e) => setPackageForm((f) => ({ ...f, price: e.target.value }))}
+                            className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                          />
+                        </div>
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Commitment Fee (Rp)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={packageForm.commitment_fee}
+                            onChange={(e) => setPackageForm((f) => ({ ...f, commitment_fee: e.target.value }))}
+                            className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1">
                         <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Buka</label>
                         <input
                           type="datetime-local"
@@ -330,6 +381,37 @@ export default function BootcampTimelinePanel({ productId }) {
                           </div>
                         </div>
                       )}
+                      {Number(packageForm.commitment_fee) > 0 && (
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">
+                            Syarat Kehadiran buat Refund Commitment Fee (jumlah sesi)
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={packageForm.min_attendance_sessions}
+                            onChange={(e) => setPackageForm((f) => ({ ...f, min_attendance_sessions: e.target.value }))}
+                            className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                          />
+                          <span className="text-[#94A3B8] text-[10.5px]">0 = gak ada syarat kehadiran.</span>
+                        </div>
+                      )}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Benefit</label>
+                        <div className="flex flex-col gap-1">
+                          {(pkg.benefits || []).map((b) => (
+                            <label key={b.key} className="flex items-center gap-2 text-[12px] text-[#334155] cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={!!packageForm.benefits[b.key]}
+                                onChange={() => toggleBenefit(b.key)}
+                                className="accent-[#148F89]"
+                              />
+                              {b.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                       <div className="flex gap-2">
                         <button
                           onClick={() => setEditingPackageId(null)}

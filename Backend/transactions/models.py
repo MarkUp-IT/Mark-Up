@@ -84,6 +84,9 @@ class Transaction(models.Model):
         related_name="payment_transactions",
     )
     commitment_fee_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Ditandai manual sama admin setelah transfer pengembalian dilakukan DI
+    # LUAR sistem (bukan alur bayar) -- gak otomatis, cuma pencatatan status.
+    commitment_fee_refunded_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(blank=True, null=True)
 

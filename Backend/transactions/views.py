@@ -261,6 +261,99 @@ def verify_transaction(request, transaction_id):
     )
 
 
+def _serialize_commitment_fee_refund(txn):
+    reg = txn.bootcamp_registration
+    package = reg.package if reg else None
+    bootcamp = package.bootcamp if package else None
+
+    sessions_completed = 0
+    sessions_total = 0
+    if bootcamp is not None:
+        library = UserLibrary.objects.filter(user_id=txn.user_id, product_id=bootcamp.product_id).first()
+        if library is not None:
+            buyer_sessions = list(library.bootcamp_sessions.all())
+            sessions_total = len(buyer_sessions)
+            sessions_completed = sum(
+                1 for s in buyer_sessions if s.status == BootcampSession.SessionStatus.COMPLETED
+            )
+
+    min_required = package.min_attendance_sessions if package else 0
+
+    return {
+        "transaction_id": txn.id,
+        "user_name": txn.user.fullname,
+        "user_email": txn.user.email,
+        "bootcamp_title": bootcamp.title if bootcamp else None,
+        "package_name": package.name if package else None,
+        "commitment_fee_amount": str(txn.commitment_fee_amount),
+        "paid_at": txn.paid_at.isoformat() if txn.paid_at else None,
+        "sessions_completed": sessions_completed,
+        "sessions_total": sessions_total,
+        "min_attendance_sessions": min_required,
+        "eligible": sessions_completed >= min_required,
+        "refunded_at": txn.commitment_fee_refunded_at.isoformat() if txn.commitment_fee_refunded_at else None,
+    }
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_commitment_fee_refunds(request):
+    """Daftar semua transaksi Mentee yang lunas & punya commitment fee --
+    dipakai admin buat tracking pengembalian commitment fee menjelang akhir
+    program. 'eligible' cuma indikator otomatis dari syarat kehadiran
+    (kalau diatur admin di paket) -- keputusan kembalikan/tidak tetap
+    manual, tombol toggle gak dikunci walau eligible=False."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    txns = (
+        Transaction.objects.filter(commitment_fee_amount__gt=0, payment_status=PaymentStatus.PAID)
+        .select_related("user", "bootcamp_registration__package__bootcamp")
+        .order_by("-paid_at")
+    )
+    return JsonResponse(
+        {"refunds": [_serialize_commitment_fee_refund(t) for t in txns]}, status=200
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def toggle_commitment_fee_refund(request, transaction_id):
+    """Tandai/batal-tandai commitment fee sebuah transaksi sudah
+    dikembalikan -- murni pencatatan status, transfer beneran dilakukan
+    admin di luar sistem (manual, sama kayak alur pengembalian lain di
+    platform ini)."""
+    if request.method != "PATCH":
+        return HttpResponseNotAllowed(["PATCH"])
+
+    try:
+        txn = Transaction.objects.select_related(
+            "user", "bootcamp_registration__package__bootcamp"
+        ).get(id=transaction_id)
+    except Transaction.DoesNotExist:
+        return JsonResponse({"detail": "Transaksi tidak ditemukan."}, status=404)
+
+    if txn.commitment_fee_amount <= 0:
+        return JsonResponse({"detail": "Transaksi ini gak punya commitment fee."}, status=400)
+    if txn.payment_status != PaymentStatus.PAID:
+        return JsonResponse({"detail": "Transaksi ini belum lunas."}, status=400)
+
+    txn.commitment_fee_refunded_at = None if txn.commitment_fee_refunded_at else timezone.now()
+    txn.save(update_fields=["commitment_fee_refunded_at"])
+
+    log_audit(
+        request, AuditAction.UPDATE, "transactions", object_id=txn.id,
+        new_data={"commitment_fee_refunded_at": str(txn.commitment_fee_refunded_at)},
+    )
+
+    return JsonResponse(
+        {"detail": "Status pengembalian commitment fee diperbarui.",
+         "refund": _serialize_commitment_fee_refund(txn)},
+        status=200,
+    )
+
+
 @jwt_required
 def get_my_transactions(request):
     if request.method != "GET":
