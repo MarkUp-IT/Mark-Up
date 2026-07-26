@@ -2,17 +2,24 @@ from django.core.paginator import Paginator, EmptyPage
 from decimal import Decimal
 from datetime import timedelta
 from zoneinfo import ZoneInfo
+import random
 
+from django.db import IntegrityError
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 
 from .utils import get_request_data
 from .forms import MentoringProductForm, ModuleProductForm, BootcampProductForm
 from .models import (
+    BootcampProduct,
     BootcampSession,
     BootcampPackage,
     BootcampRegistration,
     BootcampTimelineItem,
+    BootcampQuizQuestion,
+    BootcampQuizAttempt,
+    BootcampQuizAnswer,
+    QuizChoiceKey,
     Certificate,
     CertificateType,
     MentoringSession,
@@ -1527,6 +1534,8 @@ def _serialize_package(pkg):
         "registration_opens_at": pkg.registration_opens_at.isoformat() if pkg.registration_opens_at else None,
         "registration_closes_at": pkg.registration_closes_at.isoformat() if pkg.registration_closes_at else None,
         "registration_status": _package_registration_status(pkg),
+        "quiz_duration_minutes": pkg.quiz_duration_minutes,
+        "quiz_passing_score_percent": pkg.quiz_passing_score_percent,
         "benefits": [
             {"label": label, "included": getattr(pkg, field)}
             for field, label in _BENEFIT_LABELS
@@ -1557,13 +1566,30 @@ def get_bootcamp_packages(request, product_id):
     )
 
 
-def _serialize_registration(reg, request=None):
+def _serialize_registration(reg, for_admin=False):
     doc_url = None
     if reg.requirement_doc:
         try:
             doc_url = reg.requirement_doc.url
         except Exception:
             doc_url = None
+
+    # Skor & status lulus/tidak CUMA dikirim ke admin (for_admin=True) --
+    # peserta sendiri cuma tahu status pengerjaan, gak pernah lihat skornya.
+    quiz = None
+    if reg.package.requires_selection:
+        attempt = getattr(reg, "quiz_attempt", None)
+        if attempt is None:
+            quiz = {"status": "not_started"}
+        else:
+            quiz = {"status": attempt.status}
+            if for_admin:
+                quiz["score_percent"] = (
+                    str(attempt.score_percent) if attempt.score_percent is not None else None
+                )
+                quiz["passed"] = attempt.passed
+                quiz["submitted_at"] = attempt.submitted_at.isoformat() if attempt.submitted_at else None
+
     return {
         "id": str(reg.id),
         "status": reg.status,
@@ -1580,6 +1606,7 @@ def _serialize_registration(reg, request=None):
         },
         "bootcamp_id": str(reg.package.bootcamp_id),
         "bootcamp_title": reg.package.bootcamp.title,
+        "quiz": quiz,
     }
 
 
@@ -1660,7 +1687,7 @@ def get_my_bootcamp_registrations(request):
 
     regs = (
         BootcampRegistration.objects.filter(user=request.user)
-        .select_related("package__bootcamp")
+        .select_related("package__bootcamp", "quiz_attempt")
         .order_by("-created_at")
     )
     return JsonResponse(
@@ -1675,7 +1702,7 @@ def get_bootcamp_registrations(request):
         return HttpResponseNotAllowed(["GET"])
 
     regs = (
-        BootcampRegistration.objects.select_related("package__bootcamp", "user")
+        BootcampRegistration.objects.select_related("package__bootcamp", "user", "quiz_attempt")
         .order_by("-created_at")
     )
     status_filter = request.GET.get("status")
@@ -1684,7 +1711,7 @@ def get_bootcamp_registrations(request):
 
     data = []
     for r in regs:
-        item = _serialize_registration(r)
+        item = _serialize_registration(r, for_admin=True)
         item["user_name"] = r.user.fullname
         item["user_email"] = r.user.email
         data.append(item)
@@ -1840,9 +1867,369 @@ def update_bootcamp_package(request, package_id):
         package.registration_closes_at = request_data["registration_closes_at"] or None
     if "is_active" in request_data:
         package.is_active = bool(request_data["is_active"])
+
+    errors = {}
+    if "quiz_duration_minutes" in request_data:
+        try:
+            minutes = int(request_data["quiz_duration_minutes"])
+            if not (5 <= minutes <= 180):
+                raise ValueError
+            package.quiz_duration_minutes = minutes
+        except (TypeError, ValueError):
+            errors["quiz_duration_minutes"] = ["Durasi tes harus angka 5-180 menit."]
+    if "quiz_passing_score_percent" in request_data:
+        try:
+            score = int(request_data["quiz_passing_score_percent"])
+            if not (0 <= score <= 100):
+                raise ValueError
+            package.quiz_passing_score_percent = score
+        except (TypeError, ValueError):
+            errors["quiz_passing_score_percent"] = ["Skor kelulusan harus angka 0-100."]
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
     package.save()
 
     return JsonResponse(
         {"detail": "Paket berhasil diperbarui.", "package": _serialize_package(package)},
+        status=200,
+    )
+
+
+# ---------- Tes seleksi BCC General Knowledge (Mentee) ----------
+
+def _serialize_quiz_question(q, include_answer=False):
+    data = {
+        "id": str(q.id),
+        "question_text": q.question_text,
+        "choice_a": q.choice_a,
+        "choice_b": q.choice_b,
+        "choice_c": q.choice_c,
+        "choice_d": q.choice_d,
+        "order": q.order,
+        "is_active": q.is_active,
+    }
+    if include_answer:
+        data["correct_choice"] = q.correct_choice
+    return data
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_bootcamp_quiz_questions(request, product_id):
+    """Admin: daftar bank soal (termasuk kunci jawaban)."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    questions = BootcampQuizQuestion.objects.filter(bootcamp_id=product_id).order_by("order")
+    return JsonResponse(
+        {"questions": [_serialize_quiz_question(q, include_answer=True) for q in questions]}, status=200
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def add_bootcamp_quiz_question(request, product_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        BootcampProduct.objects.get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Produk bootcamp tidak ditemukan."}, status=404)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    question_text = (request_data.get("question_text") or "").strip()
+    choice_a = (request_data.get("choice_a") or "").strip()
+    choice_b = (request_data.get("choice_b") or "").strip()
+    choice_c = (request_data.get("choice_c") or "").strip()
+    choice_d = (request_data.get("choice_d") or "").strip()
+    correct_choice = (request_data.get("correct_choice") or "").strip().lower()
+
+    errors = {}
+    if not question_text:
+        errors["question_text"] = ["Pertanyaan wajib diisi."]
+    if not choice_a:
+        errors["choice_a"] = ["Pilihan A wajib diisi."]
+    if not choice_b:
+        errors["choice_b"] = ["Pilihan B wajib diisi."]
+    if not choice_c:
+        errors["choice_c"] = ["Pilihan C wajib diisi."]
+    if not choice_d:
+        errors["choice_d"] = ["Pilihan D wajib diisi."]
+    if correct_choice not in QuizChoiceKey.values:
+        errors["correct_choice"] = ["Kunci jawaban wajib salah satu dari A/B/C/D."]
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    next_order = BootcampQuizQuestion.objects.filter(bootcamp_id=product_id).count() + 1
+    question = BootcampQuizQuestion.objects.create(
+        bootcamp_id=product_id, question_text=question_text,
+        choice_a=choice_a, choice_b=choice_b, choice_c=choice_c, choice_d=choice_d,
+        correct_choice=correct_choice, order=next_order,
+    )
+
+    return JsonResponse(
+        {"detail": "Soal berhasil ditambahkan.",
+         "question": _serialize_quiz_question(question, include_answer=True)},
+        status=201,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_bootcamp_quiz_question(request, question_id):
+    if request.method not in ["PATCH", "PUT", "DELETE"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT", "DELETE"])
+
+    try:
+        question = BootcampQuizQuestion.objects.get(id=question_id)
+    except BootcampQuizQuestion.DoesNotExist:
+        return JsonResponse({"detail": "Soal tidak ditemukan."}, status=404)
+
+    if request.method == "DELETE":
+        question.delete()
+        return JsonResponse({"detail": "Soal berhasil dihapus."}, status=200)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    errors = {}
+    if "correct_choice" in request_data:
+        cc = (request_data["correct_choice"] or "").strip().lower()
+        if cc not in QuizChoiceKey.values:
+            errors["correct_choice"] = ["Kunci jawaban wajib salah satu dari A/B/C/D."]
+        else:
+            question.correct_choice = cc
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    if "question_text" in request_data:
+        question.question_text = request_data["question_text"]
+    if "choice_a" in request_data:
+        question.choice_a = request_data["choice_a"]
+    if "choice_b" in request_data:
+        question.choice_b = request_data["choice_b"]
+    if "choice_c" in request_data:
+        question.choice_c = request_data["choice_c"]
+    if "choice_d" in request_data:
+        question.choice_d = request_data["choice_d"]
+    if "order" in request_data:
+        question.order = request_data["order"]
+    if "is_active" in request_data:
+        question.is_active = bool(request_data["is_active"])
+    question.save()
+
+    return JsonResponse(
+        {"detail": "Soal berhasil diperbarui.",
+         "question": _serialize_quiz_question(question, include_answer=True)},
+        status=200,
+    )
+
+
+def _serialize_quiz_attempt_for_participant(attempt):
+    """TIDAK PERNAH menyertakan correct_choice atau skor -- lihat
+    _serialize_registration untuk skor (cuma bocor ke admin lewat for_admin=True)."""
+    question_ids = [item["question_id"] for item in attempt.question_order]
+    questions_by_id = {
+        str(q.id): q for q in BootcampQuizQuestion.objects.filter(id__in=question_ids)
+    }
+    answers_by_qid = {str(a.question_id): a.selected_choice for a in attempt.answers.all()}
+
+    questions = []
+    for item in attempt.question_order:
+        q = questions_by_id.get(item["question_id"])
+        if not q:
+            continue
+        choice_text = {"a": q.choice_a, "b": q.choice_b, "c": q.choice_c, "d": q.choice_d}
+        questions.append({
+            "question_id": str(q.id),
+            "question_text": q.question_text,
+            "choices": [{"key": key, "text": choice_text[key]} for key in item["choice_display_order"]],
+            "selected_choice": answers_by_qid.get(str(q.id)),
+        })
+
+    return {
+        "id": str(attempt.id),
+        "status": attempt.status,
+        "deadline": attempt.deadline.isoformat(),
+        "started_at": attempt.started_at.isoformat(),
+        "submitted_at": attempt.submitted_at.isoformat() if attempt.submitted_at else None,
+        "questions": questions,
+    }
+
+
+def _finalize_quiz_attempt(attempt):
+    """Hitung skor 100% dari jawaban & kunci jawaban di database, lalu
+    finalisasi attempt (submitted kalau masih dalam waktu, expired kalau
+    ternyata sudah lewat deadline). Dipakai di 3 titik: start/resume,
+    save-answer, dan submit -- jadi deadline ditegakkan server di mana pun
+    request itu sampai duluan."""
+    question_ids = [item["question_id"] for item in attempt.question_order]
+    correct_by_qid = {
+        str(qid): correct
+        for qid, correct in BootcampQuizQuestion.objects.filter(id__in=question_ids).values_list(
+            "id", "correct_choice"
+        )
+    }
+    answers_by_qid = {str(a.question_id): a.selected_choice for a in attempt.answers.all()}
+
+    total = len(question_ids)
+    correct_count = sum(
+        1 for qid in question_ids if answers_by_qid.get(qid) == correct_by_qid.get(qid)
+    )
+    score = (Decimal(correct_count) / Decimal(total) * 100) if total else Decimal("0")
+    score = score.quantize(Decimal("0.01"))
+
+    now = timezone.now()
+    attempt.status = (
+        BootcampQuizAttempt.Status.EXPIRED if now > attempt.deadline
+        else BootcampQuizAttempt.Status.SUBMITTED
+    )
+    attempt.score_percent = score
+    attempt.passed = score >= Decimal(attempt.registration.package.quiz_passing_score_percent)
+    attempt.submitted_at = now
+    attempt.save(update_fields=["status", "score_percent", "passed", "submitted_at"])
+    return attempt
+
+
+@csrf_exempt
+@jwt_required
+def start_or_resume_bootcamp_quiz(request, registration_id):
+    """Mulai tes BCC (attempt baru) atau lanjutkan attempt yang sudah ada.
+    Soal & kunci jawaban tidak pernah ikut serialisasi ini -- lihat
+    _serialize_quiz_attempt_for_participant."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    if is_rate_limited(f"rl:bootcamp-quiz-start:user:{request.user.id}", limit=20, window_seconds=3600):
+        return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
+
+    try:
+        registration = BootcampRegistration.objects.select_related("package__bootcamp").get(
+            id=registration_id, user=request.user,
+        )
+    except BootcampRegistration.DoesNotExist:
+        return JsonResponse({"detail": "Pendaftaran tidak ditemukan."}, status=404)
+
+    package = registration.package
+    if not package.requires_selection:
+        return JsonResponse({"detail": "Paket ini tidak memerlukan tes seleksi."}, status=400)
+    if registration.status != BootcampRegistration.Status.REGISTERED:
+        return JsonResponse(
+            {"detail": "Tes cuma bisa dikerjakan selama status pendaftaran masih ditinjau."}, status=400
+        )
+
+    try:
+        attempt = registration.quiz_attempt
+    except BootcampQuizAttempt.DoesNotExist:
+        attempt = None
+
+    if attempt is None:
+        questions = list(
+            BootcampQuizQuestion.objects.filter(bootcamp_id=package.bootcamp_id, is_active=True)
+        )
+        if not questions:
+            return JsonResponse({"detail": "Bank soal belum tersedia. Hubungi admin."}, status=400)
+
+        question_order = []
+        for q in questions:
+            choices = ["a", "b", "c", "d"]
+            random.shuffle(choices)
+            question_order.append({"question_id": str(q.id), "choice_display_order": choices})
+        random.shuffle(question_order)
+
+        deadline = timezone.now() + timedelta(minutes=package.quiz_duration_minutes)
+        try:
+            attempt = BootcampQuizAttempt.objects.create(
+                registration=registration, question_order=question_order, deadline=deadline,
+            )
+        except IntegrityError:
+            # Race: attempt sudah kebuat dari request lain yang nyaris bersamaan --
+            # OneToOneField constraint yang jadi jaminan sebenarnya, bukan cek None di atas.
+            attempt = BootcampQuizAttempt.objects.get(registration=registration)
+    elif attempt.status == BootcampQuizAttempt.Status.IN_PROGRESS and timezone.now() > attempt.deadline:
+        _finalize_quiz_attempt(attempt)
+
+    return JsonResponse({"attempt": _serialize_quiz_attempt_for_participant(attempt)}, status=200)
+
+
+@csrf_exempt
+@jwt_required
+def save_bootcamp_quiz_answer(request, attempt_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    if is_rate_limited(f"rl:bootcamp-quiz-answer:user:{request.user.id}", limit=300, window_seconds=3600):
+        return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
+
+    try:
+        attempt = BootcampQuizAttempt.objects.select_related(
+            "registration__package"
+        ).get(id=attempt_id, registration__user=request.user)
+    except BootcampQuizAttempt.DoesNotExist:
+        return JsonResponse({"detail": "Attempt tidak ditemukan."}, status=404)
+
+    if attempt.status != BootcampQuizAttempt.Status.IN_PROGRESS:
+        return JsonResponse({"detail": "Tes ini sudah selesai dikumpulkan."}, status=400)
+
+    if timezone.now() > attempt.deadline:
+        _finalize_quiz_attempt(attempt)
+        return JsonResponse({"detail": "Waktu tes sudah habis."}, status=400)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    question_id = str(request_data.get("question_id") or "")
+    selected_choice = (request_data.get("selected_choice") or "").strip().lower()
+
+    valid_question_ids = {item["question_id"] for item in attempt.question_order}
+    if question_id not in valid_question_ids:
+        return JsonResponse({"detail": "Soal tidak valid untuk attempt ini."}, status=400)
+    if selected_choice not in QuizChoiceKey.values:
+        return JsonResponse({"detail": "Pilihan jawaban tidak valid."}, status=400)
+
+    BootcampQuizAnswer.objects.update_or_create(
+        attempt=attempt, question_id=question_id, defaults={"selected_choice": selected_choice},
+    )
+
+    return JsonResponse({"detail": "Jawaban tersimpan."}, status=200)
+
+
+@csrf_exempt
+@jwt_required
+def submit_bootcamp_quiz(request, attempt_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    if is_rate_limited(f"rl:bootcamp-quiz-submit:user:{request.user.id}", limit=20, window_seconds=3600):
+        return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
+
+    try:
+        attempt = BootcampQuizAttempt.objects.select_related(
+            "registration__package"
+        ).get(id=attempt_id, registration__user=request.user)
+    except BootcampQuizAttempt.DoesNotExist:
+        return JsonResponse({"detail": "Attempt tidak ditemukan."}, status=404)
+
+    if attempt.status != BootcampQuizAttempt.Status.IN_PROGRESS:
+        return JsonResponse(
+            {"detail": "Tes ini sudah selesai dikumpulkan.",
+             "attempt": _serialize_quiz_attempt_for_participant(attempt)},
+            status=200,
+        )
+
+    _finalize_quiz_attempt(attempt)
+
+    return JsonResponse(
+        {"detail": "Tes berhasil dikumpulkan.",
+         "attempt": _serialize_quiz_attempt_for_participant(attempt)},
         status=200,
     )

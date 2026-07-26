@@ -47,7 +47,10 @@ export default function BootcampTimelinePanel({ productId }) {
   const [editingMilestoneId, setEditingMilestoneId] = useState(null);
 
   const [editingPackageId, setEditingPackageId] = useState(null);
-  const [packageForm, setPackageForm] = useState({ registration_opens_at: "", registration_closes_at: "" });
+  const [packageForm, setPackageForm] = useState({
+    registration_opens_at: "", registration_closes_at: "",
+    quiz_duration_minutes: "", quiz_passing_score_percent: "",
+  });
   const [savingPackage, setSavingPackage] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -122,19 +125,27 @@ export default function BootcampTimelinePanel({ productId }) {
     setPackageForm({
       registration_opens_at: toWIBLocalInputValue(pkg.registration_opens_at),
       registration_closes_at: toWIBLocalInputValue(pkg.registration_closes_at),
+      quiz_duration_minutes: pkg.quiz_duration_minutes ?? 30,
+      quiz_passing_score_percent: pkg.quiz_passing_score_percent ?? 70,
     });
   };
 
   const handleSavePackage = async () => {
     if (savingPackage) return;
+    const editingPkg = packages.find((p) => p.id === editingPackageId);
     setSavingPackage(true);
     try {
+      const body = {
+        registration_opens_at: packageForm.registration_opens_at || null,
+        registration_closes_at: packageForm.registration_closes_at || null,
+      };
+      if (editingPkg?.requires_selection) {
+        body.quiz_duration_minutes = Number(packageForm.quiz_duration_minutes) || 30;
+        body.quiz_passing_score_percent = Number(packageForm.quiz_passing_score_percent) || 0;
+      }
       await apiRequest(`/api/products/bootcamp-packages/${editingPackageId}/`, {
         method: "PATCH",
-        body: {
-          registration_opens_at: packageForm.registration_opens_at || null,
-          registration_closes_at: packageForm.registration_closes_at || null,
-        },
+        body,
       });
       toast.success("Jendela Pendaftaran Tersimpan");
       setEditingPackageId(null);
@@ -260,10 +271,17 @@ export default function BootcampTimelinePanel({ productId }) {
                   </div>
 
                   {!isEditing ? (
-                    <p className="text-[#64748B] text-[11.5px] flex items-center gap-1.5">
-                      <Clock size={11} className="shrink-0" />
-                      {formatDateTimeWIB(pkg.registration_opens_at)} s.d. {formatDateTimeWIB(pkg.registration_closes_at)}
-                    </p>
+                    <>
+                      <p className="text-[#64748B] text-[11.5px] flex items-center gap-1.5">
+                        <Clock size={11} className="shrink-0" />
+                        {formatDateTimeWIB(pkg.registration_opens_at)} s.d. {formatDateTimeWIB(pkg.registration_closes_at)}
+                      </p>
+                      {pkg.requires_selection && (
+                        <p className="text-[#64748B] text-[11.5px]">
+                          Tes BCC: {pkg.quiz_duration_minutes} menit, lulus ≥ {pkg.quiz_passing_score_percent}%
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-col gap-1">
@@ -286,6 +304,32 @@ export default function BootcampTimelinePanel({ productId }) {
                           className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                         />
                       </div>
+                      {pkg.requires_selection && (
+                        <div className="flex gap-2">
+                          <div className="flex-1 flex flex-col gap-1">
+                            <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Durasi Tes (menit)</label>
+                            <input
+                              type="number"
+                              min={5}
+                              max={180}
+                              value={packageForm.quiz_duration_minutes}
+                              onChange={(e) => setPackageForm((f) => ({ ...f, quiz_duration_minutes: e.target.value }))}
+                              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                            />
+                          </div>
+                          <div className="flex-1 flex flex-col gap-1">
+                            <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Skor Kelulusan (%)</label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={packageForm.quiz_passing_score_percent}
+                              onChange={(e) => setPackageForm((f) => ({ ...f, quiz_passing_score_percent: e.target.value }))}
+                              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                            />
+                          </div>
+                        </div>
+                      )}
                       <div className="flex gap-2">
                         <button
                           onClick={() => setEditingPackageId(null)}
