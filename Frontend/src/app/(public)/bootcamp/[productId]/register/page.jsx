@@ -277,25 +277,29 @@ export default function BootcampRegisterPage() {
                 ))}
               </ol>
 
-              <label className="mt-1 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[#2D2342] rounded-[10px] py-6 cursor-pointer hover:border-[#148F89]/50 transition-colors">
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  className="hidden"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                />
-                {file ? (
-                  <span className="flex items-center gap-2 text-[#148F89] text-[13px] font-semibold">
-                    <FileText size={16} /> {file.name}
-                  </span>
-                ) : (
-                  <>
-                    <Upload size={22} className="text-[#148F89]" />
-                    <span className="text-[13px] font-semibold">Klik untuk unggah PDF</span>
-                    <span className="text-[#6B7280] text-[11px]">Format PDF, maksimal 10MB</span>
-                  </>
-                )}
-              </label>
+              <div className="mt-1 flex flex-col gap-1.5">
+                <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[#2D2342] rounded-[10px] py-6 cursor-pointer hover:border-[#148F89]/50 transition-colors">
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  />
+                  {file ? (
+                    <span className="flex items-center gap-2 text-[#148F89] text-[13px] font-semibold">
+                      <FileText size={16} /> {file.name}
+                    </span>
+                  ) : (
+                    <>
+                      <Upload size={22} className="text-[#148F89]" />
+                      <span className="text-[13px] font-semibold">Klik untuk unggah PDF</span>
+                    </>
+                  )}
+                </label>
+                <p className="text-[#6B7280] text-[11px] text-center">
+                  Format PDF, ukuran file maksimal 10MB.
+                </p>
+              </div>
 
               {!selectedPackageId && (
                 <p className="flex items-center gap-2 text-[#F59E0B] text-[12px]">
