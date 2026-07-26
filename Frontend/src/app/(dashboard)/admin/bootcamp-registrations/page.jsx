@@ -20,6 +20,13 @@ const STATUS_BADGE = {
   rejected: "bg-[#FEE2E2] text-[#991B1B]",
 };
 
+const QUIZ_STATUS_LABEL = {
+  not_started: "Belum Dimulai",
+  in_progress: "Sedang Dikerjakan",
+  submitted: "Selesai Dikumpulkan",
+  expired: "Waktu Habis (Auto-submit)",
+};
+
 function formatDate(iso) {
   if (!iso) return "-";
   return new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
@@ -176,6 +183,26 @@ export default function AdminBootcampRegistrations() {
                 <div className="flex justify-between"><span className="text-[#64748B]">Paket</span><span className="text-[#1E293B] font-medium">{selected.package.name}</span></div>
                 <div className="flex justify-between"><span className="text-[#64748B]">Jalur</span><span className="text-[#1E293B] font-medium">{selected.package.requires_selection ? "Seleksi (Mentee)" : "Langsung (ACC)"}</span></div>
               </div>
+
+              {selected.package.requires_selection && selected.quiz && (
+                <div className="flex flex-col gap-1 text-[13px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-3.5 py-3">
+                  <div className="flex items-center gap-1.5 text-[#0F172A] font-semibold text-[12.5px] mb-1">
+                    <ShieldCheck size={13} className="text-[#148F89]" /> Tes BCC
+                  </div>
+                  <div className="flex justify-between"><span className="text-[#64748B]">Status</span><span className="text-[#1E293B] font-medium">{QUIZ_STATUS_LABEL[selected.quiz.status] || selected.quiz.status}</span></div>
+                  {selected.quiz.score_percent != null && (
+                    <>
+                      <div className="flex justify-between"><span className="text-[#64748B]">Skor</span><span className="text-[#1E293B] font-medium">{selected.quiz.score_percent}%</span></div>
+                      <div className="flex justify-between">
+                        <span className="text-[#64748B]">Hasil</span>
+                        <span className={`font-semibold ${selected.quiz.passed ? "text-[#166534]" : "text-[#991B1B]"}`}>
+                          {selected.quiz.passed ? "Lulus Ambang Skor" : "Belum Capai Ambang Skor"}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
 
               {selected.requirement_doc ? (
                 <a href={selected.requirement_doc} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-2.5 rounded-[8px] border border-[#E2E8F0] text-[#148F89] text-[13px] font-semibold hover:bg-[#148F89]/5 transition-colors">

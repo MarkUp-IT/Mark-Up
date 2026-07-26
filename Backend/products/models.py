@@ -190,6 +190,17 @@ class BootcampPackage(models.Model):
         help_text="True untuk Mentee: pendaftar wajib lolos seleksi (BCC test) "
                    "dulu sebelum boleh bayar. Paket lain cukup di-ACC admin.",
     )
+    quiz_duration_minutes = models.PositiveIntegerField(
+        default=30,
+        validators=[MinValueValidator(5), MaxValueValidator(180)],
+        help_text="Durasi tes BCC (menit) -- cuma relevan buat paket dengan requires_selection=True.",
+    )
+    quiz_passing_score_percent = models.PositiveIntegerField(
+        default=70,
+        validators=[MaxValueValidator(100)],
+        help_text="Ambang nilai lulus (%) tes BCC -- dipakai buat auto-flag lulus/tidak, "
+                   "keputusan akhir Terima/Tolak tetap manual oleh admin.",
+    )
     order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     registration_opens_at = models.DateTimeField(blank=True, null=True)
@@ -324,6 +335,120 @@ class BootcampRegistration(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user} -> {self.package} ({self.status})"
+
+
+class QuizChoiceKey(models.TextChoices):
+    A = "a", "A"
+    B = "b", "B"
+    C = "c", "C"
+    D = "d", "D"
+
+
+class BootcampQuizQuestion(models.Model):
+    """Satu soal bank BCC General Knowledge Test, per batch bootcamp -- sama
+    persis buat semua pendaftar Mentee batch itu. Yang diacak per attempt
+    cuma URUTAN TAMPIL (lihat BootcampQuizAttempt.question_order), bukan
+    subset soalnya -- semua orang tetap dapet soal yang sama."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct, on_delete=models.CASCADE, related_name="quiz_questions",
+    )
+    question_text = models.TextField()
+    choice_a = models.CharField(max_length=255)
+    choice_b = models.CharField(max_length=255)
+    choice_c = models.CharField(max_length=255)
+    choice_d = models.CharField(max_length=255)
+    correct_choice = models.CharField(max_length=1, choices=QuizChoiceKey.choices)
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Quiz Question"
+        verbose_name_plural = "Bootcamp Quiz Questions"
+        ordering = ["order"]
+
+    def __str__(self) -> str:
+        return f"{self.question_text[:50]} ({self.bootcamp_id})"
+
+
+class BootcampQuizAttempt(models.Model):
+    """Satu attempt tes BCC per BootcampRegistration -- OneToOneField di sini
+    yang jadi jaminan "cuma 1 kali percobaan" di level database, bukan cuma
+    dicek di kode (jadi race condition dua klik nyaris bersamaan tetap aman).
+    started_at/deadline disimpan di DB (bukan Django cache) supaya jadi
+    sumber kebenaran timing yang server-authoritative -- cache LocMemCache
+    default (non-produksi) gak shared antar worker Gunicorn, jadi gak aman
+    dipakai buat hal krusial kayak ini."""
+
+    class Status(models.TextChoices):
+        IN_PROGRESS = "in_progress", "Sedang Dikerjakan"
+        SUBMITTED = "submitted", "Selesai Dikumpulkan"
+        EXPIRED = "expired", "Waktu Habis (Auto-submit)"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    registration = models.OneToOneField(
+        BootcampRegistration, on_delete=models.CASCADE, related_name="quiz_attempt",
+    )
+    # Snapshot urutan tampil soal & pilihan per attempt ini, di-generate SEKALI
+    # saat mulai, dipakai lagi persis sama saat resume (biar konsisten &
+    # susah di-share antar pendaftar karena nomor soalnya beda-beda per orang):
+    # [{"question_id": "<uuid str>", "choice_display_order": ["c","a","d","b"]}, ...]
+    question_order = models.JSONField(default=list)
+    started_at = models.DateTimeField(auto_now_add=True)
+    deadline = models.DateTimeField(
+        help_text="started_at + package.quiz_duration_minutes, dihitung sekali "
+                   "saat attempt dibuat. Ini yang dipakai server buat cek expired, "
+                   "BUKAN countdown di client -- countdown di browser cuma tampilan.",
+    )
+    submitted_at = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.IN_PROGRESS,
+    )
+    score_percent = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True)
+    passed = models.BooleanField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Quiz Attempt"
+        verbose_name_plural = "Bootcamp Quiz Attempts"
+        ordering = ["-started_at"]
+
+    def __str__(self) -> str:
+        return f"Quiz attempt {self.registration_id} ({self.status})"
+
+
+class BootcampQuizAnswer(models.Model):
+    """Jawaban per soal, disimpan incremental tiap kali user milih (bukan
+    cuma pas submit akhir) -- biar refresh/koneksi putus gak ngilangin
+    progress. selected_choice disimpan pakai KEY ASLI soal (a/b/c/d), BUKAN
+    posisi tampil yang diacak, jadi scoring tinggal dibandingin langsung ke
+    correct_choice tanpa perlu reverse-mapping urutan acak."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    attempt = models.ForeignKey(
+        BootcampQuizAttempt, on_delete=models.CASCADE, related_name="answers",
+    )
+    question = models.ForeignKey(
+        BootcampQuizQuestion, on_delete=models.CASCADE, related_name="answers",
+    )
+    selected_choice = models.CharField(max_length=1, choices=QuizChoiceKey.choices)
+    # auto_now: ke-update tiap kali user ganti jawaban soal ini -- dipakai
+    # admin buat lihat pola waktu pengerjaan (mis. semua soal dijawab dalam
+    # hitungan detik = indikasi mencurigakan), informational only, bukan blocker.
+    answered_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Quiz Answer"
+        verbose_name_plural = "Bootcamp Quiz Answers"
+        ordering = ["answered_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["attempt", "question"], name="unique_attempt_question_answer",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.attempt_id} -> {self.question_id} = {self.selected_choice}"
 
 
 class Review(BaseModel):

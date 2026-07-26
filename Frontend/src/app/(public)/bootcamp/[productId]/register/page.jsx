@@ -157,17 +157,45 @@ export default function BootcampRegisterPage() {
                 <h2 className="font-bold text-[15px]">Status Pendaftaranmu</h2>
                 {myRegs.map((r) => {
                   const meta = STATUS_META[r.status] || STATUS_META.registered;
+                  const canTakeQuiz = r.package.requires_selection && r.status === "registered" && r.quiz;
                   return (
-                    <div key={r.id} className="flex items-center justify-between gap-3 border-b border-[#2D2342] last:border-0 pb-3 last:pb-0">
-                      <div className="flex flex-col">
-                        <span className="text-[14px] font-semibold">Paket {r.package.name}</span>
-                        <span className="text-[#9CA3AF] text-[12px]">
-                          {r.package.requires_selection ? "Jalur seleksi (Mentee)" : "Jalur langsung"}
+                    <div key={r.id} className="flex flex-col gap-2.5 border-b border-[#2D2342] last:border-0 pb-3 last:pb-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex flex-col">
+                          <span className="text-[14px] font-semibold">Paket {r.package.name}</span>
+                          <span className="text-[#9CA3AF] text-[12px]">
+                            {r.package.requires_selection ? "Jalur seleksi (Mentee)" : "Jalur langsung"}
+                          </span>
+                        </div>
+                        <span className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border whitespace-nowrap ${meta.cls}`}>
+                          {meta.label}
                         </span>
                       </div>
-                      <span className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border whitespace-nowrap ${meta.cls}`}>
-                        {meta.label}
-                      </span>
+                      {canTakeQuiz && (
+                        <>
+                          {r.quiz.status === "not_started" && (
+                            <Link
+                              href={`/bootcamp/${productId}/quiz/${r.id}`}
+                              className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#148F89] text-white text-[12.5px] font-semibold hover:bg-[#117A75] transition-colors"
+                            >
+                              <ShieldCheck size={14} /> Mulai Tes BCC
+                            </Link>
+                          )}
+                          {r.quiz.status === "in_progress" && (
+                            <Link
+                              href={`/bootcamp/${productId}/quiz/${r.id}`}
+                              className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#F59E0B] text-white text-[12.5px] font-semibold hover:bg-[#D97706] transition-colors"
+                            >
+                              <Clock size={14} /> Lanjutkan Tes
+                            </Link>
+                          )}
+                          {(r.quiz.status === "submitted" || r.quiz.status === "expired") && (
+                            <span className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#148F89]/10 text-[#148F89] text-[12.5px] font-semibold border border-[#148F89]/30">
+                              <Check size={14} /> Tes Sudah Dikumpulkan
+                            </span>
+                          )}
+                        </>
+                      )}
                     </div>
                   );
                 })}
