@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Check, X, Upload, ShieldCheck, Clock, FileText, AlertCircle, Lock } from "lucide-react";
+import { Check, X, Upload, ShieldCheck, Clock, FileText, AlertCircle, Lock, Info } from "lucide-react";
 import Navbar from "@/component/Navbar";
 import Linkify from "@/component/Linkify";
 import BootcampTimeline from "@/component/BootcampTimeline";
@@ -217,8 +217,9 @@ export default function BootcampRegisterPage() {
                       )}
                     </div>
                     {Number(pkg.commitment_fee) > 0 && (
-                      <span className="text-[#9CA3AF] text-[11px] -mt-2">
-                        Total {formatIDR(pkg.total_price)} (commitment fee dikembalikan di akhir program)
+                      <span className="text-[#9CA3AF] text-[11px] -mt-2 leading-relaxed">
+                        Total {formatIDR(pkg.total_price)}, termasuk commitment fee {formatIDR(pkg.commitment_fee)}
+                        yang dikembalikan penuh di akhir program. Dibayar nanti, hanya jika kamu dinyatakan lolos.
                       </span>
                     )}
 
@@ -245,6 +246,16 @@ export default function BootcampRegisterPage() {
                   </button>
                 );
               })}
+            </div>
+
+            <div className="flex items-start gap-2.5 bg-[#148F89]/10 border border-[#148F89]/30 rounded-[10px] px-4 py-3">
+              <Info size={15} className="text-[#148F89] shrink-0 mt-0.5" />
+              <p className="text-[#E2E8F0] text-[12.5px] leading-relaxed">
+                <span className="font-semibold text-white">Pendaftaran ini gratis.</span> Kamu belum perlu bayar
+                apa pun sekarang. Pembayaran (termasuk commitment fee, khusus paket Mentee) baru dilakukan
+                setelah kamu dinyatakan <span className="font-semibold text-white">lolos/diterima</span> ke
+                tahap berikutnya.
+              </p>
             </div>
 
             {/* Syarat + upload */}
