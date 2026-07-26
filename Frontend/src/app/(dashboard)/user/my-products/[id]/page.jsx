@@ -92,6 +92,7 @@ function mapProductDetail(raw) {
     title: raw.title,
     description: raw.description,
     imageClass: "from-[#4A2CA1] to-[#17A9D4]",
+    imageUrl: raw.image_url,
     sessions: raw.sessions?.map(mapSession),
     fileUrl: raw.file_url,
     resources: raw.resources,
@@ -456,9 +457,22 @@ export default function ProductDetail() {
 
       {/* Banner -- titik-tiga refund (LEVEL PRODUK, cuma 1) di pojok kanan atas */}
       <div
-        className={`relative rounded-[12px] overflow-hidden bg-gradient-to-br ${product.imageClass || ""} p-6 sm:p-8 flex flex-col gap-2`}
+        className={`relative rounded-[12px] overflow-hidden p-6 sm:p-8 flex flex-col gap-2 ${
+          product.imageUrl ? "bg-[#1A1128]" : `bg-gradient-to-br ${product.imageClass || ""}`
+        }`}
       >
-        <div className="flex items-start justify-between gap-3">
+        {product.imageUrl && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={product.imageUrl}
+              alt={product.title}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10" />
+          </>
+        )}
+        <div className="relative flex items-start justify-between gap-3">
           <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-white/20 text-white backdrop-blur-sm w-fit">
             {typeLabel}
           </span>
@@ -499,10 +513,10 @@ export default function ProductDetail() {
           )}
         </div>
 
-        <h2 className="text-white font-bold text-[20px] sm:text-[24px]">
+        <h2 className="relative text-white font-bold text-[20px] sm:text-[24px]">
           {product.title}
         </h2>
-        <p className="text-white/80 text-[13px] max-w-[600px] whitespace-pre-line">
+        <p className="relative text-white/80 text-[13px] max-w-[600px] whitespace-pre-line">
           <Linkify text={product.description} />
         </p>
       </div>
