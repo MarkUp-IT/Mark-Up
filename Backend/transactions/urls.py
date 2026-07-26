@@ -17,6 +17,8 @@ from .views import (
     update_payout_fee,
     commission_setting,
     get_my_payouts,
+    get_commitment_fee_refunds,
+    toggle_commitment_fee_refund,
 )
 
 urlpatterns = [
@@ -35,5 +37,7 @@ urlpatterns = [
     path("payouts/commission-setting/", commission_setting, name="api_commission_setting"),
     path("payouts/<uuid:payout_id>/mark-paid/", mark_payout_paid, name="api_payouts_mark_paid"),
     path("payouts/<uuid:payout_id>/fee/", update_payout_fee, name="api_payouts_update_fee"),
+    path("commitment-fee-refunds/", get_commitment_fee_refunds, name="api_commitment_fee_refunds_list"),
     path("<str:transaction_id>/verify/", verify_transaction, name="api_transaction_verify"),
+    path("<str:transaction_id>/commitment-fee-refund/", toggle_commitment_fee_refund, name="api_commitment_fee_refund_toggle"),
 ]

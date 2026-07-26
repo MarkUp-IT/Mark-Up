@@ -205,6 +205,12 @@ class BootcampPackage(models.Model):
     is_active = models.BooleanField(default=True)
     registration_opens_at = models.DateTimeField(blank=True, null=True)
     registration_closes_at = models.DateTimeField(blank=True, null=True)
+    min_attendance_sessions = models.PositiveIntegerField(
+        default=0,
+        help_text="Minimal jumlah sesi bootcamp berstatus selesai (per peserta) buat "
+                   "berhak dapat pengembalian commitment fee. 0 = gak ada syarat "
+                   "kehadiran. Cuma relevan buat paket yang punya commitment_fee > 0.",
+    )
 
     # Benefit per paket (sesuai tabel "Class Scheme and Benefits" di PDF).
     benefit_session_material = models.BooleanField(default=True)

@@ -1,5 +1,5 @@
 from django.core.paginator import Paginator, EmptyPage
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 import random
@@ -1573,8 +1573,9 @@ def _serialize_package(pkg):
         "registration_status": _package_registration_status(pkg),
         "quiz_duration_minutes": pkg.quiz_duration_minutes,
         "quiz_passing_score_percent": pkg.quiz_passing_score_percent,
+        "min_attendance_sessions": pkg.min_attendance_sessions,
         "benefits": [
-            {"label": label, "included": getattr(pkg, field)}
+            {"key": field, "label": label, "included": getattr(pkg, field)}
             for field, label in _BENEFIT_LABELS
         ],
     }
@@ -1978,6 +1979,36 @@ def update_bootcamp_package(request, package_id):
         package.is_active = bool(request_data["is_active"])
 
     errors = {}
+    if "name" in request_data:
+        name = (request_data["name"] or "").strip()
+        if not name:
+            errors["name"] = ["Nama paket wajib diisi."]
+        else:
+            package.name = name
+    if "price" in request_data:
+        try:
+            price = Decimal(str(request_data["price"])).quantize(Decimal("0.01"))
+            if price < 0:
+                raise ValueError
+            package.price = price
+        except (TypeError, ValueError, InvalidOperation):
+            errors["price"] = ["Harga harus angka >= 0."]
+    if "commitment_fee" in request_data:
+        try:
+            fee = Decimal(str(request_data["commitment_fee"])).quantize(Decimal("0.01"))
+            if fee < 0:
+                raise ValueError
+            package.commitment_fee = fee
+        except (TypeError, ValueError, InvalidOperation):
+            errors["commitment_fee"] = ["Commitment fee harus angka >= 0."]
+    if "benefits" in request_data:
+        benefits = request_data["benefits"] or {}
+        valid_keys = {field for field, _ in _BENEFIT_LABELS}
+        if not isinstance(benefits, dict) or not set(benefits.keys()) <= valid_keys:
+            errors["benefits"] = ["Format benefit tidak valid."]
+        else:
+            for key, value in benefits.items():
+                setattr(package, key, bool(value))
     if "quiz_duration_minutes" in request_data:
         try:
             minutes = int(request_data["quiz_duration_minutes"])
@@ -1994,6 +2025,14 @@ def update_bootcamp_package(request, package_id):
             package.quiz_passing_score_percent = score
         except (TypeError, ValueError):
             errors["quiz_passing_score_percent"] = ["Skor kelulusan harus angka 0-100."]
+    if "min_attendance_sessions" in request_data:
+        try:
+            min_sessions = int(request_data["min_attendance_sessions"])
+            if min_sessions < 0:
+                raise ValueError
+            package.min_attendance_sessions = min_sessions
+        except (TypeError, ValueError):
+            errors["min_attendance_sessions"] = ["Syarat kehadiran harus angka >= 0."]
     if errors:
         return JsonResponse({"errors": errors}, status=400)
 

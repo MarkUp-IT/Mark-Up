@@ -26,6 +26,7 @@ import {
   Settings,
   LogOut,
   X,
+  Undo2,
 } from "lucide-react";
 
 const menuList = [
@@ -49,6 +50,7 @@ const financeMenuList = [
   { name: "Transaksi", url: "/admin/transactions", icon: ReceiptText, badgeKey: "transactions" },
   { name: "Pengajuan Refund", url: "/admin/refund-requests", icon: RotateCcw, badgeKey: "refund_requests" },
   { name: "Pencairan Mentor", url: "/admin/payouts", icon: Landmark, badgeKey: "payouts" },
+  { name: "Pengembalian Commitment Fee", url: "/admin/bootcamp-refunds", icon: Undo2 },
 ];
 
 const otherMenuList = [
