@@ -279,6 +279,50 @@ def create_default_bootcamp_packages(bootcamp):
         )
 
 
+class BootcampRequirement(models.Model):
+    """Satu syarat/rule pendaftaran (ditampilkan sebagai daftar bernomor di
+    halaman pendaftaran bootcamp publik) -- diatur admin per batch, gantiin
+    daftar yang dulu hardcoded di frontend. Peserta gabungin semua bukti
+    jadi 1 PDF (requirement_doc di BootcampRegistration), daftar ini cuma
+    checklist informasional, gak ada validasi per-item di backend."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct,
+        on_delete=models.CASCADE,
+        related_name="requirements",
+    )
+    text = models.CharField(max_length=500)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Bootcamp Requirement"
+        verbose_name_plural = "Bootcamp Requirements"
+        ordering = ["order"]
+
+    def __str__(self) -> str:
+        return f"{self.text[:50]} ({self.bootcamp_id})"
+
+
+DEFAULT_BOOTCAMP_REQUIREMENTS = [
+    "Bukti upload Instastory poster",
+    "Bukti follow IG MarkUp & tag 5 teman di komentar feeds oprec, serta follow LinkedIn & TikTok MarkUp",
+    "Bukti upload twibbon",
+    "Bukti share poster ke 3 grup WhatsApp",
+    "Bukti kartu tanda pelajar/mahasiswa (student ID card)",
+]
+
+
+def create_default_bootcamp_requirements(bootcamp):
+    """Isi syarat pendaftaran standar buat BootcampProduct baru kalau belum
+    ada -- admin bisa ubah/tambah/hapus lagi lewat panel Kelola Pesanan
+    Bootcamp, ini cuma starting point biar gak kosong."""
+    if BootcampRequirement.objects.filter(bootcamp=bootcamp).exists():
+        return
+    for order, text in enumerate(DEFAULT_BOOTCAMP_REQUIREMENTS, start=1):
+        BootcampRequirement.objects.create(bootcamp=bootcamp, text=text, order=order)
+
+
 class BootcampTimelineItem(models.Model):
     """Milestone utama program bootcamp (bukan jadwal sesi kelas) --
     ditampilkan sebagai garis waktu ringkas di halaman produk & pendaftaran.

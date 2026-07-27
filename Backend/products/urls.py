@@ -49,6 +49,9 @@ from .views import (
     assign_bootcamp_team_member,
     remove_bootcamp_team_member,
     randomize_bootcamp_teams,
+    get_bootcamp_requirements,
+    add_bootcamp_requirement,
+    update_bootcamp_requirement,
 )
 
 urlpatterns = [
@@ -72,6 +75,7 @@ urlpatterns = [
     path("bootcamp-registrations/<uuid:registration_id>/review/", review_bootcamp_registration, name="api_bootcamp_registration_review"),
     path("bootcamp-packages/<uuid:package_id>/", update_bootcamp_package, name="api_bootcamp_package_update"),
     path("bootcamp-timeline/<uuid:item_id>/", update_bootcamp_timeline_item, name="api_bootcamp_timeline_item_update"),
+    path("bootcamp-requirements/<uuid:item_id>/", update_bootcamp_requirement, name="api_bootcamp_requirement_update"),
     path("bootcamp-quiz-questions/<uuid:question_id>/", update_bootcamp_quiz_question, name="api_bootcamp_quiz_question_update"),
     path("bootcamp-registrations/<uuid:registration_id>/quiz/start/", start_or_resume_bootcamp_quiz, name="api_bootcamp_quiz_start"),
     path("bootcamp-quiz-attempts/<uuid:attempt_id>/answer/", save_bootcamp_quiz_answer, name="api_bootcamp_quiz_answer"),
@@ -92,6 +96,8 @@ urlpatterns = [
     path("<uuid:product_id>/packages/", get_bootcamp_packages, name="api_bootcamp_packages"),
     path("<uuid:product_id>/timeline/", get_bootcamp_timeline, name="api_bootcamp_timeline"),
     path("<uuid:product_id>/timeline/add/", add_bootcamp_timeline_item, name="api_bootcamp_timeline_add"),
+    path("<uuid:product_id>/requirements/", get_bootcamp_requirements, name="api_bootcamp_requirements"),
+    path("<uuid:product_id>/requirements/add/", add_bootcamp_requirement, name="api_bootcamp_requirement_add"),
     path("<uuid:product_id>/quiz-questions/", get_bootcamp_quiz_questions, name="api_bootcamp_quiz_questions"),
     path("<uuid:product_id>/quiz-questions/add/", add_bootcamp_quiz_question, name="api_bootcamp_quiz_question_add"),
     path("<uuid:product_id>/resources/", get_bootcamp_resources, name="api_bootcamp_resources"),

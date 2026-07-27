@@ -36,6 +36,8 @@ from .models import (
     Review,
     UserLibrary,
     create_default_bootcamp_packages,
+    BootcampRequirement,
+    create_default_bootcamp_requirements,
 )
 from accounts.decorators import jwt_required, role_required
 from accounts.models import User, UserRole, AuditAction
@@ -758,6 +760,7 @@ def add_product(request):
         _sync_bootcamp_session_slots(detail)
         # Langsung siapkan 4 paket standar (Mentee/Basic/Premium/Elite).
         create_default_bootcamp_packages(detail)
+        create_default_bootcamp_requirements(detail)
 
     log_audit(
         request, AuditAction.CREATE, "products", object_id=product.id,
@@ -2051,6 +2054,91 @@ def update_bootcamp_timeline_item(request, item_id):
 
     return JsonResponse(
         {"detail": "Milestone berhasil diperbarui.", "item": _serialize_timeline_item(item)},
+        status=200,
+    )
+
+
+# ---------- Syarat pendaftaran (dulu hardcoded di frontend) ----------
+
+def _serialize_requirement(item):
+    return {
+        "id": str(item.id),
+        "text": item.text,
+        "order": item.order,
+    }
+
+
+def get_bootcamp_requirements(request, product_id):
+    """Daftar syarat pendaftaran sebuah bootcamp (publik)."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    items = BootcampRequirement.objects.filter(bootcamp_id=product_id).order_by("order")
+    return JsonResponse(
+        {"requirements": [_serialize_requirement(i) for i in items]}, status=200
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def add_bootcamp_requirement(request, product_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    text = (request_data.get("text") or "").strip()
+    if not text:
+        return JsonResponse({"errors": {"text": ["Teks syarat wajib diisi."]}}, status=400)
+
+    try:
+        BootcampProduct.objects.get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Produk bootcamp tidak ditemukan."}, status=404)
+
+    next_order = BootcampRequirement.objects.filter(bootcamp_id=product_id).count() + 1
+    item = BootcampRequirement.objects.create(bootcamp_id=product_id, text=text, order=next_order)
+
+    return JsonResponse(
+        {"detail": "Syarat berhasil ditambahkan.", "item": _serialize_requirement(item)},
+        status=201,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_bootcamp_requirement(request, item_id):
+    if request.method not in ["PATCH", "PUT", "DELETE"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT", "DELETE"])
+
+    try:
+        item = BootcampRequirement.objects.get(id=item_id)
+    except BootcampRequirement.DoesNotExist:
+        return JsonResponse({"detail": "Syarat tidak ditemukan."}, status=404)
+
+    if request.method == "DELETE":
+        item.delete()
+        return JsonResponse({"detail": "Syarat berhasil dihapus."}, status=200)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    if "text" in request_data:
+        text = (request_data["text"] or "").strip()
+        if not text:
+            return JsonResponse({"errors": {"text": ["Teks syarat wajib diisi."]}}, status=400)
+        item.text = text
+    if "order" in request_data:
+        item.order = request_data["order"]
+    item.save()
+
+    return JsonResponse(
+        {"detail": "Syarat berhasil diperbarui.", "item": _serialize_requirement(item)},
         status=200,
     )
 
