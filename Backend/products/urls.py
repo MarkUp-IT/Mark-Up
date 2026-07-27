@@ -52,6 +52,7 @@ from .views import (
     get_bootcamp_requirements,
     add_bootcamp_requirement,
     update_bootcamp_requirement,
+    update_commitment_letter_settings,
 )
 
 urlpatterns = [
@@ -98,6 +99,7 @@ urlpatterns = [
     path("<uuid:product_id>/timeline/add/", add_bootcamp_timeline_item, name="api_bootcamp_timeline_add"),
     path("<uuid:product_id>/requirements/", get_bootcamp_requirements, name="api_bootcamp_requirements"),
     path("<uuid:product_id>/requirements/add/", add_bootcamp_requirement, name="api_bootcamp_requirement_add"),
+    path("<uuid:product_id>/commitment-letter-settings/", update_commitment_letter_settings, name="api_bootcamp_commitment_letter_settings"),
     path("<uuid:product_id>/quiz-questions/", get_bootcamp_quiz_questions, name="api_bootcamp_quiz_questions"),
     path("<uuid:product_id>/quiz-questions/add/", add_bootcamp_quiz_question, name="api_bootcamp_quiz_question_add"),
     path("<uuid:product_id>/resources/", get_bootcamp_resources, name="api_bootcamp_resources"),

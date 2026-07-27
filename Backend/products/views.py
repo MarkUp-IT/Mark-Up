@@ -27,6 +27,7 @@ from .models import (
     BootcampResourceType,
     BootcampTeam,
     BootcampTeamMember,
+    BootcampRequirementCategory,
     Certificate,
     CertificateType,
     MentoringSession,
@@ -1573,6 +1574,7 @@ def upload_product_image(request):
 # ==================== BOOTCAMP: PAKET & PENDAFTARAN ====================
 
 MAX_REGISTRATION_DOC_SIZE = 10 * 1024 * 1024  # 10MB (PDF gabungan bisa agak besar)
+MAX_COMMITMENT_LETTER_SIZE = 5 * 1024 * 1024  # 5MB (cuma surat teks, gak sebesar PDF gabungan)
 MAX_PAYMENT_PROOF_SIZE = 5 * 1024 * 1024  # 5MB, sama kayak checkout_product biasa
 ALLOWED_PAYMENT_PROOF_EXTENSIONS = {"jpg", "jpeg", "png", "pdf"}
 
@@ -1674,6 +1676,13 @@ def _serialize_registration(reg, for_admin=False):
         except Exception:
             doc_url = None
 
+    commitment_letter_url = None
+    if reg.commitment_letter:
+        try:
+            commitment_letter_url = reg.commitment_letter.url
+        except Exception:
+            commitment_letter_url = None
+
     # Skor & status lulus/tidak CUMA dikirim ke admin (for_admin=True) --
     # peserta sendiri cuma tahu status pengerjaan, gak pernah lihat skornya.
     quiz = None
@@ -1734,6 +1743,7 @@ def _serialize_registration(reg, for_admin=False):
         "reviewed_at": reg.reviewed_at.isoformat() if reg.reviewed_at else None,
         "admin_notes": reg.admin_notes,
         "requirement_doc": doc_url,
+        "commitment_letter": commitment_letter_url,
         "package": {
             "id": str(reg.package_id),
             "slug": reg.package.slug,
@@ -1764,6 +1774,7 @@ def register_bootcamp(request):
 
     package_id = request.POST.get("package_id")
     doc = request.FILES.get("requirement_doc")
+    commitment_letter = request.FILES.get("commitment_letter")
 
     errors = {}
     if not package_id:
@@ -1776,6 +1787,14 @@ def register_bootcamp(request):
             errors["requirement_doc"] = ["Dokumen harus berformat PDF (gabungkan semua bukti jadi satu PDF)."]
         elif doc.size > MAX_REGISTRATION_DOC_SIZE:
             errors["requirement_doc"] = ["Ukuran file maksimal 10MB."]
+    if not commitment_letter:
+        errors["commitment_letter"] = ["Commitment letter (PDF) wajib diunggah."]
+    else:
+        ext = commitment_letter.name.rsplit(".", 1)[-1].lower() if "." in commitment_letter.name else ""
+        if ext != "pdf":
+            errors["commitment_letter"] = ["Commitment letter harus berformat PDF."]
+        elif commitment_letter.size > MAX_COMMITMENT_LETTER_SIZE:
+            errors["commitment_letter"] = ["Ukuran file maksimal 5MB."]
     if errors:
         return JsonResponse({"errors": errors}, status=400)
 
@@ -1802,7 +1821,7 @@ def register_bootcamp(request):
         )
 
     reg = BootcampRegistration.objects.create(
-        user=request.user, package=package, requirement_doc=doc,
+        user=request.user, package=package, requirement_doc=doc, commitment_letter=commitment_letter,
     )
 
     notify_team(
@@ -2063,19 +2082,32 @@ def update_bootcamp_timeline_item(request, item_id):
 def _serialize_requirement(item):
     return {
         "id": str(item.id),
+        "category": item.category,
         "text": item.text,
         "order": item.order,
     }
 
 
 def get_bootcamp_requirements(request, product_id):
-    """Daftar syarat pendaftaran sebuah bootcamp (publik)."""
+    """Daftar syarat pendaftaran & struktur commitment letter sebuah
+    bootcamp (publik) -- dibedain lewat field `category` tiap item."""
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])
 
-    items = BootcampRequirement.objects.filter(bootcamp_id=product_id).order_by("order")
+    items = BootcampRequirement.objects.filter(bootcamp_id=product_id).order_by("category", "order")
+
+    try:
+        bootcamp = BootcampProduct.objects.get(product_id=product_id)
+        max_words = bootcamp.commitment_letter_max_words
+    except BootcampProduct.DoesNotExist:
+        max_words = None
+
     return JsonResponse(
-        {"requirements": [_serialize_requirement(i) for i in items]}, status=200
+        {
+            "requirements": [_serialize_requirement(i) for i in items],
+            "commitment_letter_max_words": max_words,
+        },
+        status=200,
     )
 
 
@@ -2094,13 +2126,19 @@ def add_bootcamp_requirement(request, product_id):
     if not text:
         return JsonResponse({"errors": {"text": ["Teks syarat wajib diisi."]}}, status=400)
 
+    category = (request_data.get("category") or BootcampRequirementCategory.GENERAL).strip()
+    if category not in BootcampRequirementCategory.values:
+        return JsonResponse({"errors": {"category": ["Kategori tidak valid."]}}, status=400)
+
     try:
         BootcampProduct.objects.get(product_id=product_id)
     except BootcampProduct.DoesNotExist:
         return JsonResponse({"detail": "Produk bootcamp tidak ditemukan."}, status=404)
 
-    next_order = BootcampRequirement.objects.filter(bootcamp_id=product_id).count() + 1
-    item = BootcampRequirement.objects.create(bootcamp_id=product_id, text=text, order=next_order)
+    next_order = BootcampRequirement.objects.filter(bootcamp_id=product_id, category=category).count() + 1
+    item = BootcampRequirement.objects.create(
+        bootcamp_id=product_id, category=category, text=text, order=next_order,
+    )
 
     return JsonResponse(
         {"detail": "Syarat berhasil ditambahkan.", "item": _serialize_requirement(item)},
@@ -2139,6 +2177,40 @@ def update_bootcamp_requirement(request, item_id):
 
     return JsonResponse(
         {"detail": "Syarat berhasil diperbarui.", "item": _serialize_requirement(item)},
+        status=200,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_commitment_letter_settings(request, product_id):
+    """Admin atur batas maksimal kata commitment letter (informasional,
+    gak divalidasi ketat di backend -- cuma ditampilkan ke peserta)."""
+    if request.method not in ["PATCH", "PUT"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT"])
+
+    try:
+        bootcamp = BootcampProduct.objects.get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Produk bootcamp tidak ditemukan."}, status=404)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    try:
+        max_words = int(request_data.get("max_words"))
+        if max_words < 1:
+            raise ValueError
+    except (TypeError, ValueError):
+        return JsonResponse({"errors": {"max_words": ["Batas kata harus angka >= 1."]}}, status=400)
+
+    bootcamp.commitment_letter_max_words = max_words
+    bootcamp.save(update_fields=["commitment_letter_max_words"])
+
+    return JsonResponse(
+        {"detail": "Batas kata berhasil diperbarui.", "commitment_letter_max_words": max_words},
         status=200,
     )
 

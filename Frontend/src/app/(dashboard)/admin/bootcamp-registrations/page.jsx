@@ -234,7 +234,15 @@ export default function AdminBootcampRegistrations() {
                   <FileText size={15} /> Lihat Dokumen Syarat (PDF)
                 </a>
               ) : (
-                <p className="text-[#94A3B8] text-[12px] italic text-center">Dokumen tidak tersedia.</p>
+                <p className="text-[#94A3B8] text-[12px] italic text-center">Dokumen syarat tidak tersedia.</p>
+              )}
+
+              {selected.commitment_letter ? (
+                <a href={selected.commitment_letter} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-2.5 rounded-[8px] border border-[#E2E8F0] text-[#148F89] text-[13px] font-semibold hover:bg-[#148F89]/5 transition-colors">
+                  <FileText size={15} /> Lihat Commitment Letter (PDF)
+                </a>
+              ) : (
+                <p className="text-[#94A3B8] text-[12px] italic text-center">Commitment letter tidak tersedia.</p>
               )}
 
               <div className="flex flex-col gap-1.5">
