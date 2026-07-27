@@ -9,8 +9,14 @@ import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 import { BANK_INFO } from "@/lib/bankInfo";
 import { toast } from "sonner";
 
+const MAX_PROOF_SIZE = 5 * 1024 * 1024;
+
 const formatIDR = (val) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(val));
+
+function formatMB(bytes) {
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
 
 const PAYMENT_STATUS_META = {
   PENDING: { label: "Menunggu Verifikasi Admin", cls: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" },
@@ -70,7 +76,14 @@ export default function BootcampPaymentPage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(data?.detail || "Gagal mengirim pembayaran.");
+        const msg =
+          data?.detail ||
+          (res.status === 413
+            ? "Ukuran file terlalu besar buat server. Kecilkan ukuran filenya lalu coba lagi."
+            : data === null
+              ? "Terjadi kesalahan tak terduga di server. Coba lagi."
+              : "Gagal mengirim pembayaran.");
+        throw new Error(msg);
       }
       toast.success("Pembayaran Terkirim", { description: "Menunggu diverifikasi admin." });
       setFile(null);
@@ -222,7 +235,18 @@ export default function BootcampPaymentPage() {
                         type="file"
                         accept=".jpg,.jpeg,.png,.pdf"
                         className="hidden"
-                        onChange={(e) => setFile(e.target.files?.[0] || null)}
+                        onChange={(e) => {
+                          const selected = e.target.files?.[0] || null;
+                          if (selected && selected.size > MAX_PROOF_SIZE) {
+                            toast.error("File Terlalu Besar", {
+                              description: `Ukuran file (${formatMB(selected.size)}) melebihi batas maksimal ${formatMB(MAX_PROOF_SIZE)}.`,
+                            });
+                            e.target.value = "";
+                            return;
+                          }
+                          setFile(selected);
+                          e.target.value = "";
+                        }}
                       />
                       <div className="w-9 h-9 rounded-full bg-[#1A1128] flex items-center justify-center">
                         <Upload size={16} className="text-[#148F89]" />
