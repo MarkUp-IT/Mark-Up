@@ -10,8 +10,15 @@ import BootcampTimeline from "@/component/BootcampTimeline";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 import { toast } from "sonner";
 
+const MAX_REGISTRATION_DOC_SIZE = 10 * 1024 * 1024;
+const MAX_COMMITMENT_LETTER_SIZE = 5 * 1024 * 1024;
+
 const formatIDR = (val) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(val));
+
+function formatMB(bytes) {
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
 
 function formatFullDate(dateStr) {
   if (!dateStr) return "";
@@ -39,6 +46,24 @@ export default function BootcampRegisterPage() {
   const [file, setFile] = useState(null);
   const [commitmentLetterFile, setCommitmentLetterFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Validasi ukuran di browser dulu -- sebelumnya file oversize diloloskan
+  // begitu aja lalu ditolak nginx (413 HTML, bukan JSON) pas submit, bikin
+  // user cuma liat toast generik "Gagal mendaftar." tanpa tau kenapa.
+  const handleFileSelect = (selectedFile, maxSize, setter) => {
+    if (!selectedFile) {
+      setter(null);
+      return;
+    }
+    if (selectedFile.size > maxSize) {
+      toast.error("File Terlalu Besar", {
+        description: `Ukuran file (${formatMB(selectedFile.size)}) melebihi batas maksimal ${formatMB(maxSize)}. Kecilkan dulu ukuran filenya.`,
+      });
+      setter(null);
+      return;
+    }
+    setter(selectedFile);
+  };
 
   const fetchAll = async () => {
     setLoading(true);
@@ -102,7 +127,18 @@ export default function BootcampRegisterPage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        const msg = data?.detail || Object.values(data?.errors || {}).flat().join(" ") || "Gagal mendaftar.";
+        // data null artinya respons bukan JSON -- biasanya halaman error dari
+        // nginx (mis. 413 gabungan 2 file kelebihan batas server), bukan error
+        // tervalidasi dari Django. Pesan generik lama bikin bingung karena gak
+        // nunjukin ini soal ukuran file.
+        const msg =
+          data?.detail ||
+          Object.values(data?.errors || {}).flat().join(" ") ||
+          (res.status === 413
+            ? "Gabungan ukuran file terlalu besar buat server. Kecilkan ukuran PDF-nya lalu coba lagi."
+            : data === null
+              ? "Terjadi kesalahan tak terduga di server. Coba lagi, atau kecilkan ukuran file kalau masih gagal."
+              : "Gagal mendaftar.");
         throw new Error(msg);
       }
       toast.success("Pendaftaran Terkirim", { description: "Menunggu ditinjau admin." });
@@ -374,7 +410,10 @@ export default function BootcampRegisterPage() {
                     type="file"
                     accept="application/pdf"
                     className="hidden"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      handleFileSelect(e.target.files?.[0] || null, MAX_REGISTRATION_DOC_SIZE, setFile);
+                      e.target.value = "";
+                    }}
                   />
                   {file ? (
                     <span className="flex items-center gap-2 text-[#148F89] text-[13px] font-semibold">
@@ -423,7 +462,10 @@ export default function BootcampRegisterPage() {
                     type="file"
                     accept="application/pdf"
                     className="hidden"
-                    onChange={(e) => setCommitmentLetterFile(e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      handleFileSelect(e.target.files?.[0] || null, MAX_COMMITMENT_LETTER_SIZE, setCommitmentLetterFile);
+                      e.target.value = "";
+                    }}
                   />
                   {commitmentLetterFile ? (
                     <span className="flex items-center gap-2 text-[#148F89] text-[13px] font-semibold">
