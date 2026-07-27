@@ -20,6 +20,7 @@ import BootcampTimelinePanel from "@/component/admin/BootcampTimelinePanel";
 import BootcampQuizPanel from "@/component/admin/BootcampQuizPanel";
 import BootcampResourcePanel from "@/component/admin/BootcampResourcePanel";
 import BootcampTeamPanel from "@/component/admin/BootcampTeamPanel";
+import BootcampRequirementsPanel from "@/component/admin/BootcampRequirementsPanel";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
@@ -29,13 +30,6 @@ const PARTICIPANT_STATUS_META = {
   scheduled: { label: "TERJADWAL", className: "bg-[#DBEAFE] text-[#1D4ED8]" },
   waiting_schedule: { label: "BELUM DIJADWALKAN", className: "bg-[#FEF3C7] text-[#92400E]" },
 };
-
-const SESSION_BENEFIT_OPTIONS = [
-  { value: "", label: "Sesi inti (semua paket)" },
-  { value: "mentoring_case", label: "Mentoring Case Competition" },
-  { value: "career_coaching", label: "Career Coaching" },
-  { value: "networking", label: "Networking Session" },
-];
 
 function MentorMultiSelect({ mentors, selectedIds, onChange }) {
   const [open, setOpen] = useState(false);
@@ -157,7 +151,7 @@ export default function BootcampOrderDetail() {
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newSession, setNewSession] = useState({ title: "", start_time: "", end_time: "", required_benefit: "" });
+  const [newSession, setNewSession] = useState({ title: "", start_time: "", end_time: "" });
   const [saving, setSaving] = useState(false);
   const [scheduleSession, setScheduleSession] = useState(null);
   const [scheduleForm, setScheduleForm] = useState({ start_time: "", end_time: "" });
@@ -180,7 +174,6 @@ export default function BootcampOrderDetail() {
         nextDrafts[s.id] = {
           mentor_ids: s.mentor_ids || [],
           meeting_link: s.meeting_link || "",
-          required_benefit: s.required_benefit || "",
         };
       });
       setDrafts(nextDrafts);
@@ -274,7 +267,6 @@ export default function BootcampOrderDetail() {
           body: {
             mentor_ids: draft.mentor_ids || [],
             meeting_link: draft.meeting_link,
-            required_benefit: draft.required_benefit || "",
           },
         });
       }
@@ -339,7 +331,7 @@ export default function BootcampOrderDetail() {
         body: newSession,
       });
       setShowAddModal(false);
-      setNewSession({ title: "", start_time: "", end_time: "", required_benefit: "" });
+      setNewSession({ title: "", start_time: "", end_time: "" });
       fetchDetail();
       toast.success("Sesi Ditambahkan", { description: `"${newSession.title.trim()}" berhasil ditambahkan.` });
     } catch (err) {
@@ -393,6 +385,8 @@ export default function BootcampOrderDetail() {
 
       {params?.id && <BootcampTeamPanel productId={params.id} />}
 
+      {params?.id && <BootcampRequirementsPanel productId={params.id} />}
+
       {!loading && sessions.length === 0 ? (
         <EmptyState message="Belum ada sesi untuk bootcamp ini." />
       ) : (
@@ -403,7 +397,6 @@ export default function BootcampOrderDetail() {
                 <tr>
                   <th className="px-4 py-3.5 text-left font-bold text-[#64748B] text-[11px] tracking-wider">JUDUL SESI</th>
                   <th className="px-4 py-3.5 text-left font-bold text-[#64748B] text-[11px] tracking-wider" style={{ width: "190px" }}>MENTOR</th>
-                  <th className="px-4 py-3.5 text-left font-bold text-[#64748B] text-[11px] tracking-wider" style={{ width: "170px" }}>BENEFIT</th>
                   <th className="px-4 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider" style={{ width: "150px" }}>JADWAL</th>
                   <th className="px-4 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider" style={{ width: "230px" }}>LINK ZOOM</th>
                   <th className="px-4 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider" style={{ width: "140px" }}>STATUS</th>
@@ -422,18 +415,6 @@ export default function BootcampOrderDetail() {
                           selectedIds={drafts[item.id]?.mentor_ids || []}
                           onChange={(ids) => updateDraft(item.id, "mentor_ids", ids)}
                         />
-                      </td>
-                      <td className="px-4 py-4">
-                        <select
-                          value={drafts[item.id]?.required_benefit || ""}
-                          onChange={(e) => updateDraft(item.id, "required_benefit", e.target.value)}
-                          style={{ height: "36px" }}
-                          className="w-full bg-[#F8FAFC] rounded-[6px] px-2 text-[11.5px] outline-none border border-[#E2E8F0] text-[#334155] focus:border-[#148F89] transition-colors"
-                        >
-                          {SESSION_BENEFIT_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
                       </td>
                       <td className="px-4 py-4 text-center">
                         <button
@@ -553,19 +534,6 @@ export default function BootcampOrderDetail() {
                   style={{ height: "42px" }}
                   className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 text-[13.5px] text-[#1E293B] outline-none focus:border-[#148F89] transition-colors"
                 />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[#334155] text-[13px] font-medium">Benefit (kunci per paket)</label>
-                <select
-                  value={newSession.required_benefit}
-                  onChange={(e) => setNewSession((f) => ({ ...f, required_benefit: e.target.value }))}
-                  style={{ height: "42px" }}
-                  className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 text-[13.5px] text-[#1E293B] outline-none focus:border-[#148F89] transition-colors"
-                >
-                  {SESSION_BENEFIT_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
               </div>
             </div>
             <div className="px-6 py-5 bg-[#F8FAFC] border-t border-[#E2E8F0] flex gap-3">

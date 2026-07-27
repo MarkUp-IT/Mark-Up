@@ -10,14 +10,6 @@ import BootcampTimeline from "@/component/BootcampTimeline";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 import { toast } from "sonner";
 
-const REQUIREMENTS = [
-  "Bukti upload Instastory poster",
-  "Bukti follow IG MarkUp & tag 5 teman di komentar feeds oprec, serta follow LinkedIn & TikTok MarkUp",
-  "Bukti upload twibbon",
-  "Bukti share poster ke 3 grup WhatsApp",
-  "Bukti kartu tanda pelajar/mahasiswa (student ID card)",
-];
-
 const formatIDR = (val) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(val));
 
@@ -39,6 +31,7 @@ export default function BootcampRegisterPage() {
   const [product, setProduct] = useState(null);
   const [packages, setPackages] = useState([]);
   const [timeline, setTimeline] = useState([]);
+  const [requirements, setRequirements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [myRegs, setMyRegs] = useState([]);
   const [selectedPackageId, setSelectedPackageId] = useState("");
@@ -48,14 +41,16 @@ export default function BootcampRegisterPage() {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [productRes, pkgRes, timelineRes] = await Promise.all([
+      const [productRes, pkgRes, timelineRes, reqRes] = await Promise.all([
         apiRequest(`/api/products/${productId}/`, { auth: false }),
         apiRequest(`/api/products/${productId}/packages/`, { auth: false }),
         apiRequest(`/api/products/${productId}/timeline/`, { auth: false }),
+        apiRequest(`/api/products/${productId}/requirements/`, { auth: false }),
       ]);
       setProduct(productRes);
       setPackages(pkgRes?.packages || []);
       setTimeline(timelineRes?.timeline || []);
+      setRequirements(reqRes?.requirements || []);
       if (getAccessToken()) {
         const regRes = await apiRequest("/api/products/bootcamp-registrations/me/");
         setMyRegs((regRes?.registrations || []).filter((r) => r.bootcamp_id === productId));
@@ -72,7 +67,16 @@ export default function BootcampRegisterPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]);
 
+  // Cuma ada 1 paket -> gak usah nampilin kartu "pilih salah satu", auto-pilih
+  // di belakang layar biar user gak bingung ngerasa ada opsi yang harus dipilih.
+  useEffect(() => {
+    if (packages.length === 1 && !selectedPackageId) {
+      setSelectedPackageId(packages[0].id);
+    }
+  }, [packages, selectedPackageId]);
+
   const registeredPackageIds = new Set(myRegs.map((r) => r.package.id));
+  const singlePackageMode = packages.length === 1;
 
   const handleSubmit = async () => {
     if (!selectedPackageId || !file || submitting) return;
@@ -236,25 +240,30 @@ export default function BootcampRegisterPage() {
               </div>
             )}
 
-            {/* Daftar paket + benefit */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {packages.map((pkg) => {
+            {/* Daftar paket + benefit -- kalau cuma ada 1 paket, tampil sebagai
+                ringkasan info aja (bukan grid "pilih salah satu" yang bikin
+                user ngira ada opsi lain). */}
+            {(() => {
+              const renderPackageCard = (pkg, { interactive }) => {
                 const alreadyReg = registeredPackageIds.has(pkg.id);
                 const locked = pkg.registration_status !== "open";
                 const disabled = alreadyReg || locked;
                 const selected = selectedPackageId === pkg.id;
+                const Wrapper = interactive ? "button" : "div";
                 return (
-                  <button
+                  <Wrapper
                     key={pkg.id}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => setSelectedPackageId(pkg.id)}
+                    type={interactive ? "button" : undefined}
+                    disabled={interactive ? disabled : undefined}
+                    onClick={interactive ? () => setSelectedPackageId(pkg.id) : undefined}
                     className={`text-left rounded-[14px] border p-5 flex flex-col gap-3 transition-colors ${
-                      disabled
-                        ? "border-[#2D2342] bg-[#170F26]/50 opacity-60 cursor-not-allowed"
-                        : selected
-                          ? "border-[#148F89] bg-[#148F89]/10"
-                          : "border-[#2D2342] bg-[#170F26] hover:border-[#148F89]/50"
+                      !interactive
+                        ? "border-[#148F89]/50 bg-[#148F89]/5"
+                        : disabled
+                          ? "border-[#2D2342] bg-[#170F26]/50 opacity-60 cursor-not-allowed"
+                          : selected
+                            ? "border-[#148F89] bg-[#148F89]/10"
+                            : "border-[#2D2342] bg-[#170F26] hover:border-[#148F89]/50"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -266,7 +275,7 @@ export default function BootcampRegisterPage() {
                           </span>
                         )}
                       </div>
-                      {selected && !disabled && <Check size={18} className="text-[#148F89] shrink-0" />}
+                      {interactive && selected && !disabled && <Check size={18} className="text-[#148F89] shrink-0" />}
                       {locked && <Lock size={16} className="text-[#6B7280] shrink-0" />}
                     </div>
 
@@ -305,10 +314,21 @@ export default function BootcampRegisterPage() {
                     {!alreadyReg && pkg.registration_status === "closed" && (
                       <span className="text-[11px] text-[#EF4444] italic mt-1">Pendaftaran paket ini sudah ditutup.</span>
                     )}
-                  </button>
+                  </Wrapper>
                 );
-              })}
-            </div>
+              };
+
+              return singlePackageMode ? (
+                <div className="flex flex-col gap-2">
+                  <h2 className="font-bold text-[15px]">Paket</h2>
+                  {renderPackageCard(packages[0], { interactive: false })}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {packages.map((pkg) => renderPackageCard(pkg, { interactive: true }))}
+                </div>
+              );
+            })()}
 
             <div className="flex items-start gap-2.5 bg-[#148F89]/10 border border-[#148F89]/30 rounded-[10px] px-4 py-3">
               <Info size={15} className="text-[#148F89] shrink-0 mt-0.5" />
@@ -328,16 +348,18 @@ export default function BootcampRegisterPage() {
                   Gabungkan semua bukti berikut menjadi <span className="text-white font-medium">satu file PDF</span>, lalu unggah di bawah.
                 </p>
               </div>
-              <ol className="flex flex-col gap-2">
-                {REQUIREMENTS.map((r, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-[13px] text-[#E2E8F0]">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-[#148F89]/15 text-[#148F89] text-[11px] font-bold flex items-center justify-center mt-0.5">
-                      {i + 1}
-                    </span>
-                    {r}
-                  </li>
-                ))}
-              </ol>
+              {requirements.length > 0 && (
+                <ol className="flex flex-col gap-2">
+                  {requirements.map((r, i) => (
+                    <li key={r.id} className="flex items-start gap-2.5 text-[13px] text-[#E2E8F0]">
+                      <span className="shrink-0 w-5 h-5 rounded-full bg-[#148F89]/15 text-[#148F89] text-[11px] font-bold flex items-center justify-center mt-0.5">
+                        {i + 1}
+                      </span>
+                      {r.text}
+                    </li>
+                  ))}
+                </ol>
+              )}
 
               <div className="mt-1 flex flex-col gap-1.5">
                 <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[#2D2342] rounded-[10px] py-6 cursor-pointer hover:border-[#148F89]/50 transition-colors">
