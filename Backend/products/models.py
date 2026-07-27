@@ -150,6 +150,11 @@ class BootcampProduct(BaseProductDetail):
                    "naik, otomatis nge-generate slot sesi kosong (programs.BootcampSession) "
                    "sejumlah ini, tinggal diisi tanggal/mentor/link-nya di Kelola Pesanan.",
     )
+    commitment_letter_max_words = models.PositiveIntegerField(
+        default=500,
+        help_text="Batas maksimal kata buat commitment/motivation letter pendaftar, "
+                   "ditampilkan sebagai informasi di halaman pendaftaran publik.",
+    )
 
     class Meta:
         verbose_name = "Bootcamp Product"
@@ -279,11 +284,18 @@ def create_default_bootcamp_packages(bootcamp):
         )
 
 
+class BootcampRequirementCategory(models.TextChoices):
+    GENERAL = "general", "Syarat Umum"
+    COMMITMENT_LETTER = "commitment_letter", "Struktur Commitment Letter"
+
+
 class BootcampRequirement(models.Model):
-    """Satu syarat/rule pendaftaran (ditampilkan sebagai daftar bernomor di
-    halaman pendaftaran bootcamp publik) -- diatur admin per batch, gantiin
-    daftar yang dulu hardcoded di frontend. Peserta gabungin semua bukti
-    jadi 1 PDF (requirement_doc di BootcampRegistration), daftar ini cuma
+    """Satu item checklist (ditampilkan sebagai daftar bernomor di halaman
+    pendaftaran bootcamp publik) -- diatur admin per batch, gantiin daftar
+    yang dulu hardcoded di frontend. Dipakai buat 2 hal beda (dibedain lewat
+    `category`): syarat umum (peserta gabungin buktinya jadi 1 PDF di
+    requirement_doc) dan poin struktur commitment letter (file terpisah di
+    commitment_letter) -- keduanya di BootcampRegistration. Daftar ini cuma
     checklist informasional, gak ada validasi per-item di backend."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -292,13 +304,17 @@ class BootcampRequirement(models.Model):
         on_delete=models.CASCADE,
         related_name="requirements",
     )
+    category = models.CharField(
+        max_length=20, choices=BootcampRequirementCategory.choices,
+        default=BootcampRequirementCategory.GENERAL,
+    )
     text = models.CharField(max_length=500)
     order = models.PositiveIntegerField(default=0)
 
     class Meta:
         verbose_name = "Bootcamp Requirement"
         verbose_name_plural = "Bootcamp Requirements"
-        ordering = ["order"]
+        ordering = ["category", "order"]
 
     def __str__(self) -> str:
         return f"{self.text[:50]} ({self.bootcamp_id})"
@@ -313,14 +329,35 @@ DEFAULT_BOOTCAMP_REQUIREMENTS = [
 ]
 
 
+DEFAULT_COMMITMENT_LETTER_POINTS = [
+    "Personal Introduction & Background",
+    "Motivation for Joining the Bootcamp",
+    "Relevant Experiences & Achievements",
+    "Goals, Expectations & Skills to Develop",
+    "Contribution & Future Aspirations",
+]
+
+
 def create_default_bootcamp_requirements(bootcamp):
-    """Isi syarat pendaftaran standar buat BootcampProduct baru kalau belum
-    ada -- admin bisa ubah/tambah/hapus lagi lewat panel Kelola Pesanan
-    Bootcamp, ini cuma starting point biar gak kosong."""
-    if BootcampRequirement.objects.filter(bootcamp=bootcamp).exists():
-        return
-    for order, text in enumerate(DEFAULT_BOOTCAMP_REQUIREMENTS, start=1):
-        BootcampRequirement.objects.create(bootcamp=bootcamp, text=text, order=order)
+    """Isi syarat pendaftaran & struktur commitment letter standar buat
+    BootcampProduct baru kalau belum ada -- admin bisa ubah/tambah/hapus
+    lagi lewat panel Kelola Pesanan Bootcamp, ini cuma starting point biar
+    gak kosong."""
+    if not BootcampRequirement.objects.filter(
+        bootcamp=bootcamp, category=BootcampRequirementCategory.GENERAL
+    ).exists():
+        for order, text in enumerate(DEFAULT_BOOTCAMP_REQUIREMENTS, start=1):
+            BootcampRequirement.objects.create(
+                bootcamp=bootcamp, category=BootcampRequirementCategory.GENERAL, text=text, order=order,
+            )
+
+    if not BootcampRequirement.objects.filter(
+        bootcamp=bootcamp, category=BootcampRequirementCategory.COMMITMENT_LETTER
+    ).exists():
+        for order, text in enumerate(DEFAULT_COMMITMENT_LETTER_POINTS, start=1):
+            BootcampRequirement.objects.create(
+                bootcamp=bootcamp, category=BootcampRequirementCategory.COMMITMENT_LETTER, text=text, order=order,
+            )
 
 
 class BootcampTimelineItem(models.Model):
@@ -406,7 +443,14 @@ class BootcampRegistration(models.Model):
     )
     requirement_doc = models.FileField(
         upload_to="bootcamp_registrations/%Y/%m/",
-        help_text="Satu PDF gabungan berisi 5 bukti syarat pendaftaran.",
+        help_text="Satu PDF gabungan berisi bukti syarat pendaftaran (jumlah & isi diatur admin).",
+    )
+    commitment_letter = models.FileField(
+        upload_to="bootcamp_commitment_letters/%Y/%m/",
+        blank=True, null=True,
+        help_text="Commitment/motivation letter terpisah dari PDF syarat -- strukturnya diatur "
+                   "admin. Nullable karena ini requirement baru, pendaftaran lama (kalau ada) "
+                   "gak punya file ini; wajib diisi buat pendaftaran BARU (dicek di view, bukan di sini).",
     )
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.REGISTERED,
