@@ -49,6 +49,7 @@ export default function BootcampTimelinePanel({ productId }) {
   const [editingPackageId, setEditingPackageId] = useState(null);
   const [packageForm, setPackageForm] = useState({
     registration_opens_at: "", registration_closes_at: "", payment_deadline_at: "",
+    requires_selection: false, selection_quota: "",
     quiz_duration_minutes: "", quiz_passing_score_percent: "",
     name: "", price: "", commitment_fee: "", min_attendance_sessions: "",
     benefits: {},
@@ -130,6 +131,8 @@ export default function BootcampTimelinePanel({ productId }) {
       registration_opens_at: toWIBLocalInputValue(pkg.registration_opens_at),
       registration_closes_at: toWIBLocalInputValue(pkg.registration_closes_at),
       payment_deadline_at: toWIBLocalInputValue(pkg.payment_deadline_at),
+      requires_selection: Boolean(pkg.requires_selection),
+      selection_quota: pkg.selection_quota ?? "",
       quiz_duration_minutes: pkg.quiz_duration_minutes ?? 30,
       quiz_passing_score_percent: pkg.quiz_passing_score_percent ?? 70,
       name: pkg.name || "",
@@ -146,7 +149,6 @@ export default function BootcampTimelinePanel({ productId }) {
 
   const handleSavePackage = async () => {
     if (savingPackage) return;
-    const editingPkg = packages.find((p) => p.id === editingPackageId);
     setSavingPackage(true);
     try {
       const body = {
@@ -156,11 +158,15 @@ export default function BootcampTimelinePanel({ productId }) {
         name: packageForm.name.trim(),
         price: Number(packageForm.price) || 0,
         commitment_fee: Number(packageForm.commitment_fee) || 0,
+        requires_selection: packageForm.requires_selection,
         benefits: packageForm.benefits,
       };
-      if (editingPkg?.requires_selection) {
+      if (packageForm.requires_selection) {
+        body.selection_quota = packageForm.selection_quota === "" ? null : Number(packageForm.selection_quota) || null;
         body.quiz_duration_minutes = Number(packageForm.quiz_duration_minutes) || 30;
         body.quiz_passing_score_percent = Number(packageForm.quiz_passing_score_percent) || 0;
+      } else {
+        body.selection_quota = null;
       }
       if (Number(packageForm.commitment_fee) > 0) {
         body.min_attendance_sessions = Number(packageForm.min_attendance_sessions) || 0;
@@ -299,9 +305,16 @@ export default function BootcampTimelinePanel({ productId }) {
                         {formatDateTimeWIB(pkg.registration_opens_at)} s.d. {formatDateTimeWIB(pkg.registration_closes_at)}
                       </p>
                       {pkg.requires_selection && (
-                        <p className="text-[#64748B] text-[11.5px]">
-                          Tes BCC: {pkg.quiz_duration_minutes} menit, lulus ≥ {pkg.quiz_passing_score_percent}%
-                        </p>
+                        <>
+                          <p className="text-[#64748B] text-[11.5px]">
+                            Tes BCC: {pkg.quiz_duration_minutes} menit, lulus ≥ {pkg.quiz_passing_score_percent}%
+                          </p>
+                          <p className="text-[#64748B] text-[11.5px]">
+                            {pkg.selection_quota
+                              ? `${pkg.accepted_count}/${pkg.selection_quota} diterima`
+                              : `${pkg.accepted_count} diterima (gak ada kuota)`}
+                          </p>
+                        </>
                       )}
                       {pkg.payment_deadline_at && (
                         <p className="text-[#64748B] text-[11.5px]">
@@ -373,31 +386,56 @@ export default function BootcampTimelinePanel({ productId }) {
                         />
                         <span className="text-[#94A3B8] text-[10.5px]">Kosongkan kalau gak ada batas waktu otomatis.</span>
                       </div>
-                      {pkg.requires_selection && (
-                        <div className="flex gap-2">
-                          <div className="flex-1 flex flex-col gap-1">
-                            <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Durasi Tes (menit)</label>
+                      <label className="flex items-center gap-2 px-3 h-9 rounded-[6px] bg-[#F8FAFC] border border-[#E2E8F0] cursor-pointer w-fit">
+                        <input
+                          type="checkbox"
+                          checked={packageForm.requires_selection}
+                          onChange={(e) => setPackageForm((f) => ({ ...f, requires_selection: e.target.checked }))}
+                          className="accent-[#148F89]"
+                        />
+                        <span className="text-[12.5px] text-[#1E293B] font-medium">Butuh Seleksi (Tes BCC)?</span>
+                      </label>
+                      {packageForm.requires_selection && (
+                        <>
+                          <div className="flex gap-2">
+                            <div className="flex-1 flex flex-col gap-1">
+                              <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Durasi Tes (menit)</label>
+                              <input
+                                type="number"
+                                min={5}
+                                max={180}
+                                value={packageForm.quiz_duration_minutes}
+                                onChange={(e) => setPackageForm((f) => ({ ...f, quiz_duration_minutes: e.target.value }))}
+                                className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                              />
+                            </div>
+                            <div className="flex-1 flex flex-col gap-1">
+                              <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Skor Kelulusan (%)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                value={packageForm.quiz_passing_score_percent}
+                                onChange={(e) => setPackageForm((f) => ({ ...f, quiz_passing_score_percent: e.target.value }))}
+                                className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Kuota Diterima (opsional)</label>
                             <input
                               type="number"
-                              min={5}
-                              max={180}
-                              value={packageForm.quiz_duration_minutes}
-                              onChange={(e) => setPackageForm((f) => ({ ...f, quiz_duration_minutes: e.target.value }))}
+                              min={1}
+                              placeholder="Kosongkan = gak ada batas"
+                              value={packageForm.selection_quota}
+                              onChange={(e) => setPackageForm((f) => ({ ...f, selection_quota: e.target.value }))}
                               className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                             />
+                            <span className="text-[#94A3B8] text-[10.5px]">
+                              Cuma indikator progres -- gak ngunci tombol Terima di halaman Tinjau Pendaftaran.
+                            </span>
                           </div>
-                          <div className="flex-1 flex flex-col gap-1">
-                            <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Skor Kelulusan (%)</label>
-                            <input
-                              type="number"
-                              min={0}
-                              max={100}
-                              value={packageForm.quiz_passing_score_percent}
-                              onChange={(e) => setPackageForm((f) => ({ ...f, quiz_passing_score_percent: e.target.value }))}
-                              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
-                            />
-                          </div>
-                        </div>
+                        </>
                       )}
                       {Number(packageForm.commitment_fee) > 0 && (
                         <div className="flex flex-col gap-1">

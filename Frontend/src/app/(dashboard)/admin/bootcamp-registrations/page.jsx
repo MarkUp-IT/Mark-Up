@@ -201,6 +201,14 @@ export default function AdminBootcampRegistrations() {
                     <ShieldCheck size={13} className="text-[#148F89]" /> Tes BCC
                   </div>
                   <div className="flex justify-between"><span className="text-[#64748B]">Status</span><span className="text-[#1E293B] font-medium">{QUIZ_STATUS_LABEL[selected.quiz.status] || selected.quiz.status}</span></div>
+                  <div className="flex justify-between">
+                    <span className="text-[#64748B]">Kuota paket ini</span>
+                    <span className="text-[#1E293B] font-medium">
+                      {selected.package.selection_quota
+                        ? `${selected.package.accepted_count}/${selected.package.selection_quota} diterima`
+                        : `${selected.package.accepted_count} diterima (gak ada kuota)`}
+                    </span>
+                  </div>
                   {selected.quiz.score_percent != null && (
                     <>
                       <div className="flex justify-between"><span className="text-[#64748B]">Skor</span><span className="text-[#1E293B] font-medium">{selected.quiz.score_percent}%</span></div>

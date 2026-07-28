@@ -192,8 +192,18 @@ class BootcampPackage(models.Model):
     )
     requires_selection = models.BooleanField(
         default=False,
-        help_text="True untuk Mentee: pendaftar wajib lolos seleksi (BCC test) "
-                   "dulu sebelum boleh bayar. Paket lain cukup di-ACC admin.",
+        help_text="Kalau True: pendaftar wajib lolos seleksi (tes BCC) dulu sebelum "
+                   "boleh bayar. Kalau False: cukup di-ACC admin. Dinamis per paket, "
+                   "gak terikat ke paket 'Mentee' secara khusus -- admin bisa "
+                   "nyalain/matiin dari panel Kelola Pesanan Bootcamp.",
+    )
+    selection_quota = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Target jumlah pendaftar yang mau diterima lewat seleksi paket ini. "
+                   "Kosong = gak ada batas. Ini CUMA indikator progres di panel admin "
+                   "('12/30 diterima') -- gak pernah ngunci tombol Terima, sama kayak "
+                   "pola 'eligible' di fitur lain (skor tes, refund commitment fee): "
+                   "keputusan Terima/Tolak tetap manual sepenuhnya di tangan admin.",
     )
     quiz_duration_minutes = models.PositiveIntegerField(
         default=30,

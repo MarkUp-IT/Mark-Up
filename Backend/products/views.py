@@ -1630,6 +1630,11 @@ def _serialize_package(pkg):
         "commitment_fee": str(pkg.commitment_fee),
         "total_price": str(pkg.price + pkg.commitment_fee),
         "requires_selection": pkg.requires_selection,
+        "selection_quota": pkg.selection_quota,
+        "accepted_count": (
+            pkg.registrations.filter(status=BootcampRegistration.Status.ACCEPTED).count()
+            if pkg.requires_selection else None
+        ),
         "is_active": pkg.is_active,
         "registration_opens_at": pkg.registration_opens_at.isoformat() if pkg.registration_opens_at else None,
         "registration_closes_at": pkg.registration_closes_at.isoformat() if pkg.registration_closes_at else None,
@@ -1749,6 +1754,11 @@ def _serialize_registration(reg, for_admin=False):
             "slug": reg.package.slug,
             "name": reg.package.name,
             "requires_selection": reg.package.requires_selection,
+            "selection_quota": reg.package.selection_quota,
+            "accepted_count": (
+                reg.package.registrations.filter(status=BootcampRegistration.Status.ACCEPTED).count()
+                if reg.package.requires_selection else None
+            ),
             "price": str(reg.package.price),
             "commitment_fee": str(reg.package.commitment_fee),
             "payment_deadline_at": reg.package.payment_deadline_at.isoformat() if reg.package.payment_deadline_at else None,
@@ -2240,8 +2250,22 @@ def update_bootcamp_package(request, package_id):
         package.payment_deadline_at = _parse_wib_datetime_or_none(request_data["payment_deadline_at"])
     if "is_active" in request_data:
         package.is_active = bool(request_data["is_active"])
+    if "requires_selection" in request_data:
+        package.requires_selection = bool(request_data["requires_selection"])
 
     errors = {}
+    if "selection_quota" in request_data:
+        raw_quota = request_data["selection_quota"]
+        if raw_quota in (None, ""):
+            package.selection_quota = None
+        else:
+            try:
+                quota = int(raw_quota)
+                if quota < 1:
+                    raise ValueError
+                package.selection_quota = quota
+            except (TypeError, ValueError):
+                errors["selection_quota"] = ["Kuota harus angka >= 1, atau kosongkan buat gak ada batas."]
     if "name" in request_data:
         name = (request_data["name"] or "").strip()
         if not name:
