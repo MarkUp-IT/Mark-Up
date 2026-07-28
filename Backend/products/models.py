@@ -182,7 +182,12 @@ class BootcampPackage(models.Model):
         on_delete=models.CASCADE,
         related_name="packages",
     )
-    slug = models.CharField(max_length=20, choices=PackageSlug.choices)
+    # Dulu dibatasi choices=PackageSlug.choices, jadi satu bootcamp mentok 4
+    # paket dan admin gak bisa bikin jenis paket baru sama sekali. Sekarang
+    # bebas (di-generate otomatis dari nama), PackageSlug cuma dipakai buat
+    # nyeed 4 paket default. Aman diubah karena slug murni buat tampilan --
+    # gak ada logic yang ngecek nilainya (dicek langsung ke seluruh kode).
+    slug = models.CharField(max_length=50)
     name = models.CharField(max_length=100)
     price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     commitment_fee = models.DecimalField(
@@ -245,6 +250,17 @@ class BootcampPackage(models.Model):
     benefit_networking = models.BooleanField(default=False)
     benefit_ecertificate = models.BooleanField(default=True)
 
+    # Catatan buat yang baca nanti: 9 field di atas SENGAJA tetap kolom tetap,
+    # bukan tabel bebas. Tujuh di antaranya beneran ngunci fitur, bukan cuma
+    # tulisan di kartu paket:
+    #   record_incubation / framework_template / winning_deck -> hak unduh file
+    #     (dicocokin ke BootcampResourceType lewat getattr "benefit_<type>")
+    #   mentoring_case / career_coaching / networking -> sesi mana yang kelihatan
+    #     (BootcampSessionRequiredBenefit)
+    #   team_pairing -> boleh dimasukin tim atau nggak
+    # Kalau ini diganti jadi teks bebas, penguncian itu jebol tanpa error --
+    # makanya benefit tambahan yang bebas ditaruh di model terpisah di bawah.
+
     class Meta:
         verbose_name = "Bootcamp Package"
         verbose_name_plural = "Bootcamp Packages"
@@ -258,6 +274,32 @@ class BootcampPackage(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.bootcamp_id})"
+
+
+class BootcampPackageExtraBenefit(models.Model):
+    """Benefit tambahan bebas per paket, di luar 9 benefit bawaan.
+
+    Dibikin terpisah karena 9 benefit bawaan itu nyangkut ke penguncian fitur
+    (hak unduh file, visibilitas sesi, team pairing) -- gak bisa dijadiin teks
+    bebas tanpa ngerusak itu. Yang di sini murni buat ditampilin di kartu paket
+    (mis. "Akses Grup Alumni", "Sesi Bonus Review CV"), jadi admin bisa nambah
+    sebanyak apa pun tanpa perlu migrasi database.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    package = models.ForeignKey(
+        BootcampPackage, on_delete=models.CASCADE, related_name="extra_benefits",
+    )
+    label = models.CharField(max_length=120)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Bootcamp Package Extra Benefit"
+        verbose_name_plural = "Bootcamp Package Extra Benefits"
+        ordering = ["order", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.label} ({self.package_id})"
 
 
 # Nilai default 4 paket standar -- dipakai saat produk bootcamp dibuat, biar

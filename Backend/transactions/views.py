@@ -1197,3 +1197,77 @@ def get_my_payouts(request):
     ).order_by("-created_at")
 
     return JsonResponse({"payouts": [_serialize_payout(p) for p in payouts]}, status=200)
+
+def get_bank_account(request):
+    """Rekening tujuan transfer -- PUBLIK (tanpa login), karena halaman
+    pembayaran perlu nampilin ini sebelum/selagi user bayar. Isinya memang
+    ditujukan buat dibaca umum, sama kayak nomor rekening yang dipajang di
+    halaman checkout."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    from .models import BankAccountSetting
+
+    setting = BankAccountSetting.get_solo()
+    return JsonResponse(
+        {
+            "bank_name": setting.bank_name,
+            "account_number": setting.account_number,
+            "account_holder": setting.account_holder,
+        },
+        status=200,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_bank_account(request):
+    """Admin ubah rekening tujuan transfer. Dulu ini hardcode di file frontend,
+    jadi ganti rekening = ganti kode + deploy ulang."""
+    if request.method not in ("PATCH", "PUT"):
+        return HttpResponseNotAllowed(["PATCH", "PUT"])
+
+    from .models import BankAccountSetting
+
+    data = get_request_data(request)
+    if data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    setting = BankAccountSetting.get_solo()
+    errors = {}
+
+    if "bank_name" in data:
+        bank_name = (data["bank_name"] or "").strip()
+        if not bank_name:
+            errors["bank_name"] = ["Nama bank wajib diisi."]
+        else:
+            setting.bank_name = bank_name
+    if "account_number" in data:
+        account_number = (data["account_number"] or "").strip()
+        if not account_number:
+            errors["account_number"] = ["Nomor rekening wajib diisi."]
+        else:
+            setting.account_number = account_number
+    if "account_holder" in data:
+        account_holder = (data["account_holder"] or "").strip()
+        if not account_holder:
+            errors["account_holder"] = ["Nama pemilik rekening wajib diisi."]
+        else:
+            setting.account_holder = account_holder
+
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    setting.save()
+    log_audit(request, AuditAction.UPDATE, "bank_account_setting", object_id=None)
+
+    return JsonResponse(
+        {
+            "detail": "Rekening berhasil diperbarui.",
+            "bank_name": setting.bank_name,
+            "account_number": setting.account_number,
+            "account_holder": setting.account_holder,
+        },
+        status=200,
+    )

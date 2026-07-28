@@ -6,9 +6,10 @@ import random
 
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db import IntegrityError, transaction as db_transaction
+from django.db import IntegrityError, models, transaction as db_transaction
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
+from django.utils.text import slugify
 from django.utils.dateparse import parse_date, parse_datetime
 
 from .utils import get_request_data
@@ -17,6 +18,7 @@ from .models import (
     BootcampProduct,
     BootcampSession,
     BootcampPackage,
+    BootcampPackageExtraBenefit,
     BootcampRegistration,
     BootcampTimelineItem,
     BootcampQuizQuestion,
@@ -1647,6 +1649,12 @@ def _serialize_package(pkg):
             {"key": field, "label": label, "included": getattr(pkg, field)}
             for field, label in _BENEFIT_LABELS
         ],
+        # Benefit tambahan bebas (cuma tampilan). Selalu dianggap "included" --
+        # kalau admin gak mau nampilin, tinggal dihapus itemnya.
+        "extra_benefits": [
+            {"id": str(b.id), "label": b.label, "order": b.order}
+            for b in pkg.extra_benefits.all()
+        ],
     }
 
 
@@ -2329,6 +2337,174 @@ def update_bootcamp_package(request, package_id):
         {"detail": "Paket berhasil diperbarui.", "package": _serialize_package(package)},
         status=200,
     )
+
+
+def _unique_package_slug(bootcamp_id, name):
+    """Bikin slug unik per bootcamp dari nama paket. Slug cuma dipakai buat
+    tampilan (gak ada logic yang ngecek nilainya), tapi tetap harus unik
+    karena ada UniqueConstraint (bootcamp, slug) di database."""
+    base = slugify(name)[:40] or "paket"
+    slug = base
+    n = 2
+    while BootcampPackage.objects.filter(bootcamp_id=bootcamp_id, slug=slug).exists():
+        suffix = f"-{n}"
+        slug = f"{base[:50 - len(suffix)]}{suffix}"
+        n += 1
+    return slug
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def add_bootcamp_package(request, product_id):
+    """Bikin paket baru buat sebuah bootcamp. Sebelumnya paket cuma bisa lahir
+    otomatis dari DEFAULT_BOOTCAMP_PACKAGES (mentok 4 & namanya terkunci)."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        bootcamp = BootcampProduct.objects.get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Bootcamp tidak ditemukan."}, status=404)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    errors = {}
+    name = (request_data.get("name") or "").strip()
+    if not name:
+        errors["name"] = ["Nama paket wajib diisi."]
+
+    price = Decimal("0")
+    if "price" in request_data:
+        try:
+            price = Decimal(str(request_data["price"])).quantize(Decimal("0.01"))
+            if price < 0:
+                raise ValueError
+        except (TypeError, ValueError, InvalidOperation):
+            errors["price"] = ["Harga harus angka >= 0."]
+
+    commitment_fee = Decimal("0")
+    if "commitment_fee" in request_data:
+        try:
+            commitment_fee = Decimal(str(request_data["commitment_fee"])).quantize(Decimal("0.01"))
+            if commitment_fee < 0:
+                raise ValueError
+        except (TypeError, ValueError, InvalidOperation):
+            errors["commitment_fee"] = ["Commitment fee harus angka >= 0."]
+
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    last_order = (
+        BootcampPackage.objects.filter(bootcamp=bootcamp)
+        .aggregate(models.Max("order"))["order__max"] or 0
+    )
+
+    package = BootcampPackage.objects.create(
+        bootcamp=bootcamp,
+        slug=_unique_package_slug(bootcamp.pk, name),
+        name=name,
+        price=price,
+        commitment_fee=commitment_fee,
+        requires_selection=bool(request_data.get("requires_selection", False)),
+        order=last_order + 1,
+    )
+
+    log_audit(request, AuditAction.CREATE, "bootcamp_packages", object_id=package.id)
+
+    return JsonResponse(
+        {"detail": "Paket berhasil dibuat.", "package": _serialize_package(package)},
+        status=201,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def delete_bootcamp_package(request, package_id):
+    """Hapus paket. Sengaja DITOLAK kalau paket udah punya pendaftar atau
+    pembelian -- FK-nya CASCADE, jadi kalau dibiarin, hapus paket bakal ikut
+    ngapus riwayat pendaftaran & akses peserta tanpa peringatan apa pun."""
+    if request.method != "DELETE":
+        return HttpResponseNotAllowed(["DELETE"])
+
+    try:
+        package = BootcampPackage.objects.get(id=package_id)
+    except BootcampPackage.DoesNotExist:
+        return JsonResponse({"detail": "Paket tidak ditemukan."}, status=404)
+
+    reg_count = BootcampRegistration.objects.filter(package=package).count()
+    lib_count = UserLibrary.objects.filter(package=package).count()
+    if reg_count or lib_count:
+        return JsonResponse(
+            {
+                "detail": (
+                    f"Paket ini sudah dipakai ({reg_count} pendaftaran, {lib_count} pembelian) "
+                    "jadi gak bisa dihapus. Nonaktifkan aja lewat tombol Aktif/Nonaktif "
+                    "supaya gak muncul di halaman pendaftaran, tapi riwayatnya tetap aman."
+                )
+            },
+            status=400,
+        )
+
+    log_audit(request, AuditAction.DELETE, "bootcamp_packages", object_id=package.id)
+    package.delete()
+    return JsonResponse({"detail": "Paket berhasil dihapus."}, status=200)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def add_package_extra_benefit(request, package_id):
+    """Tambah benefit tampilan bebas ke sebuah paket."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        package = BootcampPackage.objects.get(id=package_id)
+    except BootcampPackage.DoesNotExist:
+        return JsonResponse({"detail": "Paket tidak ditemukan."}, status=404)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    label = (request_data.get("label") or "").strip()
+    if not label:
+        return JsonResponse({"errors": {"label": ["Teks benefit wajib diisi."]}}, status=400)
+
+    last_order = (
+        package.extra_benefits.aggregate(models.Max("order"))["order__max"] or 0
+    )
+    benefit = BootcampPackageExtraBenefit.objects.create(
+        package=package, label=label, order=last_order + 1,
+    )
+
+    return JsonResponse(
+        {
+            "detail": "Benefit tambahan dibuat.",
+            "extra_benefit": {"id": str(benefit.id), "label": benefit.label, "order": benefit.order},
+        },
+        status=201,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def delete_package_extra_benefit(request, benefit_id):
+    if request.method != "DELETE":
+        return HttpResponseNotAllowed(["DELETE"])
+
+    try:
+        benefit = BootcampPackageExtraBenefit.objects.get(id=benefit_id)
+    except BootcampPackageExtraBenefit.DoesNotExist:
+        return JsonResponse({"detail": "Benefit tidak ditemukan."}, status=404)
+
+    benefit.delete()
+    return JsonResponse({"detail": "Benefit tambahan dihapus."}, status=200)
 
 
 # ---------- Resource (file) benefit eksklusif per paket ----------

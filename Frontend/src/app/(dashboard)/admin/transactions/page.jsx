@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
+import BankAccountPanel from "@/component/admin/BankAccountPanel";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 
@@ -190,6 +191,8 @@ export default function Transactions() {
           value={monthlyRevenue == null ? "-" : formatIDR(monthlyRevenue)}
         />
       </div>
+
+      <BankAccountPanel />
 
       <div className="flex flex-col gap-4">
         <div className="flex items-end justify-between gap-4 flex-wrap">
