@@ -313,3 +313,33 @@ class CommissionSetting(models.Model):
 
     def __str__(self) -> str:
         return f"Komisi mentoring: {self.mentoring_fee_percent}% ke MarkUp"
+
+
+class BankAccountSetting(models.Model):
+    """Rekening tujuan transfer (singleton, pk=1).
+
+    Dulu di-hardcode di Frontend/src/lib/bankInfo.js, jadi tiap ganti rekening
+    harus ubah kode + deploy ulang. Sekarang admin bisa ubah sendiri lewat
+    halaman Pengaturan, dan halaman pembayaran ngambilnya dari sini.
+    """
+
+    bank_name = models.CharField(max_length=100, default="Mandiri")
+    account_number = models.CharField(max_length=50, default="")
+    account_holder = models.CharField(max_length=150, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Bank Account Setting"
+        verbose_name_plural = "Bank Account Settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self) -> str:
+        return f"{self.bank_name} {self.account_number} a.n {self.account_holder}"

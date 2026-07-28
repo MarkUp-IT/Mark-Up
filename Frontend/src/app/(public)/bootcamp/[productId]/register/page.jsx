@@ -344,6 +344,14 @@ export default function BootcampRegisterPage() {
                           {b.label}
                         </span>
                       ))}
+                      {/* Benefit tambahan yang diatur admin -- selalu "dapat",
+                          soalnya kalau gak ditawarin ya tinggal gak dibikin. */}
+                      {(pkg.extra_benefits || []).map((b) => (
+                        <span key={b.id} className="text-[12px] flex items-center gap-2 text-[#E2E8F0]">
+                          <Check size={13} className="text-[#148F89] shrink-0" />
+                          {b.label}
+                        </span>
+                      ))}
                     </div>
 
                     {alreadyReg && (

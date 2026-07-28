@@ -56,6 +56,13 @@ export default function BootcampTimelinePanel({ productId }) {
   });
   const [savingPackage, setSavingPackage] = useState(false);
 
+  const [showAddPackage, setShowAddPackage] = useState(false);
+  const [newPackageForm, setNewPackageForm] = useState({
+    name: "", price: "", commitment_fee: "", requires_selection: false,
+  });
+  const [savingNewPackage, setSavingNewPackage] = useState(false);
+  const [extraBenefitDraft, setExtraBenefitDraft] = useState({});
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -145,6 +152,67 @@ export default function BootcampTimelinePanel({ productId }) {
 
   const toggleBenefit = (key) => {
     setPackageForm((f) => ({ ...f, benefits: { ...f.benefits, [key]: !f.benefits[key] } }));
+  };
+
+  const handleAddPackage = async () => {
+    if (savingNewPackage || !newPackageForm.name.trim()) return;
+    setSavingNewPackage(true);
+    try {
+      await apiRequest(`/api/products/${productId}/packages/add/`, {
+        method: "POST",
+        body: {
+          name: newPackageForm.name.trim(),
+          price: Number(newPackageForm.price) || 0,
+          commitment_fee: Number(newPackageForm.commitment_fee) || 0,
+          requires_selection: newPackageForm.requires_selection,
+        },
+      });
+      toast.success("Paket Dibuat");
+      setShowAddPackage(false);
+      setNewPackageForm({ name: "", price: "", commitment_fee: "", requires_selection: false });
+      fetchData();
+    } catch (err) {
+      toast.error("Gagal Membuat Paket", { description: extractErrorMessage(err, "Terjadi kesalahan.") });
+    } finally {
+      setSavingNewPackage(false);
+    }
+  };
+
+  const handleDeletePackage = async (pkg) => {
+    if (!confirm(`Hapus paket "${pkg.name}"? Tindakan ini tidak bisa dibatalkan.`)) return;
+    try {
+      await apiRequest(`/api/products/bootcamp-packages/${pkg.id}/delete/`, { method: "DELETE" });
+      toast.success("Paket Dihapus");
+      fetchData();
+    } catch (err) {
+      // Backend nolak kalau paketnya udah punya pendaftar/pembelian -- pesannya
+      // udah menjelaskan alasannya, jadi tampilin apa adanya.
+      toast.error("Gagal Menghapus Paket", { description: extractErrorMessage(err, "Terjadi kesalahan.") });
+    }
+  };
+
+  const handleAddExtraBenefit = async (pkgId) => {
+    const label = (extraBenefitDraft[pkgId] || "").trim();
+    if (!label) return;
+    try {
+      await apiRequest(`/api/products/bootcamp-packages/${pkgId}/extra-benefits/add/`, {
+        method: "POST",
+        body: { label },
+      });
+      setExtraBenefitDraft((d) => ({ ...d, [pkgId]: "" }));
+      fetchData();
+    } catch (err) {
+      toast.error("Gagal Menambah Benefit", { description: extractErrorMessage(err, "Terjadi kesalahan.") });
+    }
+  };
+
+  const handleDeleteExtraBenefit = async (benefitId) => {
+    try {
+      await apiRequest(`/api/products/bootcamp-extra-benefits/${benefitId}/`, { method: "DELETE" });
+      fetchData();
+    } catch (err) {
+      toast.error("Gagal Menghapus Benefit", { description: extractErrorMessage(err, "Terjadi kesalahan.") });
+    }
   };
 
   const handleSavePackage = async () => {
@@ -273,7 +341,70 @@ export default function BootcampTimelinePanel({ productId }) {
 
       {/* Jendela pendaftaran per paket */}
       <div className="bg-white border border-[#E2E8F0] rounded-[12px] p-5 flex flex-col gap-4">
-        <h2 className="font-bold text-[15px] text-[#0F172A]">Jendela Pendaftaran Paket</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-[15px] text-[#0F172A]">Jendela Pendaftaran Paket</h2>
+          <button
+            onClick={() => setShowAddPackage((v) => !v)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors"
+          >
+            <Plus size={13} /> Tambah Paket
+          </button>
+        </div>
+
+        {showAddPackage && (
+          <div className="flex flex-col gap-2.5 p-3.5 rounded-[8px] bg-[#F8FAFC] border border-[#E2E8F0]">
+            <input
+              type="text"
+              placeholder="Nama paket baru, mis. Kelas Alumni"
+              value={newPackageForm.name}
+              onChange={(e) => setNewPackageForm((f) => ({ ...f, name: e.target.value }))}
+              className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+            />
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min={0}
+                placeholder="Harga (Rp)"
+                value={newPackageForm.price}
+                onChange={(e) => setNewPackageForm((f) => ({ ...f, price: e.target.value }))}
+                className="flex-1 bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+              />
+              <input
+                type="number"
+                min={0}
+                placeholder="Commitment fee (Rp)"
+                value={newPackageForm.commitment_fee}
+                onChange={(e) => setNewPackageForm((f) => ({ ...f, commitment_fee: e.target.value }))}
+                className="flex-1 bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-[12.5px] text-[#1E293B] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={newPackageForm.requires_selection}
+                onChange={(e) => setNewPackageForm((f) => ({ ...f, requires_selection: e.target.checked }))}
+                className="accent-[#148F89]"
+              />
+              Butuh Seleksi (Tes BCC)?
+            </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowAddPackage(false)}
+                className="flex-1 h-9 rounded-[6px] border border-[#E2E8F0] text-[#64748B] text-[12.5px] font-semibold hover:bg-white transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleAddPackage}
+                disabled={!newPackageForm.name.trim() || savingNewPackage}
+                className="flex-1 h-9 rounded-[6px] bg-[#148F89] text-white text-[12.5px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-50"
+              >
+                {savingNewPackage ? "Menyimpan..." : "Simpan"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {packages.length === 0 ? (
           <p className="text-[#94A3B8] text-[12.5px] italic">Belum ada paket.</p>
         ) : (
@@ -291,9 +422,14 @@ export default function BootcampTimelinePanel({ productId }) {
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={`px-2.5 py-1 rounded-full text-[10.5px] font-bold ${meta.cls}`}>{meta.label}</span>
                       {!isEditing && (
-                        <button onClick={() => openEditPackage(pkg)} className="p-1.5 rounded-[6px] text-[#64748B] hover:text-[#148F89] hover:bg-[#148F89]/5 transition-colors">
-                          <Pencil size={13} />
-                        </button>
+                        <>
+                          <button onClick={() => openEditPackage(pkg)} className="p-1.5 rounded-[6px] text-[#64748B] hover:text-[#148F89] hover:bg-[#148F89]/5 transition-colors">
+                            <Pencil size={13} />
+                          </button>
+                          <button onClick={() => handleDeletePackage(pkg)} className="p-1.5 rounded-[6px] text-[#DC2626] hover:bg-red-50 transition-colors">
+                            <Trash2 size={13} />
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -454,6 +590,9 @@ export default function BootcampTimelinePanel({ productId }) {
                       )}
                       <div className="flex flex-col gap-1.5">
                         <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Benefit</label>
+                        <span className="text-[#94A3B8] text-[10.5px] -mt-1">
+                          Yang ini ngatur hak akses beneran (unduh file, sesi mana yang kelihatan, team pairing).
+                        </span>
                         <div className="flex flex-col gap-1">
                           {(pkg.benefits || []).map((b) => (
                             <label key={b.key} className="flex items-center gap-2 text-[12px] text-[#334155] cursor-pointer">
@@ -468,6 +607,49 @@ export default function BootcampTimelinePanel({ productId }) {
                           ))}
                         </div>
                       </div>
+
+                      {/* Benefit tambahan: bebas, cuma buat ditampilin di kartu paket.
+                          Disimpan langsung pas ditambah/hapus (bukan nunggu tombol
+                          Simpan) supaya beda perlakuannya jelas dari benefit bawaan. */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Benefit Tambahan</label>
+                        <span className="text-[#94A3B8] text-[10.5px] -mt-1">
+                          Bebas, cuma tampilan di kartu paket. Langsung tersimpan begitu ditambah/dihapus.
+                        </span>
+                        {(pkg.extra_benefits || []).length > 0 && (
+                          <div className="flex flex-col gap-1">
+                            {pkg.extra_benefits.map((b) => (
+                              <div key={b.id} className="flex items-center justify-between gap-2 text-[12px] text-[#334155] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-2.5 py-1.5">
+                                <span className="truncate">{b.label}</span>
+                                <button
+                                  onClick={() => handleDeleteExtraBenefit(b.id)}
+                                  className="p-1 rounded-[4px] text-[#DC2626] hover:bg-red-50 transition-colors shrink-0"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="mis. Akses Grup Alumni"
+                            value={extraBenefitDraft[pkg.id] || ""}
+                            onChange={(e) => setExtraBenefitDraft((d) => ({ ...d, [pkg.id]: e.target.value }))}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddExtraBenefit(pkg.id); } }}
+                            className="flex-1 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-8 text-[12px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                          />
+                          <button
+                            onClick={() => handleAddExtraBenefit(pkg.id)}
+                            disabled={!(extraBenefitDraft[pkg.id] || "").trim()}
+                            className="px-3 h-8 rounded-[6px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-50"
+                          >
+                            <Plus size={13} />
+                          </button>
+                        </div>
+                      </div>
+
                       <div className="flex gap-2">
                         <button
                           onClick={() => setEditingPackageId(null)}

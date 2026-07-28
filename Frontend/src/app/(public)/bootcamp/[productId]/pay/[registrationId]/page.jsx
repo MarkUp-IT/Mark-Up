@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Landmark, Copy, CheckCircle2, AlertCircle, Upload, FileText, Trash2, Clock, AlertTriangle } from "lucide-react";
 import Navbar from "@/component/Navbar";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
-import { BANK_INFO } from "@/lib/bankInfo";
+import { useBankInfo } from "@/lib/bankInfo";
 import { toast } from "sonner";
 
 const MAX_PROOF_SIZE = 5 * 1024 * 1024;
@@ -34,6 +34,7 @@ export default function BootcampPaymentPage() {
   const [isCopied, setIsCopied] = useState(false);
   const [file, setFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const { bankInfo } = useBankInfo();
 
   const fetchRegistration = async () => {
     setLoading(true);
@@ -58,7 +59,7 @@ export default function BootcampPaymentPage() {
   }, [registrationId]);
 
   const handleCopyBank = () => {
-    navigator.clipboard.writeText(BANK_INFO.account.replace(/\s/g, ""));
+    navigator.clipboard.writeText(bankInfo.account.replace(/\s/g, ""));
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
@@ -191,10 +192,10 @@ export default function BootcampPaymentPage() {
                   </div>
                   <div className="bg-[#0F081C] border border-[#2D2342] rounded-[8px] p-4 flex flex-col gap-3">
                     <div className="flex flex-col gap-1">
-                      <span className="text-[#9CA3AF] text-[11px] font-semibold">{BANK_INFO.name}</span>
-                      <span className="text-white font-bold text-[19px] tracking-widest font-mono">{BANK_INFO.account}</span>
+                      <span className="text-[#9CA3AF] text-[11px] font-semibold">{bankInfo.name}</span>
+                      <span className="text-white font-bold text-[19px] tracking-widest font-mono">{bankInfo.account}</span>
                       <span className="text-[#E2E8F0] text-[12px] mt-0.5">
-                        a.n <span className="font-bold">{BANK_INFO.holder}</span>
+                        a.n <span className="font-bold">{bankInfo.holder}</span>
                       </span>
                     </div>
                     <button

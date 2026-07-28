@@ -18,7 +18,7 @@ import {
 import Navbar from "@/component/Navbar";
 import { getAccessToken, API_BASE } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
-import { BANK_INFO } from "@/lib/bankInfo";
+import { useBankInfo } from "@/lib/bankInfo";
 import { toast } from "sonner";
 
 const NAVBAR_CLEARANCE = 150;
@@ -130,6 +130,7 @@ export default function CheckoutPaymentPage() {
   const reservationMinutes = Math.round(reservationSeconds / 60);
 
   const [isCopied, setIsCopied] = useState(false);
+  const { bankInfo } = useBankInfo();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(reservationSeconds);
@@ -163,7 +164,7 @@ export default function CheckoutPaymentPage() {
   }, []);
 
   const handleCopyBank = () => {
-    navigator.clipboard.writeText(BANK_INFO.account.replace(/\s/g, ""));
+    navigator.clipboard.writeText(bankInfo.account.replace(/\s/g, ""));
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
@@ -393,13 +394,13 @@ export default function CheckoutPaymentPage() {
                   <div className="bg-[#0F081C] border border-[#2D2342] rounded-[8px] p-4 flex flex-col gap-3">
                     <div className="flex flex-col gap-1">
                       <span className="text-[#9CA3AF] text-[11px] font-semibold">
-                        {BANK_INFO.name}
+                        {bankInfo.name}
                       </span>
                       <span className="text-white font-bold text-[19px] tracking-widest font-mono">
-                        {BANK_INFO.account}
+                        {bankInfo.account}
                       </span>
                       <span className="text-[#E2E8F0] text-[12px] mt-0.5">
-                        a.n <span className="font-bold">{BANK_INFO.holder}</span>
+                        a.n <span className="font-bold">{bankInfo.holder}</span>
                       </span>
                     </div>
                     <button
