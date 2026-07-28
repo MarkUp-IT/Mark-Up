@@ -445,7 +445,11 @@ def update_bootcamp_session_template(request, session_id):
     # update template-nya, ikut disebar ke salinan sesi tiap peserta yang
     # sudah beli tapi BELUM menyelesaikan sesi itu -- yang sudah selesai
     # dibiarkan apa adanya karena riwayatnya sudah final.
-    sync_fields = {"title": session.title, "start_time": session.start_time, "meeting_link": session.meeting_link}
+    # products.BootcampSession.meeting_link gak nullable (cuma blank=True),
+    # beda sama field ini yang null=True -- None wajib dinormalisasi ke ""
+    # dulu, kalau enggak .update() di bawah langsung nabrak NOT NULL
+    # constraint di database begitu template belum diisi link sama sekali.
+    sync_fields = {"title": session.title, "start_time": session.start_time, "meeting_link": session.meeting_link or ""}
     active_buyer_sessions = list(session.buyer_sessions.exclude(status="completed"))
     session.buyer_sessions.exclude(status="completed").update(**sync_fields)
     if mentor_changed:

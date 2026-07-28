@@ -70,6 +70,25 @@ def get_mentors(request):
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])
 
+    # Endpoint ini dipakai buat DUA konteks beda: direktori mentor publik
+    # (harus nyaring profil belum lengkap) DAN dropdown assign-mentor-ke-sesi
+    # admin (kelola pesanan bootcamp) -- admin harus tetap bisa nugasin
+    # mentor yang profil publiknya belum lengkap, karena itu urusan internal
+    # penjadwalan/payout, bukan tampilan publik. Deteksi admin dari JWT kalau
+    # ada, tapi endpoint tetap boleh diakses tanpa token (buat direktori publik).
+    requester_is_admin = False
+    auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+    if auth_header.startswith("Bearer "):
+        from rest_framework_simplejwt.authentication import JWTAuthentication
+        from rest_framework_simplejwt.exceptions import InvalidToken, AuthenticationFailed
+
+        try:
+            jwt_auth = JWTAuthentication()
+            validated_token = jwt_auth.get_validated_token(auth_header.split(" ", 1)[1].strip())
+            requester_is_admin = jwt_auth.get_user(validated_token).role == UserRole.ADMIN
+        except (InvalidToken, AuthenticationFailed):
+            requester_is_admin = False
+
     mentors = (
         MentorProfile.objects.select_related("user")
         .prefetch_related(
@@ -109,10 +128,11 @@ def get_mentors(request):
 
     # Mentor yang profilnya belum lengkap (lihat MentorProfile.is_profile_complete)
     # nggak ditampilin publik -- masih nyembunyiin diri sampai data wajibnya keisi.
+    # Admin (lihat requester_is_admin di atas) tetap lihat semua mentor.
     data = [
         _serialize_mentor(mentor, request)
         for mentor in mentors
-        if mentor.is_profile_complete()
+        if requester_is_admin or mentor.is_profile_complete()
     ]
     return JsonResponse({"mentors": data}, status=200)
 

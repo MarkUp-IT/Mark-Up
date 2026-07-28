@@ -198,7 +198,10 @@ export default function BootcampOrderDetail() {
   useEffect(() => {
     fetchDetail();
     fetchParticipants();
-    apiRequest("/api/mentors/", { auth: false })
+    // auth: true (default) -- perlu dikirim biar backend tau ini admin dan
+    // ikut nampilin mentor yang profil publiknya belum lengkap juga, soalnya
+    // dropdown ini buat assign mentor internal, bukan direktori publik.
+    apiRequest("/api/mentors/")
       .then((res) => setMentors(res?.mentors || []))
       .catch(console.error);
   }, [fetchDetail, fetchParticipants]);
