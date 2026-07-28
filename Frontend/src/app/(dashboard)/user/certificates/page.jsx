@@ -60,8 +60,8 @@ export default function Certificates() {
           Sertifikat Saya
         </h1>
         <p className="text-[#9CA3AF] text-[14px] mt-1">
-          Sertifikat diterbitkan otomatis setelah kamu menyelesaikan sebuah
-          program bootcamp di Mark-Up.
+          Sertifikat diterbitkan tim Mark-Up setelah kamu menyelesaikan sebuah
+          program bootcamp, biasanya beberapa hari kerja setelah program berakhir.
         </p>
       </motion.div>
 

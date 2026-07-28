@@ -45,7 +45,7 @@ export const faqData = {
     },
     {
       q: "Apakah saya dapat sertifikat setelah menyelesaikan Bootcamp?",
-      a: "Ya. Setelah menyelesaikan seluruh sesi dalam sebuah program Bootcamp, sertifikat akan diterbitkan otomatis dan bisa kamu lihat serta unduh dari halaman Sertifikat di akunmu.",
+      a: "Ya. Setelah kamu menyelesaikan seluruh sesi dalam sebuah program Bootcamp, tim kami akan menerbitkan sertifikatmu. Prosesnya biasanya memakan waktu beberapa hari kerja setelah program berakhir, dan begitu terbit kamu bisa langsung melihat serta mengunduhnya dari halaman Sertifikat di akunmu.",
     },
     {
       q: "Bagaimana jika saya melewatkan salah satu sesi?",
