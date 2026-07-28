@@ -34,6 +34,7 @@ export default function BootcampPaymentPage() {
   const [isCopied, setIsCopied] = useState(false);
   const [file, setFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [referralCode, setReferralCode] = useState("");
   const { bankInfo } = useBankInfo();
 
   const fetchRegistration = async () => {
@@ -70,6 +71,9 @@ export default function BootcampPaymentPage() {
     try {
       const formData = new FormData();
       formData.append("proof_of_payment", file);
+      if (referralCode.trim()) {
+        formData.append("referral_code", referralCode.trim());
+      }
       const res = await fetch(`${API_BASE}/api/products/bootcamp-registrations/${registrationId}/pay/`, {
         method: "POST",
         headers: { Authorization: `Bearer ${getAccessToken()}` },
@@ -96,8 +100,16 @@ export default function BootcampPaymentPage() {
     }
   };
 
-  const total = registration ? Number(registration.package.price) + Number(registration.package.commitment_fee) : 0;
   const payment = registration?.payment;
+  // Diskon dihitung server (aturan persen/nominal + batas maksimum ada di sana),
+  // jadi baru kelihatan setelah pembayaran terkirim -- sama kayak checkout produk
+  // lain yang juga gak pratinjau diskon di browser.
+  const appliedDiscount = Number(payment?.discount_amount || 0);
+  const total = registration
+    ? (payment
+      ? Number(payment.grand_total)
+      : Number(registration.package.price) + Number(registration.package.commitment_fee))
+    : 0;
   const showForm =
     registration
     && registration.status === "accepted"
@@ -149,6 +161,12 @@ export default function BootcampPaymentPage() {
                 <span className="text-[#9CA3AF]">Harga paket</span>
                 <span className="text-white font-medium">{formatIDR(registration.package.price)}</span>
               </div>
+              {appliedDiscount > 0 && (
+                <div className="flex justify-between text-[13px]">
+                  <span className="text-[#9CA3AF]">Diskon kode referral</span>
+                  <span className="text-[#148F89] font-medium">-{formatIDR(appliedDiscount)}</span>
+                </div>
+              )}
               {Number(registration.package.commitment_fee) > 0 && (
                 <div className="flex justify-between text-[13px]">
                   <span className="text-[#9CA3AF]">Commitment fee (refundable)</span>
@@ -255,6 +273,21 @@ export default function BootcampPaymentPage() {
                       <span className="text-[12px] font-semibold text-[#E2E8F0]">Klik untuk memilih file</span>
                     </label>
                   )}
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[#9CA3AF] text-[12px] font-semibold">Kode Referral (opsional)</label>
+                    <input
+                      type="text"
+                      value={referralCode}
+                      onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                      placeholder="Masukkan kode kalau punya"
+                      className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 h-10 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors uppercase"
+                    />
+                    <span className="text-[#6B7280] text-[11px]">
+                      Potongan berlaku untuk harga paket saja
+                      {Number(registration.package.commitment_fee) > 0 ? ", commitment fee tidak ikut didiskon." : "."}
+                    </span>
+                  </div>
 
                   <button
                     onClick={handleSubmit}

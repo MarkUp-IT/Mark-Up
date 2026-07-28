@@ -9,6 +9,7 @@ from django.core.mail import send_mail
 from django.db import IntegrityError, models, transaction as db_transaction
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from django.utils.text import slugify
 from django.utils.dateparse import parse_date, parse_datetime
 
@@ -21,6 +22,7 @@ from .models import (
     BootcampPackageExtraBenefit,
     BootcampRegistration,
     BootcampTimelineItem,
+    BootcampQuiz,
     BootcampQuizQuestion,
     BootcampQuizAttempt,
     BootcampQuizAnswer,
@@ -47,7 +49,9 @@ from accounts.models import User, UserRole, AuditAction
 from accounts.utils import log_audit, notify_team, get_client_ip, is_rate_limited
 from django.db.models import Q
 from mentors.models import MentorAvailability
-from transactions.models import Transaction, TransactionItem, PaymentStatus
+from transactions.models import (
+    Transaction, TransactionItem, PaymentStatus, ReferralCode, ReferralCodeUsage,
+)
 from django.views.decorators.csrf import csrf_exempt
 
 MAX_CERTIFICATE_SIZE = 5 * 1024 * 1024  # 5MB
@@ -1698,19 +1702,27 @@ def _serialize_registration(reg, for_admin=False):
 
     # Skor & status lulus/tidak CUMA dikirim ke admin (for_admin=True) --
     # peserta sendiri cuma tahu status pengerjaan, gak pernah lihat skornya.
-    quiz = None
+    quizzes = []
     if reg.package.requires_selection:
-        attempt = getattr(reg, "quiz_attempt", None)
-        if attempt is None:
-            quiz = {"status": "not_started"}
-        else:
-            quiz = {"status": attempt.status}
-            if for_admin:
-                quiz["score_percent"] = (
+        attempts_by_quiz = {a.quiz_id: a for a in reg.quiz_attempts.all()}
+        for q in BootcampQuiz.objects.filter(
+            bootcamp_id=reg.package.bootcamp_id, is_active=True
+        ).order_by("order", "created_at"):
+            attempt = attempts_by_quiz.get(q.id)
+            item = {
+                "quiz_id": str(q.id),
+                "title": q.title,
+                "timeline_item_id": str(q.timeline_item_id) if q.timeline_item_id else None,
+                "duration_minutes": q.duration_minutes,
+                "status": attempt.status if attempt else "not_started",
+            }
+            if for_admin and attempt is not None:
+                item["score_percent"] = (
                     str(attempt.score_percent) if attempt.score_percent is not None else None
                 )
-                quiz["passed"] = attempt.passed
-                quiz["submitted_at"] = attempt.submitted_at.isoformat() if attempt.submitted_at else None
+                item["passed"] = attempt.passed
+                item["submitted_at"] = attempt.submitted_at.isoformat() if attempt.submitted_at else None
+            quizzes.append(item)
 
     # Pembayaran (kalau ada) -- beda dari quiz, ini boleh dilihat peserta
     # sendiri (bukan info yang perlu disembunyikan), makanya gak digerbang
@@ -1730,6 +1742,8 @@ def _serialize_registration(reg, for_admin=False):
             "sub_total": str(txn.sub_total),
             "commitment_fee_amount": str(txn.commitment_fee_amount),
             "grand_total": str(txn.grand_total),
+            "discount_amount": str(txn.discount_amount or 0),
+            "promo_code": txn.promo_code or None,
             "proof_of_payment": proof_url,
             "created_at": txn.created_at.isoformat(),
             "paid_at": txn.paid_at.isoformat() if txn.paid_at else None,
@@ -1774,7 +1788,7 @@ def _serialize_registration(reg, for_admin=False):
         "payment_deadline_passed": payment_deadline_passed,
         "bootcamp_id": str(reg.package.bootcamp_id),
         "bootcamp_title": reg.package.bootcamp.title,
-        "quiz": quiz,
+        "quizzes": quizzes,
         "payment": payment,
     }
 
@@ -1865,7 +1879,7 @@ def get_my_bootcamp_registrations(request):
 
     regs = (
         BootcampRegistration.objects.filter(user=request.user)
-        .select_related("package__bootcamp", "quiz_attempt")
+        .select_related("package__bootcamp").prefetch_related("quiz_attempts")
         .prefetch_related("payment_transactions")
         .order_by("-created_at")
     )
@@ -1881,7 +1895,7 @@ def get_bootcamp_registrations(request):
         return HttpResponseNotAllowed(["GET"])
 
     regs = (
-        BootcampRegistration.objects.select_related("package__bootcamp", "user", "quiz_attempt")
+        BootcampRegistration.objects.select_related("package__bootcamp", "user").prefetch_related("quiz_attempts")
         .prefetch_related("payment_transactions")
         .order_by("-created_at")
     )
@@ -2024,9 +2038,9 @@ def add_bootcamp_timeline_item(request, product_id):
         return JsonResponse({"errors": errors}, status=400)
 
     try:
-        BootcampProduct.objects.get(product_id=product_id)
-    except BootcampProduct.DoesNotExist:
-        return JsonResponse({"detail": "Produk bootcamp tidak ditemukan."}, status=404)
+        quiz = BootcampQuiz.objects.get(id=quiz_id)
+    except BootcampQuiz.DoesNotExist:
+        return JsonResponse({"detail": "Tes tidak ditemukan."}, status=404)
 
     next_order = BootcampTimelineItem.objects.filter(bootcamp_id=product_id).count() + 1
     item = BootcampTimelineItem.objects.create(
@@ -2632,12 +2646,12 @@ def _serialize_quiz_question(q, include_answer=False):
 
 @jwt_required
 @role_required(UserRole.ADMIN)
-def get_bootcamp_quiz_questions(request, product_id):
+def get_bootcamp_quiz_questions(request, quiz_id):
     """Admin: daftar bank soal (termasuk kunci jawaban)."""
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])
 
-    questions = BootcampQuizQuestion.objects.filter(bootcamp_id=product_id).order_by("order")
+    questions = BootcampQuizQuestion.objects.filter(quiz_id=quiz_id).order_by("order")
     return JsonResponse(
         {"questions": [_serialize_quiz_question(q, include_answer=True) for q in questions]}, status=200
     )
@@ -2646,14 +2660,14 @@ def get_bootcamp_quiz_questions(request, product_id):
 @csrf_exempt
 @jwt_required
 @role_required(UserRole.ADMIN)
-def add_bootcamp_quiz_question(request, product_id):
+def add_bootcamp_quiz_question(request, quiz_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
 
     try:
-        BootcampProduct.objects.get(product_id=product_id)
-    except BootcampProduct.DoesNotExist:
-        return JsonResponse({"detail": "Produk bootcamp tidak ditemukan."}, status=404)
+        quiz = BootcampQuiz.objects.get(id=quiz_id)
+    except BootcampQuiz.DoesNotExist:
+        return JsonResponse({"detail": "Tes tidak ditemukan."}, status=404)
 
     request_data = get_request_data(request)
     if request_data is None:
@@ -2682,9 +2696,9 @@ def add_bootcamp_quiz_question(request, product_id):
     if errors:
         return JsonResponse({"errors": errors}, status=400)
 
-    next_order = BootcampQuizQuestion.objects.filter(bootcamp_id=product_id).count() + 1
+    next_order = BootcampQuizQuestion.objects.filter(quiz=quiz).count() + 1
     question = BootcampQuizQuestion.objects.create(
-        bootcamp_id=product_id, question_text=question_text,
+        quiz=quiz, question_text=question_text,
         choice_a=choice_a, choice_b=choice_b, choice_c=choice_c, choice_d=choice_d,
         correct_choice=correct_choice, order=next_order,
     )
@@ -2809,7 +2823,14 @@ def _finalize_quiz_attempt(attempt):
         else BootcampQuizAttempt.Status.SUBMITTED
     )
     attempt.score_percent = score
-    attempt.passed = score >= Decimal(attempt.registration.package.quiz_passing_score_percent)
+    # Ambang lulus sekarang per-tes (dulu per-paket), jadi tiap tes bisa beda
+    # standarnya. Fallback ke setelan paket buat attempt lama yang belum
+    # ketaut ke tes mana pun.
+    passing = (
+        attempt.quiz.passing_score_percent if attempt.quiz_id
+        else attempt.registration.package.quiz_passing_score_percent
+    )
+    attempt.passed = score >= Decimal(passing)
     attempt.submitted_at = now
     attempt.save(update_fields=["status", "score_percent", "passed", "submitted_at"])
     return attempt
@@ -2817,7 +2838,7 @@ def _finalize_quiz_attempt(attempt):
 
 @csrf_exempt
 @jwt_required
-def start_or_resume_bootcamp_quiz(request, registration_id):
+def start_or_resume_bootcamp_quiz(request, registration_id, quiz_id):
     """Mulai tes BCC (attempt baru) atau lanjutkan attempt yang sudah ada.
     Soal & kunci jawaban tidak pernah ikut serialisasi ini -- lihat
     _serialize_quiz_attempt_for_participant."""
@@ -2842,14 +2863,22 @@ def start_or_resume_bootcamp_quiz(request, registration_id):
             {"detail": "Tes cuma bisa dikerjakan selama status pendaftaran masih ditinjau."}, status=400
         )
 
+    # Tes harus punya bootcamp yang sama dengan paket pendaftaran ini -- kalau
+    # nggak dicek, peserta bisa nembak quiz_id milik bootcamp lain.
     try:
-        attempt = registration.quiz_attempt
-    except BootcampQuizAttempt.DoesNotExist:
-        attempt = None
+        quiz = BootcampQuiz.objects.get(
+            id=quiz_id, bootcamp_id=package.bootcamp_id, is_active=True,
+        )
+    except BootcampQuiz.DoesNotExist:
+        return JsonResponse({"detail": "Tes tidak ditemukan."}, status=404)
+
+    attempt = BootcampQuizAttempt.objects.filter(
+        registration=registration, quiz=quiz,
+    ).first()
 
     if attempt is None:
         questions = list(
-            BootcampQuizQuestion.objects.filter(bootcamp_id=package.bootcamp_id, is_active=True)
+            BootcampQuizQuestion.objects.filter(quiz=quiz, is_active=True)
         )
         if not questions:
             return JsonResponse({"detail": "Bank soal belum tersedia. Hubungi admin."}, status=400)
@@ -2861,15 +2890,17 @@ def start_or_resume_bootcamp_quiz(request, registration_id):
             question_order.append({"question_id": str(q.id), "choice_display_order": choices})
         random.shuffle(question_order)
 
-        deadline = timezone.now() + timedelta(minutes=package.quiz_duration_minutes)
+        deadline = timezone.now() + timedelta(minutes=quiz.duration_minutes)
         try:
             attempt = BootcampQuizAttempt.objects.create(
-                registration=registration, question_order=question_order, deadline=deadline,
+                registration=registration, quiz=quiz,
+                question_order=question_order, deadline=deadline,
             )
         except IntegrityError:
             # Race: attempt sudah kebuat dari request lain yang nyaris bersamaan --
-            # OneToOneField constraint yang jadi jaminan sebenarnya, bukan cek None di atas.
-            attempt = BootcampQuizAttempt.objects.get(registration=registration)
+            # UniqueConstraint (registration, quiz) yang jadi jaminan sebenarnya,
+            # bukan cek None di atas.
+            attempt = BootcampQuizAttempt.objects.get(registration=registration, quiz=quiz)
     elif attempt.status == BootcampQuizAttempt.Status.IN_PROGRESS and timezone.now() > attempt.deadline:
         _finalize_quiz_attempt(attempt)
 
@@ -3009,10 +3040,42 @@ def create_bootcamp_payment(request, registration_id):
     bootcamp_product = package.bootcamp
     sub_total = package.price
     commitment_fee_amount = package.commitment_fee
-    grand_total = sub_total + commitment_fee_amount
+
+    # Kode referral -- dipotong CUMA dari harga paket, commitment fee gak ikut
+    # didiskon karena duit itu bukan pendapatan (dikembalikan penuh ke peserta
+    # di akhir program), jadi mendiskonnya sama aja bikin selisih kas pas refund.
+    voucher_code = (request.POST.get("referral_code") or "").strip()
+    referral_code = None
+    discount_amount = Decimal("0")
+    if voucher_code:
+        try:
+            referral_code = ReferralCode.objects.get(code__iexact=voucher_code)
+        except ReferralCode.DoesNotExist:
+            return JsonResponse({"detail": "Kode referral tidak ditemukan."}, status=400)
+
+        if not referral_code.is_valid_for_product(bootcamp_product.product, user=request.user):
+            return JsonResponse(
+                {"detail": "Kode referral tidak berlaku, sudah tidak aktif, atau sudah pernah kamu pakai."},
+                status=400,
+            )
+        discount_amount = referral_code.compute_discount(sub_total)
+
+    grand_total = (sub_total - discount_amount) + commitment_fee_amount
 
     try:
         with db_transaction.atomic():
+            # Kuota kode dikunci di dalam transaksi (bukan cuma dicek di atas)
+            # supaya dua orang yang nembak kode sisa-1 barengan gak dua-duanya lolos.
+            if referral_code is not None:
+                locked_referral = ReferralCode.objects.select_for_update().get(pk=referral_code.pk)
+                if not locked_referral.is_valid_for_product(bootcamp_product.product, user=request.user):
+                    return JsonResponse(
+                        {"detail": "Kode referral tidak berlaku, kuotanya habis, atau sudah pernah kamu pakai."},
+                        status=400,
+                    )
+                locked_referral.used_count += 1
+                locked_referral.save(update_fields=["used_count"])
+
             # Stok di-reserve begitu bayar, sama pola-nya kayak checkout_product
             # biasa buat MODULE/BOOTCAMP -- sold_count baru nambah pas admin approve.
             detail_locked = BootcampProduct.objects.select_for_update().get(
@@ -3027,7 +3090,8 @@ def create_bootcamp_payment(request, registration_id):
                 user=request.user,
                 buyer_phone=request.user.phone or "",
                 sub_total=sub_total,
-                discount_amount=0,
+                promo_code=voucher_code or None,
+                discount_amount=discount_amount,
                 tax=0,
                 grand_total=grand_total,
                 payment_status=PaymentStatus.PENDING,
@@ -3041,6 +3105,14 @@ def create_bootcamp_payment(request, registration_id):
                 price_at_checkout=grand_total,
                 quantity=1,
             )
+
+            if referral_code is not None:
+                ReferralCodeUsage.objects.create(
+                    referral_code=referral_code,
+                    transaction=txn,
+                    user=request.user,
+                    discount_amount=discount_amount,
+                )
     except Exception as e:
         return JsonResponse({"detail": f"Gagal membuat pembayaran: {str(e)}"}, status=500)
 
@@ -3287,3 +3359,177 @@ def randomize_bootcamp_teams(request, product_id):
         },
         status=200,
     )
+
+
+# ==================== BOOTCAMP: KELOLA TES (MULTI-TES) ====================
+
+
+def _serialize_quiz(quiz, question_count=None):
+    return {
+        "id": str(quiz.id),
+        "title": quiz.title,
+        "timeline_item_id": str(quiz.timeline_item_id) if quiz.timeline_item_id else None,
+        "timeline_item_title": quiz.timeline_item.title if quiz.timeline_item_id else None,
+        "duration_minutes": quiz.duration_minutes,
+        "passing_score_percent": quiz.passing_score_percent,
+        "order": quiz.order,
+        "is_active": quiz.is_active,
+        "question_count": (
+            question_count if question_count is not None else quiz.questions.count()
+        ),
+    }
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_bootcamp_quizzes(request, product_id):
+    """Daftar tes sebuah bootcamp (admin). Gak nyertain soal -- soal diambil
+    terpisah lewat endpoint per-tes supaya kunci jawaban gak kebawa-bawa."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    quizzes = (
+        BootcampQuiz.objects.filter(bootcamp_id=product_id)
+        .select_related("timeline_item")
+        .order_by("order", "created_at")
+    )
+    return JsonResponse({"quizzes": [_serialize_quiz(q) for q in quizzes]}, status=200)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def add_bootcamp_quiz(request, product_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        bootcamp = BootcampProduct.objects.get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Produk bootcamp tidak ditemukan."}, status=404)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    title = (request_data.get("title") or "").strip()
+    if not title:
+        return JsonResponse({"errors": {"title": ["Judul tes wajib diisi."]}}, status=400)
+
+    errors = {}
+    duration = 30
+    if "duration_minutes" in request_data:
+        try:
+            duration = int(request_data["duration_minutes"])
+            if not (5 <= duration <= 180):
+                raise ValueError
+        except (TypeError, ValueError):
+            errors["duration_minutes"] = ["Durasi harus angka 5-180 menit."]
+
+    passing = 70
+    if "passing_score_percent" in request_data:
+        try:
+            passing = int(request_data["passing_score_percent"])
+            if not (0 <= passing <= 100):
+                raise ValueError
+        except (TypeError, ValueError):
+            errors["passing_score_percent"] = ["Skor kelulusan harus angka 0-100."]
+
+    timeline_item = None
+    if request_data.get("timeline_item_id"):
+        try:
+            timeline_item = BootcampTimelineItem.objects.get(
+                id=request_data["timeline_item_id"], bootcamp_id=bootcamp.pk,
+            )
+        except (BootcampTimelineItem.DoesNotExist, ValidationError, ValueError):
+            errors["timeline_item_id"] = ["Milestone timeline tidak ditemukan."]
+
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    next_order = BootcampQuiz.objects.filter(bootcamp=bootcamp).count() + 1
+    quiz = BootcampQuiz.objects.create(
+        bootcamp=bootcamp, title=title, timeline_item=timeline_item,
+        duration_minutes=duration, passing_score_percent=passing, order=next_order,
+    )
+    log_audit(request, AuditAction.CREATE, "bootcamp_quizzes", object_id=quiz.id)
+
+    return JsonResponse({"detail": "Tes berhasil dibuat.", "quiz": _serialize_quiz(quiz)}, status=201)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_bootcamp_quiz(request, quiz_id):
+    if request.method not in ["PATCH", "PUT", "DELETE"]:
+        return HttpResponseNotAllowed(["PATCH", "PUT", "DELETE"])
+
+    try:
+        quiz = BootcampQuiz.objects.select_related("timeline_item").get(id=quiz_id)
+    except BootcampQuiz.DoesNotExist:
+        return JsonResponse({"detail": "Tes tidak ditemukan."}, status=404)
+
+    if request.method == "DELETE":
+        # Kalau sudah ada yang ngerjain, hapus tes = hapus jawaban & skor
+        # mereka (CASCADE). Ditolak; admin bisa nonaktifin aja.
+        attempt_count = BootcampQuizAttempt.objects.filter(quiz=quiz).count()
+        if attempt_count:
+            return JsonResponse(
+                {
+                    "detail": (
+                        f"Tes ini sudah dikerjakan {attempt_count} peserta jadi gak bisa dihapus. "
+                        "Nonaktifkan aja supaya gak muncul ke peserta, hasilnya tetap tersimpan."
+                    )
+                },
+                status=400,
+            )
+        log_audit(request, AuditAction.DELETE, "bootcamp_quizzes", object_id=quiz.id)
+        quiz.delete()
+        return JsonResponse({"detail": "Tes berhasil dihapus."}, status=200)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    errors = {}
+    if "title" in request_data:
+        title = (request_data["title"] or "").strip()
+        if not title:
+            errors["title"] = ["Judul tes wajib diisi."]
+        else:
+            quiz.title = title
+    if "duration_minutes" in request_data:
+        try:
+            duration = int(request_data["duration_minutes"])
+            if not (5 <= duration <= 180):
+                raise ValueError
+            quiz.duration_minutes = duration
+        except (TypeError, ValueError):
+            errors["duration_minutes"] = ["Durasi harus angka 5-180 menit."]
+    if "passing_score_percent" in request_data:
+        try:
+            passing = int(request_data["passing_score_percent"])
+            if not (0 <= passing <= 100):
+                raise ValueError
+            quiz.passing_score_percent = passing
+        except (TypeError, ValueError):
+            errors["passing_score_percent"] = ["Skor kelulusan harus angka 0-100."]
+    if "is_active" in request_data:
+        quiz.is_active = bool(request_data["is_active"])
+    if "timeline_item_id" in request_data:
+        raw = request_data["timeline_item_id"]
+        if raw in (None, ""):
+            quiz.timeline_item = None
+        else:
+            try:
+                quiz.timeline_item = BootcampTimelineItem.objects.get(
+                    id=raw, bootcamp_id=quiz.bootcamp_id,
+                )
+            except (BootcampTimelineItem.DoesNotExist, ValidationError, ValueError):
+                errors["timeline_item_id"] = ["Milestone timeline tidak ditemukan."]
+
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    quiz.save()
+    return JsonResponse({"detail": "Tes berhasil diperbarui.", "quiz": _serialize_quiz(quiz)}, status=200)

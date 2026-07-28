@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Check, Clock, ShieldCheck, AlertTriangle } from "lucide-react";
 import Navbar from "@/component/Navbar";
@@ -15,9 +15,12 @@ function formatCountdown(totalSeconds) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export default function BootcampQuizPage() {
+function BootcampQuizPageInner() {
   const params = useParams();
   const { productId, registrationId } = params;
+  // Satu bootcamp bisa punya beberapa tes, jadi tes mana yang dibuka ditentukan
+  // lewat ?quiz=<id> dari halaman status pendaftaran.
+  const quizId = useSearchParams().get("quiz");
 
   const [attempt, setAttempt] = useState(null);
   const [answers, setAnswers] = useState({});
@@ -30,8 +33,13 @@ export default function BootcampQuizPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (!quizId) {
+        setError("Tes tidak ditemukan. Buka lagi lewat halaman status pendaftaran.");
+        setLoading(false);
+        return;
+      }
       try {
-        const res = await apiRequest(`/api/products/bootcamp-registrations/${registrationId}/quiz/start/`, {
+        const res = await apiRequest(`/api/products/bootcamp-registrations/${registrationId}/quizzes/${quizId}/start/`, {
           method: "POST",
         });
         if (cancelled) return;
@@ -50,7 +58,7 @@ export default function BootcampQuizPage() {
     return () => {
       cancelled = true;
     };
-  }, [registrationId]);
+  }, [registrationId, quizId]);
 
   const handleSubmit = useCallback(async () => {
     if (!attempt || submitting) return;
@@ -193,5 +201,15 @@ export default function BootcampQuizPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// useSearchParams wajib punya Suspense boundary di atasnya -- tanpa ini build
+// produksi bisa gagal pas Next.js nyoba prerender halaman.
+export default function BootcampQuizPage() {
+  return (
+    <Suspense fallback={<div className="w-full min-h-screen bg-[#0F081C]" />}>
+      <BootcampQuizPageInner />
+    </Suspense>
   );
 }
