@@ -195,12 +195,11 @@ export default function AdminBootcampRegistrations() {
                 <div className="flex justify-between"><span className="text-[#64748B]">Jalur</span><span className="text-[#1E293B] font-medium">{selected.package.requires_selection ? "Seleksi (Mentee)" : "Langsung (ACC)"}</span></div>
               </div>
 
-              {selected.package.requires_selection && selected.quiz && (
-                <div className="flex flex-col gap-1 text-[13px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-3.5 py-3">
-                  <div className="flex items-center gap-1.5 text-[#0F172A] font-semibold text-[12.5px] mb-1">
-                    <ShieldCheck size={13} className="text-[#148F89]" /> Tes BCC
+              {selected.package.requires_selection && (
+                <div className="flex flex-col gap-2 text-[13px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-3.5 py-3">
+                  <div className="flex items-center gap-1.5 text-[#0F172A] font-semibold text-[12.5px]">
+                    <ShieldCheck size={13} className="text-[#148F89]" /> Hasil Tes
                   </div>
-                  <div className="flex justify-between"><span className="text-[#64748B]">Status</span><span className="text-[#1E293B] font-medium">{QUIZ_STATUS_LABEL[selected.quiz.status] || selected.quiz.status}</span></div>
                   <div className="flex justify-between">
                     <span className="text-[#64748B]">Kuota paket ini</span>
                     <span className="text-[#1E293B] font-medium">
@@ -209,16 +208,33 @@ export default function AdminBootcampRegistrations() {
                         : `${selected.package.accepted_count} diterima (gak ada kuota)`}
                     </span>
                   </div>
-                  {selected.quiz.score_percent != null && (
-                    <>
-                      <div className="flex justify-between"><span className="text-[#64748B]">Skor</span><span className="text-[#1E293B] font-medium">{selected.quiz.score_percent}%</span></div>
-                      <div className="flex justify-between">
-                        <span className="text-[#64748B]">Hasil</span>
-                        <span className={`font-semibold ${selected.quiz.passed ? "text-[#166534]" : "text-[#991B1B]"}`}>
-                          {selected.quiz.passed ? "Lulus Ambang Skor" : "Belum Capai Ambang Skor"}
-                        </span>
+
+                  {(selected.quizzes || []).length === 0 ? (
+                    <p className="text-[#94A3B8] text-[12px] italic">Belum ada tes untuk bootcamp ini.</p>
+                  ) : (
+                    (selected.quizzes || []).map((qz) => (
+                      <div key={qz.quiz_id} className="flex flex-col gap-0.5 border-t border-[#E2E8F0] pt-2">
+                        <span className="text-[#0F172A] font-semibold text-[12.5px]">{qz.title}</span>
+                        <div className="flex justify-between">
+                          <span className="text-[#64748B]">Status</span>
+                          <span className="text-[#1E293B] font-medium">{QUIZ_STATUS_LABEL[qz.status] || qz.status}</span>
+                        </div>
+                        {qz.score_percent != null && (
+                          <>
+                            <div className="flex justify-between">
+                              <span className="text-[#64748B]">Skor</span>
+                              <span className="text-[#1E293B] font-medium">{qz.score_percent}%</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[#64748B]">Hasil</span>
+                              <span className={`font-semibold ${qz.passed ? "text-[#166534]" : "text-[#991B1B]"}`}>
+                                {qz.passed ? "Lulus Ambang Skor" : "Belum Capai Ambang Skor"}
+                              </span>
+                            </div>
+                          </>
+                        )}
                       </div>
-                    </>
+                    ))
                   )}
                 </div>
               )}

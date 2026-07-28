@@ -204,7 +204,8 @@ export default function BootcampRegisterPage() {
                 <h2 className="font-bold text-[15px]">Status Pendaftaranmu</h2>
                 {myRegs.map((r) => {
                   const meta = STATUS_META[r.status] || STATUS_META.registered;
-                  const canTakeQuiz = r.package.requires_selection && r.status === "registered" && r.quiz;
+                  const quizzes = r.quizzes || [];
+                  const canTakeQuiz = r.package.requires_selection && r.status === "registered" && quizzes.length > 0;
                   const canPay = r.status === "accepted";
                   return (
                     <div key={r.id} className="flex flex-col gap-2.5 border-b border-[#2D2342] last:border-0 pb-3 last:pb-0">
@@ -220,29 +221,41 @@ export default function BootcampRegisterPage() {
                         </span>
                       </div>
                       {canTakeQuiz && (
-                        <>
-                          {r.quiz.status === "not_started" && (
-                            <Link
-                              href={`/bootcamp/${productId}/quiz/${r.id}`}
-                              className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#148F89] text-white text-[12.5px] font-semibold hover:bg-[#117A75] transition-colors"
-                            >
-                              <ShieldCheck size={14} /> Mulai Tes BCC
-                            </Link>
-                          )}
-                          {r.quiz.status === "in_progress" && (
-                            <Link
-                              href={`/bootcamp/${productId}/quiz/${r.id}`}
-                              className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#F59E0B] text-white text-[12.5px] font-semibold hover:bg-[#D97706] transition-colors"
-                            >
-                              <Clock size={14} /> Lanjutkan Tes
-                            </Link>
-                          )}
-                          {(r.quiz.status === "submitted" || r.quiz.status === "expired") && (
-                            <span className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#148F89]/10 text-[#148F89] text-[12.5px] font-semibold border border-[#148F89]/30">
-                              <Check size={14} /> Tes Sudah Dikumpulkan
-                            </span>
-                          )}
-                        </>
+                        <div className="flex flex-col gap-2">
+                          {/* Satu bootcamp bisa punya beberapa tes (mis. tes tahap
+                              awal & tes akhir), masing-masing dikerjakan sekali. */}
+                          {quizzes.map((qz) => (
+                            <div key={qz.quiz_id} className="flex items-center justify-between gap-3 flex-wrap">
+                              <div className="flex flex-col">
+                                <span className="text-[13px] font-medium">{qz.title}</span>
+                                <span className="text-[#9CA3AF] text-[11px]">
+                                  Durasi {qz.duration_minutes} menit &middot; sekali kerjakan
+                                </span>
+                              </div>
+                              {qz.status === "not_started" && (
+                                <Link
+                                  href={`/bootcamp/${productId}/quiz/${r.id}?quiz=${qz.quiz_id}`}
+                                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#148F89] text-white text-[12.5px] font-semibold hover:bg-[#117A75] transition-colors"
+                                >
+                                  <ShieldCheck size={14} /> Mulai Tes
+                                </Link>
+                              )}
+                              {qz.status === "in_progress" && (
+                                <Link
+                                  href={`/bootcamp/${productId}/quiz/${r.id}?quiz=${qz.quiz_id}`}
+                                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#F59E0B] text-white text-[12.5px] font-semibold hover:bg-[#D97706] transition-colors"
+                                >
+                                  <Clock size={14} /> Lanjutkan Tes
+                                </Link>
+                              )}
+                              {(qz.status === "submitted" || qz.status === "expired") && (
+                                <span className="flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-[#148F89]/10 text-[#148F89] text-[12.5px] font-semibold border border-[#148F89]/30">
+                                  <Check size={14} /> Sudah Dikumpulkan
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       )}
                       {canPay && (
                         <>

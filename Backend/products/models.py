@@ -533,15 +533,66 @@ class QuizChoiceKey(models.TextChoices):
     D = "d", "D"
 
 
-class BootcampQuizQuestion(models.Model):
-    """Satu soal bank BCC General Knowledge Test, per batch bootcamp -- sama
-    persis buat semua pendaftar Mentee batch itu. Yang diacak per attempt
-    cuma URUTAN TAMPIL (lihat BootcampQuizAttempt.question_order), bukan
-    subset soalnya -- semua orang tetap dapet soal yang sama."""
+class BootcampQuiz(models.Model):
+    """Satu tes dalam sebuah batch bootcamp.
+
+    Dulu tiap bootcamp cuma bisa punya SATU tes (soal langsung nempel ke
+    BootcampProduct, dan attempt-nya OneToOne ke pendaftaran). Sekarang admin
+    bisa bikin beberapa tes -- mis. "Tes Seleksi Awal", "Tes Tengah Program",
+    "Tes Akhir" -- dan tiap tes boleh ditautkan ke satu milestone timeline
+    biar peserta ngerti tes ini bagian tahap yang mana.
+
+    Durasi & skor kelulusan pindah ke sini (dulu per paket), karena sekarang
+    tiap tes bisa beda aturannya. Nilai di BootcampPackage tetap dipakai
+    sebagai default waktu bikin tes baru.
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     bootcamp = models.ForeignKey(
-        BootcampProduct, on_delete=models.CASCADE, related_name="quiz_questions",
+        BootcampProduct, on_delete=models.CASCADE, related_name="quizzes",
+    )
+    title = models.CharField(max_length=150, default="Tes Seleksi BCC")
+    timeline_item = models.ForeignKey(
+        "BootcampTimelineItem",
+        on_delete=models.SET_NULL, blank=True, null=True, related_name="quizzes",
+        help_text="Opsional -- tes ini bagian dari milestone timeline yang mana. "
+                   "SET_NULL biar hapus milestone gak ikut ngapus tes & jawabannya.",
+    )
+    duration_minutes = models.PositiveIntegerField(
+        default=30, validators=[MinValueValidator(5), MaxValueValidator(180)],
+    )
+    passing_score_percent = models.PositiveIntegerField(
+        default=70, validators=[MaxValueValidator(100)],
+        help_text="Ambang lulus (%) buat auto-flag. Keputusan akhir Terima/Tolak "
+                   "tetap manual di tangan admin.",
+    )
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Kalau dimatiin, tes gak muncul ke peserta. Attempt yang sudah "
+                   "terlanjur dikerjakan tetap tersimpan.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Quiz"
+        verbose_name_plural = "Bootcamp Quizzes"
+        ordering = ["order", "created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.bootcamp_id})"
+
+
+class BootcampQuizQuestion(models.Model):
+    """Satu soal dalam sebuah tes -- sama persis buat semua pendaftar. Yang
+    diacak per attempt cuma URUTAN TAMPIL (lihat BootcampQuizAttempt.
+    question_order), bukan subset soalnya -- semua orang tetap dapet soal
+    yang sama."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    quiz = models.ForeignKey(
+        BootcampQuiz, on_delete=models.CASCADE, related_name="questions",
+        null=True, blank=True,
     )
     question_text = models.TextField()
     choice_a = models.CharField(max_length=255)
@@ -558,13 +609,17 @@ class BootcampQuizQuestion(models.Model):
         ordering = ["order"]
 
     def __str__(self) -> str:
-        return f"{self.question_text[:50]} ({self.bootcamp_id})"
+        return f"{self.question_text[:50]} ({self.quiz_id})"
 
 
 class BootcampQuizAttempt(models.Model):
-    """Satu attempt tes BCC per BootcampRegistration -- OneToOneField di sini
-    yang jadi jaminan "cuma 1 kali percobaan" di level database, bukan cuma
-    dicek di kode (jadi race condition dua klik nyaris bersamaan tetap aman).
+    """Satu attempt per (pendaftaran, tes).
+
+    Dulu ini OneToOneField ke registration -- artinya satu pendaftaran cuma
+    boleh punya SATU attempt selamanya, jadi mustahil ada lebih dari satu tes.
+    Sekarang jadi ForeignKey + UniqueConstraint (registration, quiz): jaminan
+    "cuma 1 kali percobaan" TETAP ditegakkan database, tapi per tes, bukan per
+    pendaftaran. Jadi race condition dua klik nyaris bersamaan tetap aman.
     started_at/deadline disimpan di DB (bukan Django cache) supaya jadi
     sumber kebenaran timing yang server-authoritative -- cache LocMemCache
     default (non-produksi) gak shared antar worker Gunicorn, jadi gak aman
@@ -576,8 +631,12 @@ class BootcampQuizAttempt(models.Model):
         EXPIRED = "expired", "Waktu Habis (Auto-submit)"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    registration = models.OneToOneField(
-        BootcampRegistration, on_delete=models.CASCADE, related_name="quiz_attempt",
+    registration = models.ForeignKey(
+        BootcampRegistration, on_delete=models.CASCADE, related_name="quiz_attempts",
+    )
+    quiz = models.ForeignKey(
+        BootcampQuiz, on_delete=models.CASCADE, related_name="attempts",
+        null=True, blank=True,
     )
     # Snapshot urutan tampil soal & pilihan per attempt ini, di-generate SEKALI
     # saat mulai, dipakai lagi persis sama saat resume (biar konsisten &
@@ -601,6 +660,14 @@ class BootcampQuizAttempt(models.Model):
         verbose_name = "Bootcamp Quiz Attempt"
         verbose_name_plural = "Bootcamp Quiz Attempts"
         ordering = ["-started_at"]
+        constraints = [
+            # Pengganti jaminan OneToOne yang lama: tetap dijaga database,
+            # tapi sekarang per tes.
+            models.UniqueConstraint(
+                fields=["registration", "quiz"],
+                name="unique_attempt_per_registration_quiz",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"Quiz attempt {self.registration_id} ({self.status})"
