@@ -59,9 +59,26 @@ def register_view(request):
 			errors["non_field_errors"] = list(non_field)
 		return JsonResponse({"errors": errors}, status=400)
 
+	# Foto profil opsional. Divalidasi ketat karena endpoint ini terbuka tanpa
+	# login -- tanpa batas tipe & ukuran, siapa pun bisa numpang nyimpen file
+	# gede di storage kita.
+	photo = request.FILES.get("profile_image")
+	if photo is not None:
+		ext = photo.name.rsplit(".", 1)[-1].lower() if "." in photo.name else ""
+		if ext not in {"jpg", "jpeg", "png", "webp"}:
+			return JsonResponse(
+				{"errors": {"profile_image": ["Foto harus JPG, PNG, atau WEBP."]}}, status=400
+			)
+		if photo.size > 2 * 1024 * 1024:
+			return JsonResponse(
+				{"errors": {"profile_image": ["Ukuran foto maksimal 2MB."]}}, status=400
+			)
+
 	user = form.save(commit=False)
 	user.set_password(form.cleaned_data["password"])
 	user.is_email_verified = False
+	if photo is not None:
+		user.profile_image = photo
 	user.save()
 
 	uid = urlsafe_base64_encode(force_bytes(user.pk))
