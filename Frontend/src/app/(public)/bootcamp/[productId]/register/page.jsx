@@ -7,7 +7,7 @@ import { Check, X, Upload, ShieldCheck, Clock, FileText, AlertCircle, Lock, Info
 import Navbar from "@/component/Navbar";
 import Linkify from "@/component/Linkify";
 import BootcampTimeline from "@/component/BootcampTimeline";
-import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
+import { apiRequest, apiRequestRaw, getAccessToken } from "@/lib/api";
 import { toast } from "sonner";
 
 const MAX_REGISTRATION_DOC_SIZE = 10 * 1024 * 1024;
@@ -120,12 +120,12 @@ export default function BootcampRegisterPage() {
       formData.append("package_id", selectedPackageId);
       formData.append("requirement_doc", file);
       formData.append("commitment_letter", commitmentLetterFile);
-      const res = await fetch(`${API_BASE}/api/products/bootcamp-register/`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${getAccessToken()}` },
-        body: formData,
-      });
-      const data = await res.json().catch(() => null);
+      // Lewat apiRequest (bukan fetch mentah) supaya kalau access token keburu
+      // kedaluwarsa pas user lama ngisi form, tokennya di-refresh otomatis dan
+      // request diulang. Dulu pakai fetch mentah -> langsung 401 "Gagal mendaftar"
+      // tanpa penjelasan.
+      const res = await apiRequestRaw(`/api/products/bootcamp-register/`, formData);
+      const data = res.data;
       if (!res.ok) {
         // data null artinya respons bukan JSON -- biasanya halaman error dari
         // nginx (mis. 413 gabungan 2 file kelebihan batas server), bukan error
@@ -138,7 +138,7 @@ export default function BootcampRegisterPage() {
             ? "Gabungan ukuran file terlalu besar buat server. Kecilkan ukuran PDF-nya lalu coba lagi."
             : data === null
               ? "Terjadi kesalahan tak terduga di server. Coba lagi, atau kecilkan ukuran file kalau masih gagal."
-              : "Gagal mendaftar.");
+              : (res.message || "Gagal mendaftar."));
         throw new Error(msg);
       }
       toast.success("Pendaftaran Terkirim", { description: "Menunggu ditinjau admin." });

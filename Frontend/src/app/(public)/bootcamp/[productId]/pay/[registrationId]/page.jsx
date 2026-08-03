@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Landmark, Copy, CheckCircle2, AlertCircle, Upload, FileText, Trash2, Clock, AlertTriangle } from "lucide-react";
 import Navbar from "@/component/Navbar";
-import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
+import { apiRequest, apiRequestRaw, getAccessToken } from "@/lib/api";
 import { useBankInfo } from "@/lib/bankInfo";
 import { toast } from "sonner";
 
@@ -74,12 +74,8 @@ export default function BootcampPaymentPage() {
       if (referralCode.trim()) {
         formData.append("referral_code", referralCode.trim());
       }
-      const res = await fetch(`${API_BASE}/api/products/bootcamp-registrations/${registrationId}/pay/`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${getAccessToken()}` },
-        body: formData,
-      });
-      const data = await res.json().catch(() => null);
+      const res = await apiRequestRaw(`/api/products/bootcamp-registrations/${registrationId}/pay/`, formData);
+      const data = res.data;
       if (!res.ok) {
         const msg =
           data?.detail ||
@@ -87,7 +83,7 @@ export default function BootcampPaymentPage() {
             ? "Ukuran file terlalu besar buat server. Kecilkan ukuran filenya lalu coba lagi."
             : data === null
               ? "Terjadi kesalahan tak terduga di server. Coba lagi."
-              : "Gagal mengirim pembayaran.");
+              : (res.message || "Gagal mengirim pembayaran."));
         throw new Error(msg);
       }
       toast.success("Pembayaran Terkirim", { description: "Menunggu diverifikasi admin." });
