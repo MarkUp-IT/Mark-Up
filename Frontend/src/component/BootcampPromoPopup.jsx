@@ -17,16 +17,13 @@ export default function BootcampPromoPopup() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await apiRequest("/api/products/", { auth: false });
-        const list = Array.isArray(res) ? res : res?.products || res?.results || [];
-        // Ambil bootcamp aktif yang masih ada stoknya -- gak ada gunanya
-        // ngiklanin batch yang udah penuh atau dinonaktifkan admin.
-        const target = list.find(
-          (p) => p.type === "BOOTCAMP" && p.is_active && (p.stock ?? 0) > 0,
-        );
+        // Produk mana yang dipromosikan & jendela tanggalnya diatur admin dan
+        // divalidasi di server -- di sini tinggal nampilin apa yang dikirim.
+        const res = await apiRequest("/api/products/promo-popup/", { auth: false });
+        const target = res?.popup;
         if (cancelled || !target) return;
 
-        if (sessionStorageSafeGet(SEEN_KEY_PREFIX + target.id)) return;
+        if (sessionStorageSafeGet(SEEN_KEY_PREFIX + target.product_id)) return;
 
         setBootcamp(target);
         // Dikasih jeda sedikit biar gak nabrak animasi hero pas halaman kebuka.
@@ -44,7 +41,7 @@ export default function BootcampPromoPopup() {
 
   const close = () => {
     setOpen(false);
-    if (bootcamp) sessionStorageSafeSet(SEEN_KEY_PREFIX + bootcamp.id, "1");
+    if (bootcamp) sessionStorageSafeSet(SEEN_KEY_PREFIX + bootcamp.product_id, "1");
   };
 
   useEffect(() => {
@@ -100,11 +97,11 @@ export default function BootcampPromoPopup() {
           </p>
 
           <Link
-            href={`/bootcamp/${bootcamp.id}/register`}
+            href={bootcamp.target_url}
             onClick={close}
             className="mt-1 flex items-center justify-center gap-2 w-full py-3 rounded-[10px] bg-[#148F89] text-white font-semibold text-[14px] hover:bg-[#117A75] transition-colors"
           >
-            Daftar Sekarang <ArrowRight size={16} />
+            {bootcamp.cta_label || "Daftar Sekarang"} <ArrowRight size={16} />
           </Link>
 
           <button
