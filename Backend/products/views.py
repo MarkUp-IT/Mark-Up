@@ -1693,6 +1693,16 @@ def _serialize_registration(reg, for_admin=False):
         except Exception:
             doc_url = None
 
+    def _file_url(f):
+        """URL file kalau ada; None kalau kosong atau storage-nya lagi rewel --
+        biar satu file bermasalah gak bikin seluruh daftar pendaftaran error."""
+        if not f:
+            return None
+        try:
+            return f.url
+        except Exception:
+            return None
+
     commitment_letter_url = None
     if reg.commitment_letter:
         try:
@@ -1771,6 +1781,8 @@ def _serialize_registration(reg, for_admin=False):
         "admin_notes": reg.admin_notes,
         "requirement_doc": doc_url,
         "commitment_letter": commitment_letter_url,
+        "cv": _file_url(reg.cv),
+        "portfolio": _file_url(reg.portfolio),
         "package": {
             "id": str(reg.package_id),
             "slug": reg.package.slug,
@@ -1807,6 +1819,8 @@ def register_bootcamp(request):
     package_id = request.POST.get("package_id")
     doc = request.FILES.get("requirement_doc")
     commitment_letter = request.FILES.get("commitment_letter")
+    cv = request.FILES.get("cv")
+    portfolio = request.FILES.get("portfolio")
 
     errors = {}
     if not package_id:
@@ -1827,6 +1841,25 @@ def register_bootcamp(request):
             errors["commitment_letter"] = ["Commitment letter harus berformat PDF."]
         elif commitment_letter.size > MAX_COMMITMENT_LETTER_SIZE:
             errors["commitment_letter"] = ["Ukuran file maksimal 5MB."]
+
+    # CV wajib; portofolio boleh kosong. Keduanya divalidasi dengan aturan yang
+    # sama (PDF, maks 5MB) supaya pesan errornya konsisten buat pendaftar.
+    if not cv:
+        errors["cv"] = ["CV (PDF) wajib diunggah."]
+    else:
+        ext = cv.name.rsplit(".", 1)[-1].lower() if "." in cv.name else ""
+        if ext != "pdf":
+            errors["cv"] = ["CV harus berformat PDF."]
+        elif cv.size > MAX_COMMITMENT_LETTER_SIZE:
+            errors["cv"] = ["Ukuran file maksimal 5MB."]
+
+    if portfolio:
+        ext = portfolio.name.rsplit(".", 1)[-1].lower() if "." in portfolio.name else ""
+        if ext != "pdf":
+            errors["portfolio"] = ["Portofolio harus berformat PDF."]
+        elif portfolio.size > MAX_COMMITMENT_LETTER_SIZE:
+            errors["portfolio"] = ["Ukuran file maksimal 5MB."]
+
     if errors:
         return JsonResponse({"errors": errors}, status=400)
 
@@ -1853,7 +1886,8 @@ def register_bootcamp(request):
         )
 
     reg = BootcampRegistration.objects.create(
-        user=request.user, package=package, requirement_doc=doc, commitment_letter=commitment_letter,
+        user=request.user, package=package, requirement_doc=doc,
+        commitment_letter=commitment_letter, cv=cv, portfolio=portfolio,
     )
 
     notify_team(

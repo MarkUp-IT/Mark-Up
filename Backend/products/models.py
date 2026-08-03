@@ -500,9 +500,22 @@ class BootcampRegistration(models.Model):
     commitment_letter = models.FileField(
         upload_to="bootcamp_commitment_letters/%Y/%m/",
         blank=True, null=True,
-        help_text="Commitment/motivation letter terpisah dari PDF syarat -- strukturnya diatur "
-                   "admin. Nullable karena ini requirement baru, pendaftaran lama (kalau ada) "
+        help_text="Commitment/motivation letter, diunggah sebagai SATU file PDF. Strukturnya "
+                   "diatur admin. Nullable karena ini requirement baru, pendaftaran lama (kalau ada) "
                    "gak punya file ini; wajib diisi buat pendaftaran BARU (dicek di view, bukan di sini).",
+    )
+    cv = models.FileField(
+        upload_to="bootcamp_cv/%Y/%m/",
+        blank=True, null=True,
+        help_text="CV pendaftar. Pindah ke sini dari profil user -- dulu diunggah sekali di "
+                   "profil, sekarang diminta per pendaftaran biar selalu versi terbaru. "
+                   "Nullable di DB demi pendaftaran lama; wajib buat pendaftaran BARU (dicek di view).",
+    )
+    portfolio = models.FileField(
+        upload_to="bootcamp_portfolio/%Y/%m/",
+        blank=True, null=True,
+        help_text="Portofolio pendaftar -- OPSIONAL, beneran boleh kosong (beda dari cv/"
+                   "commitment_letter yang nullable cuma demi data lama).",
     )
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.REGISTERED,

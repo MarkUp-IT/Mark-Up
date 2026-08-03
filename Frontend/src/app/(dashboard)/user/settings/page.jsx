@@ -36,6 +36,8 @@ function Field({ label, value, onChange, disabled, note, type = "text" }) {
   );
 }
 
+const SHOW_CV_SECTION = false;
+
 export default function Settings() {
   const shouldReduceMotion = useReducedMotion();
 
@@ -381,7 +383,7 @@ const handleDeleteAccount = async () => {
             note="Contoh: Mahasiswa Semester 5, Fresh Graduate, dll."
           />
           <Field
-            label="URL LinkedIn"
+            label="URL LinkedIn (opsional)"
             value={linkedIn}
             onChange={setLinkedIn}
             type="url"
@@ -401,7 +403,12 @@ const handleDeleteAccount = async () => {
         </div>
       </motion.form>
 
-      {/* CV / Portofolio */}
+      {/* CV sekarang diminta pas daftar bootcamp (per pendaftaran, biar selalu
+          versi terbaru), bukan sekali-seumur-hidup di profil. Section ini
+          dimatikan lewat flag -- bukan dihapus -- supaya gampang dihidupkan
+          lagi kalau nanti dibutuhkan. */}
+      {SHOW_CV_SECTION && (
+        <>
       <motion.div
         {...sectionReveal}
         className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col gap-4"
@@ -475,6 +482,9 @@ const handleDeleteAccount = async () => {
           </label>
         )}
       </motion.div>
+
+        </>
+      )}
 
       {/* Keamanan Akun */}
       <motion.div
