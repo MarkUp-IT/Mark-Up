@@ -98,8 +98,16 @@ export async function apiRequest(
 ) {
   const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
 
+  // Upload file harus dikirim sebagai FormData mentah -- kalau di-JSON.stringify
+  // filenya hilang, dan Content-Type-nya wajib dibiarin browser yang isi
+  // (butuh boundary multipart). Sebelum ini apiRequest maksa JSON, jadi semua
+  // upload terpaksa pakai fetch mentah -- akibatnya mereka gak kebagian
+  // auto-refresh token, dan pendaftaran gagal 401 kalau token keburu expired
+  // pas user lagi lama ngisi form.
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+
   const buildHeaders = () => {
-    const h = { "Content-Type": "application/json", ...headers };
+    const h = isFormData ? { ...headers } : { "Content-Type": "application/json", ...headers };
     if (auth) {
       const token = getAccessToken();
       if (token) h["Authorization"] = `Bearer ${token}`;
@@ -111,7 +119,7 @@ export async function apiRequest(
     const options = {
       method,
       headers: buildHeaders(),
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
       ...rest,
     };
 
@@ -194,6 +202,27 @@ export async function apiRequest(
   }
 
   return data;
+}
+
+/**
+ * Upload file (FormData) yang balikin {ok, status, data} alih-alih nge-throw.
+ *
+ * Dipakai halaman-halaman upload yang butuh baca status mentah (mis. bedain
+ * 413 "file kegedean" dari error validasi biasa). Bedanya sama fetch mentah:
+ * ini tetap lewat apiRequest, jadi kalau access token keburu kedaluwarsa pas
+ * user lama ngisi form, tokennya di-refresh otomatis dan request diulang --
+ * ini yang dulu bikin pendaftaran gagal 401 tanpa penjelasan.
+ */
+export async function apiRequestRaw(path, formData, { method = "POST" } = {}) {
+  try {
+    const data = await apiRequest(path, { method, body: formData });
+    return { ok: true, status: 200, data };
+  } catch (err) {
+    if (err instanceof ApiError) {
+      return { ok: false, status: err.status, data: err.data ?? null, message: err.message };
+    }
+    throw err;
+  }
 }
 
 export const api = {
