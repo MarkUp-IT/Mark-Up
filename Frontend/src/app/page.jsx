@@ -7,6 +7,7 @@ import CountUp from "@/component/CountUp";
 import DarkVeil from "@/component/DarkVeil";
 import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
+import BootcampPromoPopup from "@/component/BootcampPromoPopup";
 import { useDashboardOnlyGuard } from "@/lib/useDashboardOnlyGuard";
 
 const hashtagsRow1 = [
@@ -168,6 +169,7 @@ export default function HomePage() {
 
   return (
     <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col overflow-x-hidden">
+      <BootcampPromoPopup />
       <Navbar />
       {/* svh (small viewport height, statis), bukan dvh (dynamic) -- dvh ikut
           berubah live pas address bar browser HP collapse waktu discroll,
