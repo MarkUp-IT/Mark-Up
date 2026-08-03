@@ -37,6 +37,8 @@ from .views import (
     delete_bootcamp_package,
     add_package_extra_benefit,
     delete_package_extra_benefit,
+    get_promo_popup,
+    admin_promo_popup,
     get_bootcamp_quizzes,
     add_bootcamp_quiz,
     update_bootcamp_quiz,
@@ -64,6 +66,8 @@ from .views import (
 
 urlpatterns = [
     path("", get_products, name="api_products_list"),
+    path("promo-popup/", get_promo_popup, name="api_promo_popup"),
+    path("promo-popup/admin/", admin_promo_popup, name="api_promo_popup_admin"),
     path("refund-requests/", get_refund_requests, name="api_refund_requests_list"),
     path("refund-requests/<uuid:refund_id>/", update_refund_request, name="api_refund_request_update"),
     path("certificates/", get_certificates, name="api_certificates_list"),

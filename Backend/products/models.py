@@ -1014,3 +1014,72 @@ class Certificate(models.Model):
 
     def __str__(self) -> str:
         return self.number
+
+
+class PromoPopupSetting(models.Model):
+    """Popup promo yang muncul di homepage (singleton, pk=1).
+
+    Dulu popup-nya nebak sendiri: ambil bootcamp aktif pertama yang stoknya
+    masih ada. Sekarang admin yang nentuin produk mana yang dipromosikan dan
+    jendela tayangnya kapan, jadi gak perlu ganti kode tiap ganti kampanye.
+    """
+
+    product = models.ForeignKey(
+        Product, on_delete=models.SET_NULL, blank=True, null=True,
+        related_name="promo_popups",
+        help_text="Produk yang dipromosikan. SET_NULL biar hapus produk gak "
+                   "ikut ngapus setelan popup-nya.",
+    )
+    is_active = models.BooleanField(
+        default=False,
+        help_text="Saklar utama. Kalau dimatiin, popup gak tampil sama sekali "
+                   "walau tanggalnya masih berlaku.",
+    )
+    starts_at = models.DateTimeField(
+        blank=True, null=True,
+        help_text="Kosong = langsung tayang begitu diaktifkan.",
+    )
+    ends_at = models.DateTimeField(
+        blank=True, null=True,
+        help_text="Kosong = tayang terus sampai dimatiin manual.",
+    )
+    headline = models.CharField(
+        max_length=150, blank=True, default="",
+        help_text="Judul di popup. Kosong = pakai judul produknya.",
+    )
+    cta_label = models.CharField(
+        max_length=60, blank=True, default="Daftar Sekarang",
+        help_text="Tulisan di tombol.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Promo Popup Setting"
+        verbose_name_plural = "Promo Popup Settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def is_live(self):
+        """Tayang cuma kalau saklarnya nyala, produknya ada, DAN sekarang masih
+        di dalam jendela tanggalnya. Dicek di server, bukan di browser, biar
+        jadwalnya gak bisa diakalin dari sisi klien."""
+        from django.utils import timezone as _tz
+
+        if not self.is_active or not self.product_id:
+            return False
+        now = _tz.now()
+        if self.starts_at and now < self.starts_at:
+            return False
+        if self.ends_at and now > self.ends_at:
+            return False
+        return True
+
+    def __str__(self) -> str:
+        return f"Popup: {self.product_id or 'belum diatur'} (aktif={self.is_active})"

@@ -23,6 +23,7 @@ from .models import (
     BootcampRegistration,
     BootcampTimelineItem,
     BootcampQuiz,
+    PromoPopupSetting,
     BootcampQuizQuestion,
     BootcampQuizAttempt,
     BootcampQuizAnswer,
@@ -3567,3 +3568,138 @@ def update_bootcamp_quiz(request, quiz_id):
 
     quiz.save()
     return JsonResponse({"detail": "Tes berhasil diperbarui.", "quiz": _serialize_quiz(quiz)}, status=200)
+
+
+# ==================== POPUP PROMO HOMEPAGE ====================
+
+
+def _promo_product_payload(product):
+    """Ringkasan produk buat popup. Judul/gambar diambil dari detail produk
+    sesuai tipenya, dan URL tujuan tombol beda-beda: bootcamp punya halaman
+    pendaftaran sendiri, produk lain lewat checkout."""
+    detail = (
+        getattr(product, "bootcamp_detail", None)
+        or getattr(product, "mentoring_detail", None)
+        or getattr(product, "module_detail", None)
+    )
+    if detail is None:
+        return None
+
+    image = None
+    if getattr(detail, "image", None):
+        try:
+            image = detail.image.url
+        except Exception:
+            image = None
+    if not image:
+        image = getattr(detail, "image_url", None)
+
+    target = (
+        f"/bootcamp/{product.id}/register"
+        if product.type == ProductType.BOOTCAMP
+        else f"/checkout/{product.id}"
+    )
+    return {
+        "product_id": str(product.id),
+        "type": product.type,
+        "title": detail.title,
+        "description": detail.description,
+        "image_url": image,
+        "target_url": target,
+        "is_active": detail.is_active,
+    }
+
+
+def get_promo_popup(request):
+    """Popup promo buat homepage -- PUBLIK.
+
+    Balikin {"popup": null} kalau lagi gak ada kampanye aktif. Jendela tanggal
+    dicek di SERVER (bukan browser) supaya jadwal tayangnya gak bisa diakalin
+    dari sisi klien."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    setting = PromoPopupSetting.get_solo()
+    if not setting.is_live():
+        return JsonResponse({"popup": None}, status=200)
+
+    payload = _promo_product_payload(setting.product)
+    # Produk yang dinonaktifkan admin jangan dipromosiin walau setelan popup-nya
+    # masih nyala -- percuma ngarahin orang ke halaman yang udah gak jualan.
+    if payload is None or not payload["is_active"]:
+        return JsonResponse({"popup": None}, status=200)
+
+    if setting.headline:
+        payload["title"] = setting.headline
+    payload["cta_label"] = setting.cta_label or "Daftar Sekarang"
+    return JsonResponse({"popup": payload}, status=200)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def admin_promo_popup(request):
+    """GET/PATCH setelan popup promo (admin)."""
+    if request.method not in ("GET", "PATCH", "PUT"):
+        return HttpResponseNotAllowed(["GET", "PATCH", "PUT"])
+
+    setting = PromoPopupSetting.get_solo()
+
+    def serialize():
+        return {
+            "product_id": str(setting.product_id) if setting.product_id else None,
+            "is_active": setting.is_active,
+            "starts_at": setting.starts_at.isoformat() if setting.starts_at else None,
+            "ends_at": setting.ends_at.isoformat() if setting.ends_at else None,
+            "headline": setting.headline,
+            "cta_label": setting.cta_label,
+            "is_live_now": setting.is_live(),
+        }
+
+    if request.method == "GET":
+        return JsonResponse(serialize(), status=200)
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    errors = {}
+    if "product_id" in request_data:
+        raw = request_data["product_id"]
+        if raw in (None, ""):
+            setting.product = None
+        else:
+            try:
+                setting.product = Product.objects.get(id=raw)
+            except (Product.DoesNotExist, ValidationError, ValueError):
+                errors["product_id"] = ["Produk tidak ditemukan."]
+
+    if "is_active" in request_data:
+        setting.is_active = bool(request_data["is_active"])
+    if "starts_at" in request_data:
+        setting.starts_at = _parse_wib_datetime_or_none(request_data["starts_at"])
+    if "ends_at" in request_data:
+        setting.ends_at = _parse_wib_datetime_or_none(request_data["ends_at"])
+    if "headline" in request_data:
+        setting.headline = (request_data["headline"] or "").strip()[:150]
+    if "cta_label" in request_data:
+        setting.cta_label = (request_data["cta_label"] or "").strip()[:60] or "Daftar Sekarang"
+
+    # Rentang kebalik itu bikin popup diam-diam gak pernah tayang -- lebih baik
+    # ditolak terang-terangan daripada admin bingung nyari kenapa gak muncul.
+    if (
+        not errors
+        and setting.starts_at and setting.ends_at
+        and setting.ends_at <= setting.starts_at
+    ):
+        errors["ends_at"] = ["Tanggal selesai harus setelah tanggal mulai."]
+
+    if setting.is_active and not setting.product_id and "product_id" not in errors:
+        errors["product_id"] = ["Pilih produk dulu sebelum mengaktifkan popup."]
+
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    setting.save()
+    log_audit(request, AuditAction.UPDATE, "promo_popup_setting", object_id=None)
+    return JsonResponse({"detail": "Setelan popup disimpan.", **serialize()}, status=200)

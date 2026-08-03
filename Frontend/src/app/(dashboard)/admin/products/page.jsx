@@ -24,6 +24,7 @@ import { useState, useEffect } from "react";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
+import PromoPopupPanel from "@/component/admin/PromoPopupPanel";
 import CurrencyInput from "@/component/admin/CurrencyInput";
 import { toast } from "sonner";
 import { api, ApiError, getAccessToken, API_BASE } from "@/lib/api";
@@ -530,6 +531,8 @@ export default function Products() {
   return (
     <DashboardLayout title="Produk">
       <style>{heightFix}</style>
+
+      <PromoPopupPanel />
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
