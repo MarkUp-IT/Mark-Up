@@ -269,6 +269,22 @@ export default function AdminBootcampRegistrations() {
                 <p className="text-[#94A3B8] text-[12px] italic text-center">Commitment letter tidak tersedia.</p>
               )}
 
+              {selected.cv ? (
+                <a href={selected.cv} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-2.5 rounded-[8px] border border-[#E2E8F0] text-[#148F89] text-[13px] font-semibold hover:bg-[#148F89]/5 transition-colors">
+                  <FileText size={15} /> Lihat CV (PDF)
+                </a>
+              ) : (
+                <p className="text-[#94A3B8] text-[12px] italic text-center">CV tidak tersedia.</p>
+              )}
+
+              {/* Portofolio opsional -- kalau kosong ya wajar, jadi gak dikasih
+                  peringatan "tidak tersedia" biar admin gak salah kira kurang. */}
+              {selected.portfolio && (
+                <a href={selected.portfolio} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-2.5 rounded-[8px] border border-[#E2E8F0] text-[#148F89] text-[13px] font-semibold hover:bg-[#148F89]/5 transition-colors">
+                  <FileText size={15} /> Lihat Portofolio (PDF)
+                </a>
+              )}
+
               <div className="flex flex-col gap-1.5">
                 <label className="text-[#64748B] text-[12px] font-semibold">Catatan (opsional)</label>
                 <textarea

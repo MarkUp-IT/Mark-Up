@@ -45,6 +45,8 @@ export default function BootcampRegisterPage() {
   const [selectedPackageId, setSelectedPackageId] = useState("");
   const [file, setFile] = useState(null);
   const [commitmentLetterFile, setCommitmentLetterFile] = useState(null);
+  const [cvFile, setCvFile] = useState(null);
+  const [portfolioFile, setPortfolioFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Validasi ukuran di browser dulu -- sebelumnya file oversize diloloskan
@@ -109,7 +111,7 @@ export default function BootcampRegisterPage() {
   const singlePackageMode = packages.length === 1;
 
   const handleSubmit = async () => {
-    if (!selectedPackageId || !file || !commitmentLetterFile || submitting) return;
+    if (!selectedPackageId || !file || !commitmentLetterFile || !cvFile || submitting) return;
     if (!getAccessToken()) {
       toast.error("Perlu masuk dulu", { description: "Silakan masuk ke akunmu sebelum mendaftar." });
       return;
@@ -120,6 +122,8 @@ export default function BootcampRegisterPage() {
       formData.append("package_id", selectedPackageId);
       formData.append("requirement_doc", file);
       formData.append("commitment_letter", commitmentLetterFile);
+      formData.append("cv", cvFile);
+      if (portfolioFile) formData.append("portfolio", portfolioFile);
       // Lewat apiRequest (bukan fetch mentah) supaya kalau access token keburu
       // kedaluwarsa pas user lama ngisi form, tokennya di-refresh otomatis dan
       // request diulang. Dulu pakai fetch mentah -> langsung 401 "Gagal mendaftar"
@@ -144,6 +148,8 @@ export default function BootcampRegisterPage() {
       toast.success("Pendaftaran Terkirim", { description: "Menunggu ditinjau admin." });
       setFile(null);
       setCommitmentLetterFile(null);
+      setCvFile(null);
+      setPortfolioFile(null);
       setSelectedPackageId("");
       fetchAll();
     } catch (err) {
@@ -458,7 +464,7 @@ export default function BootcampRegisterPage() {
               <div>
                 <h2 className="font-bold text-[15px]">Commitment Letter</h2>
                 <p className="text-[#9CA3AF] text-[12px] mt-1">
-                  Tulis motivation/commitment letter mengikuti struktur berikut, lalu unggah sebagai <span className="text-white font-medium">PDF terpisah</span>.
+                  Tulis motivation/commitment letter mengikuti struktur berikut, lalu unggah sebagai <span className="text-white font-medium">satu file PDF</span>.
                 </p>
               </div>
               {requirements.filter((r) => r.category === "commitment_letter").length > 0 && (
@@ -505,6 +511,82 @@ export default function BootcampRegisterPage() {
               </div>
             </div>
 
+            {/* CV (wajib) & Portofolio (opsional) -- dulu diunggah sekali di
+                profil user; sekarang diminta per pendaftaran biar yang masuk
+                selalu versi terbaru. */}
+            <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-4">
+              <div>
+                <h2 className="font-bold text-[15px]">CV &amp; Portofolio</h2>
+                <p className="text-[#9CA3AF] text-[12px] mt-1">
+                  Unggah CV terbarumu. Portofolio boleh dilampirkan kalau ada, tapi tidak wajib.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[13px] font-semibold">CV <span className="text-[#EF4444]">*</span></span>
+                <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[#2D2342] rounded-[10px] py-6 cursor-pointer hover:border-[#148F89]/50 transition-colors">
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      handleFileSelect(e.target.files?.[0] || null, MAX_COMMITMENT_LETTER_SIZE, setCvFile);
+                      e.target.value = "";
+                    }}
+                  />
+                  {cvFile ? (
+                    <span className="flex items-center gap-2 text-[#148F89] text-[13px] font-semibold">
+                      <FileText size={16} /> {cvFile.name}
+                    </span>
+                  ) : (
+                    <>
+                      <Upload size={22} className="text-[#148F89]" />
+                      <span className="text-[13px] font-semibold">Klik untuk unggah PDF</span>
+                    </>
+                  )}
+                </label>
+                <p className="text-[#6B7280] text-[11px] text-center">Format PDF, ukuran file maksimal 5MB.</p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[13px] font-semibold">
+                  Portofolio <span className="text-[#9CA3AF] font-normal">(opsional)</span>
+                </span>
+                <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[#2D2342] rounded-[10px] py-6 cursor-pointer hover:border-[#148F89]/50 transition-colors">
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      handleFileSelect(e.target.files?.[0] || null, MAX_COMMITMENT_LETTER_SIZE, setPortfolioFile);
+                      e.target.value = "";
+                    }}
+                  />
+                  {portfolioFile ? (
+                    <span className="flex items-center gap-2 text-[#148F89] text-[13px] font-semibold">
+                      <FileText size={16} /> {portfolioFile.name}
+                    </span>
+                  ) : (
+                    <>
+                      <Upload size={22} className="text-[#148F89]" />
+                      <span className="text-[13px] font-semibold">Klik untuk unggah PDF</span>
+                    </>
+                  )}
+                </label>
+                <div className="flex items-center justify-center gap-2">
+                  <p className="text-[#6B7280] text-[11px]">Format PDF, maksimal 5MB.</p>
+                  {portfolioFile && (
+                    <button
+                      onClick={() => setPortfolioFile(null)}
+                      className="text-[#EF4444] text-[11px] font-semibold hover:underline"
+                    >
+                      Hapus
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-4">
               {!selectedPackageId && (
                 <p className="flex items-center gap-2 text-[#F59E0B] text-[12px]">
@@ -514,7 +596,7 @@ export default function BootcampRegisterPage() {
 
               <button
                 onClick={handleSubmit}
-                disabled={!selectedPackageId || !file || !commitmentLetterFile || submitting}
+                disabled={!selectedPackageId || !file || !commitmentLetterFile || !cvFile || submitting}
                 className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[14px] hover:bg-[#117A75] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? "Mengirim..." : "Kirim Pendaftaran"}

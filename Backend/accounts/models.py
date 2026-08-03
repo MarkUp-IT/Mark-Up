@@ -116,17 +116,19 @@ class User(AbstractUser):
         return self.fullname
 
     def is_profile_complete(self):
-        """Field wajib biar student bisa checkout -- nama, WhatsApp,
-        institusi, status/semester, LinkedIn, foto profil. CV/portofolio
-        sengaja dibiarkan opsional (pelengkap konteks mentoring doang,
-        bukan data inti)."""
+        """Field wajib biar student bisa checkout: nama, WhatsApp, institusi,
+        dan status/semester.
+
+        LinkedIn & foto profil sengaja TIDAK diwajibkan lagi -- keduanya bikin
+        orang mandek di gerbang profil padahal bukan data yang kepakai buat
+        transaksi. CV/portofolio juga gak di sini: sekarang diminta pas daftar
+        bootcamp (per pendaftaran, biar selalu versi terbaru), bukan sekali di
+        profil."""
         return bool(
             self.fullname
             and (self.phone or "").strip()
             and (self.institution or "").strip()
             and (self.current_status or "").strip()
-            and (self.linkedin_url or "").strip()
-            and self.profile_image
         )
 
 
