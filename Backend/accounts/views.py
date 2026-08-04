@@ -8,6 +8,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, AccountDeletionTokenGenerator, get_client_ip, is_rate_limited, notify_team
 from .forms import RegisterForm, UpdateProfileForm
+from mark_up.imaging import compress_or_original, MAX_DIM_AVATAR
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, UserRole, UserStatus, ContactMessage, ContactMessageStatus, AuditAction
@@ -73,6 +74,9 @@ def register_view(request):
 			return JsonResponse(
 				{"errors": {"profile_image": ["Ukuran foto maksimal 2MB."]}}, status=400
 			)
+
+	if photo is not None:
+		photo, _photo_name = compress_or_original(photo, max_dim=MAX_DIM_AVATAR)
 
 	user = form.save(commit=False)
 	user.set_password(form.cleaned_data["password"])
@@ -996,7 +1000,10 @@ def profile_view(request):
 
     return HttpResponseNotAllowed(["GET", "PATCH", "POST"])
 
-ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png"}
+# webp ikut diizinkan biar seragam sama register_view (dulu beda: register
+# nerima webp, endpoint ini nolak -- bikin user bingung kenapa file yang sama
+# bisa dipakai waktu daftar tapi ditolak waktu ganti foto).
+ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 MAX_PROFILE_IMAGE_SIZE = 2 * 1024 * 1024  # 2MB, sesuai teks di frontend
 
 
@@ -1016,6 +1023,10 @@ def upload_profile_photo(request):
 
     if photo.size > MAX_PROFILE_IMAGE_SIZE:
         return JsonResponse({"detail": "Ukuran file maksimal 2MB."}, status=400)
+
+    # Avatar cuma dipajang ~96px, jadi 512px sudah lebih dari cukup. Sekalian
+    # buang metadata EXIF (foto HP bisa nyimpen lokasi GPS di situ).
+    photo, _photo_name = compress_or_original(photo, max_dim=MAX_DIM_AVATAR)
 
     user = request.user
 

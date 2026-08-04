@@ -11,6 +11,7 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from django.utils.text import slugify
+from mark_up.imaging import compress_or_original, MAX_DIM_POSTER
 from django.utils.dateparse import parse_date, parse_datetime
 
 from .utils import get_request_data
@@ -1569,8 +1570,12 @@ def upload_product_image(request):
     if image.size > MAX_PRODUCT_IMAGE_SIZE:
         return JsonResponse({"detail": "Ukuran file maksimal 5MB."}, status=400)
 
+    # Dikompres dulu (WebP, maks 1600px) -- poster dari desainer sering 1-2 MB
+    # PNG, padahal di layar cuma dipajang ~800px.
+    image, image_name = compress_or_original(image, max_dim=MAX_DIM_POSTER)
+
     now = timezone.now()
-    key = f"product_images/{now.year}/{now.month:02d}/{image.name}"
+    key = f"product_images/{now.year}/{now.month:02d}/{image_name}"
     saved_key = default_storage.save(key, image)
 
     return JsonResponse(

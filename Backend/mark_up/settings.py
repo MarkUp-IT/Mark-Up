@@ -245,6 +245,13 @@ if USE_S3_STORAGE:
     AWS_QUERYSTRING_AUTH = True
     AWS_QUERYSTRING_EXPIRE = 3600  # 1 jam
 
+    # Header yang nempel di objek waktu diunggah. "immutable" aman di sini
+    # karena AWS_S3_FILE_OVERWRITE=False -- nama file selalu unik, jadi isi di
+    # satu URL gak pernah berubah. Dipasangin sama memo URL di
+    # mark_up/storage.py: header ini bikin browser MAU nyimpen, memo itu yang
+    # bikin URL-nya konsisten sehingga simpanannya kepakai.
+    AWS_S3_OBJECT_PARAMETERS = {"CacheControl": "public, max-age=31536000, immutable"}
+
     STORAGES = {
         "default": {"BACKEND": "mark_up.storage.TolerantS3Storage"},
         "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},

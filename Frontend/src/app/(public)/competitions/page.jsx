@@ -226,6 +226,8 @@ export default function InfoLombaPage() {
                         src={lomba.image}
                         alt={`Poster ${lomba.title}`}
                         className="w-full h-full object-cover"
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-[#4A2CA1] to-[#17A9D4]"></div>
