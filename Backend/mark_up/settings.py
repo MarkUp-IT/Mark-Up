@@ -151,6 +151,14 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'accounts.validators.SimplePasswordValidator',
     },
+    {
+        # Nolak password yang ada di daftar 20.000 password paling sering
+        # dipakai/bocor. "Password1!" lolos aturan panjang+kapital+simbol tapi
+        # ditebak duluan sama penyerang. Validator bawaan Django yang lain
+        # (similarity/numeric) sengaja TIDAK dipakai -- sesuai keputusan
+        # sebelumnya yang menilai itu terlalu ribet buat user.
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    },
 ]
 
 CORS_ALLOWED_ORIGINS = [

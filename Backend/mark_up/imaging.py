@@ -91,3 +91,29 @@ def compress_or_original(uploaded_file, *, max_dim):
     if compressed.size >= getattr(uploaded_file, "size", float("inf")):
         return uploaded_file, original_name
     return compressed, new_name
+
+
+def is_real_image(uploaded_file):
+    """Cek isi berkas, bukan cuma ekstensinya.
+
+    Ekstensi gampang dipalsukan -- file apa pun bisa di-rename jadi .jpg.
+    Pillow beneran nyoba mem-parse isinya, jadi ini pemeriksaan yang sulit
+    diakali. verify() sengaja dipanggil di objek terpisah karena setelah
+    verify() objeknya gak bisa dipakai lagi buat operasi lain.
+    """
+    try:
+        from PIL import Image
+    except Exception:
+        # Pillow gak ada -> jangan ngeblokir upload, cuma gak bisa diperiksa.
+        return True
+    try:
+        uploaded_file.seek(0)
+        Image.open(uploaded_file).verify()
+        return True
+    except Exception:
+        return False
+    finally:
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass

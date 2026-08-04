@@ -9,7 +9,7 @@ from .models import (
     BootcampSessionRequiredBenefit,
 )
 from django.utils import timezone
-from mark_up.imaging import compress_or_original, MAX_DIM_POSTER
+from mark_up.imaging import compress_or_original, is_real_image, MAX_DIM_POSTER
 from django.utils.dateparse import parse_datetime
 from accounts.decorators import jwt_required, role_required
 from accounts.models import UserRole, AuditAction
@@ -491,6 +491,9 @@ def upload_competition_poster(request):
 
     if image.size > MAX_POSTER_IMAGE_SIZE:
         return JsonResponse({"detail": "Ukuran file maksimal 5MB."}, status=400)
+    if not is_real_image(image):
+        return JsonResponse({"detail": "File ini bukan gambar yang valid."}, status=400)
+
     # Sama seperti poster produk: dikecilkan & dikonversi WebP dulu.
     image, poster_name = compress_or_original(image, max_dim=MAX_DIM_POSTER)
 
