@@ -197,6 +197,13 @@ export default function MentorPage() {
                         src={mentor.photo}
                         alt={mentor.name}
                         className="w-full h-full object-cover"
+                        // Baris pertama dimuat eager (di atas lipatan, ikut
+                        // LCP); sisanya nunggu discroll biar gak ngerebut
+                        // bandwidth di awal.
+                        loading={index < 4 ? "eager" : "lazy"}
+                        decoding="async"
+                        width={96}
+                        height={96}
                       />
                     ) : (
                       <span className="text-white font-poppins font-bold text-lg md:text-xl">

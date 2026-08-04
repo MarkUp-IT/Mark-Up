@@ -299,10 +299,11 @@ export default function ProdukPage() {
                     <AnimatePresence>
                       {sectionProducts.length > 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6 w-full">
-                          {sectionProducts.map((product) => (
+                          {sectionProducts.map((product, index) => (
                             <ProductCard
                               key={product.id}
                               data={product}
+                              index={index}
                               onClick={() => setSelectedProduct(product)}
                               reduceMotion={shouldReduceMotion}
                             />
@@ -560,7 +561,7 @@ export default function ProdukPage() {
 }
 
 // --- KOMPONEN PRODUCT CARD ---
-function ProductCard({ data, onClick, reduceMotion }) {
+function ProductCard({ data, index = 0, onClick, reduceMotion }) {
   let tagStyle = "";
   let priceColor = "";
 
@@ -604,6 +605,8 @@ function ProductCard({ data, onClick, reduceMotion }) {
             src={data.image}
             alt={data.title}
             className="w-full h-full object-cover"
+            loading={index < 3 ? "eager" : "lazy"}
+            decoding="async"
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-[#4A2CA1] to-[#17A9D4] flex items-center justify-center p-4">

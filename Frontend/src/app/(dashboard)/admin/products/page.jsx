@@ -935,7 +935,7 @@ export default function Products() {
                   <p className="text-[#1E293B] font-semibold text-[14px]">
                     {addImage.uploading ? "Mengunggah..." : "Klik untuk unggah gambar"}
                   </p>
-                  <p className="text-[#94A3B8] text-[12px]">JPG/PNG/WEBP, maks. 5MB</p>
+                  <p className="text-[#94A3B8] text-[12px]">JPG/PNG/WEBP, maks. 5MB &mdash; otomatis dikompres biar cepat dimuat</p>
                 </>
               )}
             </label>
@@ -1167,7 +1167,7 @@ export default function Products() {
                   <p className="text-[#1E293B] font-semibold text-[14px]">
                     {editImage.uploading ? "Mengunggah..." : "Klik untuk ganti gambar"}
                   </p>
-                  <p className="text-[#94A3B8] text-[12px]">JPG/PNG/WEBP, maks. 5MB</p>
+                  <p className="text-[#94A3B8] text-[12px]">JPG/PNG/WEBP, maks. 5MB &mdash; otomatis dikompres biar cepat dimuat</p>
                 </>
               )}
             </label>
