@@ -31,7 +31,7 @@ export const metadata = {
     // %s = judul per halaman. Brand-nya sengaja diulang di belakang tiap judul
     // biar semua varian penulisan ("MarkUp", "Mark-Up", "Mark Up") kebaca
     // Google di tiap halaman, bukan cuma di homepage.
-    default: "MarkUp — Wadah Akselerasi Talenta Muda Pencetak Para Juara",
+    default: "MarkUp - Wadah Akselerasi Talenta Muda Pencetak Para Juara",
     template: "%s | MarkUp (Mark-Up) Indonesia",
   },
   description:

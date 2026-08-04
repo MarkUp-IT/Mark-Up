@@ -20,7 +20,8 @@ import { getAccessToken, API_BASE } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
 import { useBankInfo } from "@/lib/bankInfo";
 import { toast } from "sonner";
-import { useRequireLogin } from "@/lib/useRequireLogin";
+import LoginRequiredDialog from "@/component/LoginRequiredDialog";
+import { useIsLoggedIn } from "@/lib/useIsLoggedIn";
 
 const NAVBAR_CLEARANCE = 150;
 const CONTENT_WIDTH = 640;
@@ -107,8 +108,9 @@ function DocUploadField({ label, hint, accept, file, setFile }) {
 }
 
 function CheckoutPaymentPageInner() {
-  // Checkout wajib login -- lihat useRequireLogin.
-  const allowed = useRequireLogin();
+  // null = belum ketahuan (masih SSR). Gerbang baru ditampilkan setelah
+  // statusnya pasti, biar user yang sudah login gak kena popup sekilas.
+  const isLoggedIn = useIsLoggedIn();
   const params = useParams();
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
@@ -254,9 +256,6 @@ function CheckoutPaymentPageInner() {
   }
 
 
-  // Selagi diarahkan ke /login, jangan render isi halaman sama sekali.
-  if (!allowed) return null;
-
   return (
     <div style={{ backgroundColor: "#060010", minHeight: "100vh" }}>
       <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative overflow-x-hidden">
@@ -270,6 +269,14 @@ function CheckoutPaymentPageInner() {
         />
 
         <Navbar />
+
+      {isLoggedIn === false && (
+        <LoginRequiredDialog
+          title="Masuk Dulu buat Lanjut"
+          message="Pembelian butuh akun supaya pesanan dan pembayaranmu bisa dilacak."
+          backHref="/products"
+        />
+      )}
         <main
           style={{
             maxWidth: `${CONTENT_WIDTH}px`,

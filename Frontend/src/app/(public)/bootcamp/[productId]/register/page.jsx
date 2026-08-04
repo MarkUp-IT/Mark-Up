@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Check, X, Upload, ShieldCheck, Clock, FileText, AlertCircle, Lock, Info } from "lucide-react";
@@ -9,6 +9,8 @@ import Linkify from "@/component/Linkify";
 import BootcampTimeline from "@/component/BootcampTimeline";
 import { apiRequest, apiRequestRaw, getAccessToken } from "@/lib/api";
 import { toast } from "sonner";
+import LoginRequiredDialog from "@/component/LoginRequiredDialog";
+import { useIsLoggedIn } from "@/lib/useIsLoggedIn";
 
 const MAX_REGISTRATION_DOC_SIZE = 10 * 1024 * 1024;
 const MAX_COMMITMENT_LETTER_SIZE = 5 * 1024 * 1024;
@@ -31,8 +33,11 @@ const STATUS_META = {
   rejected: { label: "Ditolak", cls: "bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/30" },
 };
 
-export default function BootcampRegisterPage() {
+function BootcampRegisterPageInner() {
   const params = useParams();
+  // null = belum ketahuan (masih SSR). Gerbang baru ditampilkan setelah
+  // statusnya pasti, biar user yang sudah login gak kena popup sekilas.
+  const isLoggedIn = useIsLoggedIn();
   const productId = params.productId;
 
   const [product, setProduct] = useState(null);
@@ -162,6 +167,17 @@ export default function BootcampRegisterPage() {
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white">
       <Navbar variant="solid" />
+
+      {/* Gerbang login. Isi halaman tetap kerender di belakang sebagai konteks
+          (biar user lihat dia mau daftar bootcamp apa), tapi ketutup lapisan
+          ini sepenuhnya -- gak bisa diklik atau discroll. */}
+      {isLoggedIn === false && (
+        <LoginRequiredDialog
+          title="Masuk Dulu buat Daftar"
+          message="Pendaftaran bootcamp butuh akun supaya status seleksi dan pembayaranmu bisa dilacak."
+          backHref="/products"
+        />
+      )}
 
       <div className="max-w-[860px] mx-auto px-4 pt-32 pb-16 flex flex-col gap-8">
         <Link href="/products" className="text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit">
@@ -609,5 +625,15 @@ export default function BootcampRegisterPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// LoginRequiredDialog pakai useSearchParams, jadi wajib ada Suspense di atasnya
+// supaya build produksi gak gagal waktu prerender.
+export default function BootcampRegisterPage() {
+  return (
+    <Suspense fallback={<div className="w-full min-h-screen bg-[#0F081C]" />}>
+      <BootcampRegisterPageInner />
+    </Suspense>
   );
 }

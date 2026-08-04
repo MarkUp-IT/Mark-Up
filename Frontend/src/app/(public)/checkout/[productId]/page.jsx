@@ -21,8 +21,9 @@ import {
 import Navbar from "@/component/Navbar";
 import Linkify from "@/component/Linkify";
 import { toast } from "sonner";
-import { useRequireLogin } from "@/lib/useRequireLogin";
-import { api, ApiError } from "@/lib/api";
+import LoginRequiredDialog from "@/component/LoginRequiredDialog";
+import { useIsLoggedIn } from "@/lib/useIsLoggedIn";
+import { api, ApiError, getAccessToken } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
 
 // Jarak & lebar krusial dipaksa lewat inline style (bukan class Tailwind) --
@@ -138,8 +139,9 @@ function StepPill({ current }) {
 
 
 function CheckoutDetailPageInner() {
-  // Checkout wajib login -- lihat useRequireLogin.
-  const allowed = useRequireLogin();
+  // null = belum ketahuan (masih SSR). Gerbang baru ditampilkan setelah
+  // statusnya pasti, biar user yang sudah login gak kena popup sekilas.
+  const isLoggedIn = useIsLoggedIn();
   const params = useParams();
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
@@ -374,9 +376,6 @@ function CheckoutDetailPageInner() {
     return null;
   }
 
-  // Selagi diarahkan ke /login, jangan render isi halaman sama sekali.
-  if (!allowed) return null;
-
   return (
     <div style={{ backgroundColor: "#060010", minHeight: "100vh" }}>
       <style>{`
@@ -387,6 +386,14 @@ function CheckoutDetailPageInner() {
       `}</style>
 
       <Navbar />
+
+      {isLoggedIn === false && (
+        <LoginRequiredDialog
+          title="Masuk Dulu buat Lanjut"
+          message="Pembelian butuh akun supaya pesanan dan pembayaranmu bisa dilacak."
+          backHref="/products"
+        />
+      )}
 
       <main
         style={{
