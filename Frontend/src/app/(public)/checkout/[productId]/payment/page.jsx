@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
@@ -20,6 +20,7 @@ import { getAccessToken, API_BASE } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
 import { useBankInfo } from "@/lib/bankInfo";
 import { toast } from "sonner";
+import { useRequireLogin } from "@/lib/useRequireLogin";
 
 const NAVBAR_CLEARANCE = 150;
 const CONTENT_WIDTH = 640;
@@ -105,7 +106,9 @@ function DocUploadField({ label, hint, accept, file, setFile }) {
   );
 }
 
-export default function CheckoutPaymentPage() {
+function CheckoutPaymentPageInner() {
+  // Checkout wajib login -- lihat useRequireLogin.
+  const allowed = useRequireLogin();
   const params = useParams();
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
@@ -249,6 +252,10 @@ export default function CheckoutPaymentPage() {
   if (!checkoutSummary.productId) {
     return null; // lagi redirect, lihat useEffect guard di atas
   }
+
+
+  // Selagi diarahkan ke /login, jangan render isi halaman sama sekali.
+  if (!allowed) return null;
 
   return (
     <div style={{ backgroundColor: "#060010", minHeight: "100vh" }}>
@@ -560,5 +567,15 @@ export default function CheckoutPaymentPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+// useRequireLogin pakai useSearchParams, jadi wajib ada Suspense di atasnya
+// supaya build produksi gak gagal waktu prerender.
+export default function CheckoutPaymentPage() {
+  return (
+    <Suspense fallback={<div className="w-full min-h-screen bg-[#0F081C]" />}>
+      <CheckoutPaymentPageInner />
+    </Suspense>
   );
 }
