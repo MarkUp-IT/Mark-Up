@@ -687,6 +687,43 @@ def _create_bootcamp_sessions(user_library, product):
             session.mentors.set(mentor_profiles)
 
 
+# Berkas yang boleh diunggah di alur checkout. Dipakai bareng buat bukti bayar
+# DAN dokumen syarat bootcamp -- sebelumnya tiga dokumen bootcamp cuma dicek
+# "ada atau nggak", tanpa batas ukuran maupun tipe, jadi bisa dipakai nitip
+# file apa pun ke storage.
+CHECKOUT_ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "pdf"}
+CHECKOUT_MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+
+
+def _validate_checkout_upload(f, label):
+    """Balikin pesan error, atau None kalau berkasnya lolos.
+
+    Ekstensi gampang dipalsukan, jadi isinya ikut diperiksa: yang ngaku gambar
+    di-parse Pillow, yang ngaku PDF dicek penanda '%PDF' di awal berkas.
+    """
+    name = f.name or ""
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    if ext not in CHECKOUT_ALLOWED_EXTENSIONS:
+        return f"{label} harus berformat JPG, PNG, atau PDF."
+    if f.size > CHECKOUT_MAX_FILE_SIZE:
+        return f"Ukuran {label.lower()} maksimal 5MB."
+
+    if ext == "pdf":
+        try:
+            f.seek(0)
+            head = f.read(5)
+            f.seek(0)
+        except Exception:
+            return None
+        if head[:4] != b"%PDF":
+            return f"{label} bukan berkas PDF yang valid."
+    else:
+        from mark_up.imaging import is_real_image
+        if not is_real_image(f):
+            return f"{label} bukan gambar yang valid."
+    return None
+
+
 @csrf_exempt
 @jwt_required
 def checkout_product(request):
@@ -731,15 +768,9 @@ def checkout_product(request):
     if not proof_file:
         return JsonResponse({"detail": "Bukti pembayaran diperlukan."}, status=400)
     
-    ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "pdf"}
-    MAX_FILE_SIZE = 5 * 1024 * 1024  
-
-    ext = proof_file.name.rsplit(".", 1)[-1].lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        return JsonResponse({"detail": "Format file tidak didukung."}, status=400)
-
-    if proof_file.size > MAX_FILE_SIZE:
-        return JsonResponse({"detail": "Ukuran file maksimal 5MB."}, status=400)
+    err = _validate_checkout_upload(proof_file, "Bukti pembayaran")
+    if err:
+        return JsonResponse({"detail": err}, status=400)
 
     try:
         product = Product.objects.select_related(
@@ -779,6 +810,17 @@ def checkout_product(request):
                 {"detail": "Lengkapi dulu: " + ", ".join(missing_docs) + "."},
                 status=400,
             )
+
+        # Ketiganya dulu cuma dicek keberadaannya -- ukuran & tipenya lolos
+        # begitu aja. Sekarang divalidasi sama ketatnya dengan bukti bayar.
+        for f, label in (
+            (follow_proof, "Bukti follow"),
+            (wa_share_proof, "Bukti share WhatsApp"),
+            (commitment_letter, "Commitment letter"),
+        ):
+            err = _validate_checkout_upload(f, label)
+            if err:
+                return JsonResponse({"detail": err}, status=400)
 
     price = detail.new_price if getattr(detail, "new_price", None) else detail.original_price
 
