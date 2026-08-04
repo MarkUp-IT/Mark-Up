@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
@@ -46,8 +46,13 @@ function Field({ label, type = "text", value, onChange, rightIcon }) {
   );
 }
 
-export default function Login() {
+function LoginInner() {
   const router = useRouter();
+  // ?next= diisi halaman yang butuh login (mis. checkout). Cuma path internal
+  // yang diterima -- kalau nerima URL absolut, orang bisa bikin link login
+  // yang habis sukses malah nendang korban ke situs lain (open redirect).
+  const rawNext = useSearchParams().get("next");
+  const nextPath = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -96,6 +101,13 @@ export default function Login() {
       const role = data.user?.role;
 
       window.setTimeout(() => {
+        // Kalau user tadi diarahkan ke sini dari halaman yang butuh login
+        // (mis. checkout), balikin ke situ -- bukan dilempar ke dashboard,
+        // yang bikin dia harus nyari ulang produk yang mau dibeli.
+        if (nextPath) {
+          router.push(nextPath);
+          return;
+        }
         switch (role) {
           case "ADMIN":
             router.push("/admin");
@@ -273,3 +285,12 @@ export default function Login() {
   );
   }
 
+// useSearchParams wajib dibungkus Suspense, kalau nggak build produksi bisa
+// gagal waktu Next.js nyoba prerender halaman ini.
+export default function Login() {
+  return (
+    <Suspense fallback={<div className="w-full min-h-screen bg-[#060010]" />}>
+      <LoginInner />
+    </Suspense>
+  );
+}

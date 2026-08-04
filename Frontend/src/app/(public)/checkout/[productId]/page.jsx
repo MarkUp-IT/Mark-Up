@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
@@ -21,6 +21,7 @@ import {
 import Navbar from "@/component/Navbar";
 import Linkify from "@/component/Linkify";
 import { toast } from "sonner";
+import { useRequireLogin } from "@/lib/useRequireLogin";
 import { api, ApiError } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
 
@@ -136,7 +137,9 @@ function StepPill({ current }) {
 
 
 
-export default function CheckoutDetailPage() {
+function CheckoutDetailPageInner() {
+  // Checkout wajib login -- lihat useRequireLogin.
+  const allowed = useRequireLogin();
   const params = useParams();
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
@@ -370,6 +373,10 @@ export default function CheckoutDetailPage() {
   if (!product) {
     return null;
   }
+
+  // Selagi diarahkan ke /login, jangan render isi halaman sama sekali.
+  if (!allowed) return null;
+
   return (
     <div style={{ backgroundColor: "#060010", minHeight: "100vh" }}>
       <style>{`
@@ -822,5 +829,15 @@ export default function CheckoutDetailPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+// useRequireLogin pakai useSearchParams, jadi wajib ada Suspense di atasnya
+// supaya build produksi gak gagal waktu prerender.
+export default function CheckoutDetailPage() {
+  return (
+    <Suspense fallback={<div className="w-full min-h-screen bg-[#0F081C]" />}>
+      <CheckoutDetailPageInner />
+    </Suspense>
   );
 }
