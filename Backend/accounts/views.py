@@ -8,7 +8,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, AccountDeletionTokenGenerator, get_client_ip, is_rate_limited, notify_team
 from .forms import RegisterForm, UpdateProfileForm
-from mark_up.imaging import compress_or_original, MAX_DIM_AVATAR
+from mark_up.imaging import compress_or_original, is_real_image, MAX_DIM_AVATAR
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, UserRole, UserStatus, ContactMessage, ContactMessageStatus, AuditAction
@@ -76,6 +76,10 @@ def register_view(request):
 			)
 
 	if photo is not None:
+		if not is_real_image(photo):
+			return JsonResponse(
+				{"errors": {"profile_image": ["File ini bukan gambar yang valid."]}}, status=400
+			)
 		photo, _photo_name = compress_or_original(photo, max_dim=MAX_DIM_AVATAR)
 
 	user = form.save(commit=False)
@@ -457,6 +461,10 @@ def change_password(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
 
+	# Nebak password lama pakai sesi yang sudah dikuasai -- dibatasi per user.
+	if is_rate_limited(f"rl:change-password:user:{request.user.id}", limit=5, window_seconds=3600):
+		return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
+
 	request_data = get_request_data(request)
 	if request_data is None:
 		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
@@ -539,6 +547,11 @@ def confirm_delete_account(request):
 	sama polanya kayak reset_password."""
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
+
+	ip = get_client_ip(request)
+	# Endpoint publik yang MENGHAPUS akun -- dulu gak dibatasi sama sekali.
+	if is_rate_limited(f"rl:confirm-delete:ip:{ip}", limit=5, window_seconds=3600):
+		return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
 
 	request_data = get_request_data(request)
 	if request_data is None:
@@ -643,6 +656,10 @@ def reset_password(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
 
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:reset-password:ip:{ip}", limit=10, window_seconds=3600):
+		return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
+
 	request_data = get_request_data(request)
 	if request_data is None:
 		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
@@ -681,6 +698,10 @@ def reset_password(request):
 def verify_email(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
+
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:verify-email:ip:{ip}", limit=20, window_seconds=3600):
+		return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
 
 	request_data = get_request_data(request)
 	if request_data is None:
@@ -1013,6 +1034,10 @@ def upload_profile_photo(request):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
 
+    # Batasi biar storage gak bisa dibanjiri upload berulang.
+    if is_rate_limited(f"rl:upload-photo:user:{request.user.id}", limit=20, window_seconds=3600):
+        return JsonResponse({"detail": "Terlalu banyak unggahan. Coba lagi nanti."}, status=429)
+
     photo = request.FILES.get("photo")
     if not photo:
         return JsonResponse({"detail": "File foto diperlukan."}, status=400)
@@ -1023,6 +1048,9 @@ def upload_profile_photo(request):
 
     if photo.size > MAX_PROFILE_IMAGE_SIZE:
         return JsonResponse({"detail": "Ukuran file maksimal 2MB."}, status=400)
+
+    if not is_real_image(photo):
+        return JsonResponse({"detail": "File ini bukan gambar yang valid."}, status=400)
 
     # Avatar cuma dipajang ~96px, jadi 512px sudah lebih dari cukup. Sekalian
     # buang metadata EXIF (foto HP bisa nyimpen lokasi GPS di situ).
@@ -1071,6 +1099,9 @@ MAX_CV_SIZE = 5 * 1024 * 1024  # 5MB, sesuai teks di frontend
 def upload_cv(request):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
+
+    if is_rate_limited(f"rl:upload-cv:user:{request.user.id}", limit=20, window_seconds=3600):
+        return JsonResponse({"detail": "Terlalu banyak unggahan. Coba lagi nanti."}, status=429)
 
     cv = request.FILES.get("cv")
     if not cv:
