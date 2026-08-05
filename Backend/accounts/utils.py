@@ -54,9 +54,29 @@ def get_request_data(request):
 
 
 def get_client_ip(request):
+    """IP asli pengunjung, dipakai buat rate limit & audit log.
+
+    X-Forwarded-For itu header yang BISA DIISI KLIEN, jadi entri paling depan
+    nggak boleh dipercaya. Dulu fungsi ini ngambil entri pertama -- akibatnya
+    penyerang tinggal ngirim "X-Forwarded-For: 1.2.3.4" (diacak tiap request)
+    buat ngendaliin cache key rate limiter, dan semua limit per-IP (login,
+    register, lupa password, hapus akun) jadi nggak ada artinya.
+
+    Yang dipercaya cuma entri PALING BELAKANG, karena itu yang ditulis reverse
+    proxy kita sendiri -- benar untuk dua-duanya: kalau Nginx nimpa headernya
+    ($remote_addr, lihat deploy/nginx.conf) isinya cuma satu nilai, dan kalau
+    suatu saat balik ke mode nambah ($proxy_add_x_forwarded_for) entri
+    terakhir tetap IP yang dilihat proxy.
+
+    Catatan: kalau nanti ada CDN (mis. Cloudflare) di depan Nginx, IP asli
+    pindah ke header khusus CDN-nya (CF-Connecting-IP) dan fungsi ini harus
+    disesuaikan -- jangan balik ke entri pertama.
+    """
     forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+        hops = [part.strip() for part in forwarded_for.split(",") if part.strip()]
+        if hops:
+            return hops[-1]
     return request.META.get("REMOTE_ADDR")
 
 

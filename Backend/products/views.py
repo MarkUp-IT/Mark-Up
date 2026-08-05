@@ -1,3 +1,5 @@
+import logging
+
 from django.core.paginator import Paginator, EmptyPage
 from decimal import Decimal, InvalidOperation
 from datetime import timedelta
@@ -55,6 +57,8 @@ from transactions.models import (
     Transaction, TransactionItem, PaymentStatus, ReferralCode, ReferralCodeUsage,
 )
 from django.views.decorators.csrf import csrf_exempt
+
+logger = logging.getLogger(__name__)
 
 MAX_CERTIFICATE_SIZE = 5 * 1024 * 1024  # 5MB
 
@@ -519,6 +523,7 @@ def get_my_product_detail(request, product_id):
     return JsonResponse({"detail": "Jenis produk tidak didukung."}, status=400)
 
 
+@csrf_exempt
 @jwt_required
 def rate_my_product(request, product_id):
     if request.method != "POST":
@@ -665,6 +670,7 @@ def schedule_my_product_session(request, session_id):
     return JsonResponse(_serialize_mentoring_session(session), status=200)
 
 
+@csrf_exempt
 @jwt_required
 def refund_my_product(request, product_id):
     if request.method != "POST":
@@ -3157,8 +3163,16 @@ def create_bootcamp_payment(request, registration_id):
                     user=request.user,
                     discount_amount=discount_amount,
                 )
-    except Exception as e:
-        return JsonResponse({"detail": f"Gagal membuat pembayaran: {str(e)}"}, status=500)
+    except Exception:
+        # Sama alasannya kayak di transactions.views.checkout_product: pesan
+        # exception mentah bocorin struktur DB / konfigurasi storage ke klien.
+        logger.exception(
+            "Pembayaran bootcamp gagal untuk user %s", getattr(request.user, "id", None)
+        )
+        return JsonResponse(
+            {"detail": "Pembayaran gagal diproses. Coba lagi, atau hubungi tim kami kalau terus berulang."},
+            status=500,
+        )
 
     notify_team(
         f"Pembayaran bootcamp baru nunggu verifikasi ({txn.id})",

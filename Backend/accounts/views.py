@@ -196,11 +196,19 @@ def login_view(request):
 def google_login_view(request):
 	"""Register/login pakai akun Google. Frontend pakai tombol custom sendiri
 	(bukan tombol bawaan Google) yang minta access token lewat popup OAuth2
-	(google.accounts.oauth2.initTokenClient) -- access token itu divalidasi
-	di sini dengan manggil userinfo endpoint Google sendiri (bukan cuma
-	dipercaya mentah-mentah), lalu user dicari/dibuat berdasarkan email yang
-	sudah pasti terverifikasi oleh Google -- dan diterbitkan JWT kita sendiri,
-	sama persis kayak alur login manual."""
+	(google.accounts.oauth2.initTokenClient), lalu access token itu divalidasi
+	di sini ke Google, dan user dicari/dibuat berdasarkan email yang sudah
+	pasti terverifikasi Google -- diterbitkan JWT kita sendiri, sama persis
+	kayak alur login manual.
+
+	PENTING soal validasi: manggil userinfo doang TIDAK cukup. Endpoint
+	userinfo nerima access token dari OAuth client MANA PUN yang punya scope
+	email/profile -- jadi kalau cuma itu yang dicek, penyerang tinggal bikin
+	OAuth client Google sendiri, mancing korban login sekali di situ, terus
+	muter ulang tokennya ke sini buat dapet JWT atas nama korban (termasuk
+	nembus akun yang aslinya pakai password, karena user dicari by email).
+	Makanya token WAJIB dicek dulu ke endpoint tokeninfo buat mastiin
+	audience-nya (aud/azp) memang GOOGLE_CLIENT_ID punya kita."""
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
 
@@ -225,6 +233,37 @@ def google_login_view(request):
 
 	import requests as http_requests
 
+	# Langkah 1 -- pastikan token ini emang diterbitkan buat aplikasi KITA.
+	# Tanpa cek ini, token dari OAuth client orang lain juga bakal diterima
+	# (lihat penjelasan di docstring).
+	try:
+		tokeninfo_res = http_requests.get(
+			"https://oauth2.googleapis.com/tokeninfo",
+			params={"access_token": access_token},
+			timeout=5,
+		)
+	except http_requests.RequestException:
+		return JsonResponse({"detail": "Gagal menghubungi server Google. Coba lagi."}, status=502)
+
+	if tokeninfo_res.status_code != 200:
+		return JsonResponse({"detail": "Token Google tidak valid atau kedaluwarsa."}, status=401)
+
+	try:
+		tokeninfo = tokeninfo_res.json()
+	except ValueError:
+		return JsonResponse({"detail": "Token Google tidak valid atau kedaluwarsa."}, status=401)
+
+	# Google ngisi "aud" (dan biasanya "azp" juga) dengan client ID pemilik
+	# token. Dua-duanya diterima karena formatnya beda-beda tergantung tipe
+	# token, tapi salah satunya HARUS cocok sama punya kita.
+	token_audience = {tokeninfo.get("aud"), tokeninfo.get("azp")}
+	if client_id not in token_audience:
+		return JsonResponse(
+			{"detail": "Token Google ini bukan untuk aplikasi MarkUp."}, status=401
+		)
+
+	# Langkah 2 -- ambil profilnya (nama dsb). Tokennya udah kebukti punya
+	# kita di langkah 1, jadi hasil userinfo di sini aman dipercaya.
 	try:
 		userinfo_res = http_requests.get(
 			"https://www.googleapis.com/oauth2/v3/userinfo",
@@ -242,7 +281,12 @@ def google_login_view(request):
 	if not payload.get("email_verified"):
 		return JsonResponse({"detail": "Email Google kamu belum terverifikasi."}, status=401)
 
-	email = payload["email"].strip().lower()
+	# Kalau scope "email" nggak dikasih, userinfo balik tanpa field ini --
+	# jangan sampai KeyError-nya kelewat jadi 500.
+	email = (payload.get("email") or "").strip().lower()
+	if not email:
+		return JsonResponse({"detail": "Akun Google kamu tidak membagikan alamat email."}, status=401)
+
 	fullname = payload.get("name") or email.split("@")[0]
 
 	user, created = User.objects.get_or_create(

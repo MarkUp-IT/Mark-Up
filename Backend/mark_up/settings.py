@@ -144,6 +144,42 @@ if os.getenv("PRODUCTION", "False").lower() == "true":
     }
 
 
+# Logging -- sebelumnya nggak dikonfigurasi sama sekali, jadi error internal
+# cuma nyangkut di stderr Gunicorn lewat handler darurat bawaan Python.
+# Sekarang view yang nangkep Exception (mis. checkout) bisa nulis traceback
+# lengkap ke log server, sementara respons ke user tetap pesan umum yang
+# nggak bocorin struktur DB/storage.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} {name}: {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        # stderr -- ditangkap systemd/Gunicorn (--error-logfile -), jadi
+        # kebaca lewat `journalctl -u gunicorn`.
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
+
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
@@ -230,6 +266,31 @@ S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 S3_REGION_NAME = os.getenv("S3_REGION_NAME", "auto")
 
 USE_S3_STORAGE = all([S3_ENDPOINT_URL, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET_NAME])
+
+# Fallback ke storage lokal cuma boleh di dev. Di produksi, satu env var S3
+# yang kelupaan diisi bakal diam-diam nurunin SEMUA berkas user (bukti bayar,
+# CV, dokumen pendaftaran, sertifikat) ke folder lokal -- dan folder itu dulu
+# disajikan Nginx tanpa autentikasi. Gagal keras di sini jauh lebih baik
+# daripada server nyala tapi dokumen pribadi user kebuka tanpa ada yang sadar.
+if PRODUCTION and not USE_S3_STORAGE:
+    from django.core.exceptions import ImproperlyConfigured
+
+    _missing = [
+        name
+        for name, value in (
+            ("S3_ENDPOINT_URL", S3_ENDPOINT_URL),
+            ("S3_ACCESS_KEY_ID", S3_ACCESS_KEY_ID),
+            ("S3_SECRET_ACCESS_KEY", S3_SECRET_ACCESS_KEY),
+            ("S3_BUCKET_NAME", S3_BUCKET_NAME),
+        )
+        if not value
+    ]
+    raise ImproperlyConfigured(
+        "PRODUCTION=True tapi object storage belum lengkap dikonfigurasi. "
+        f"Env var yang masih kosong: {', '.join(_missing)}. "
+        "Isi dulu di .env -- jangan jalanin produksi dengan storage lokal, "
+        "berkas pribadi user bakal nyimpen di disk server tanpa proteksi."
+    )
 
 if USE_S3_STORAGE:
     # Botocore versi baru default-nya kirim checksum (x-amz-content-sha256)

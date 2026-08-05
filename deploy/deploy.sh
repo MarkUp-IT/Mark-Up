@@ -14,6 +14,12 @@ cd "$REPO_DIR/Backend"
 source .venv/bin/activate
 pip install -r requirements.txt
 python manage.py migrate --noinput
+# Tabel cache buat rate limiter (settings.py pakai DatabaseCache di produksi).
+# Aman dijalanin berulang -- kalau tabelnya udah ada, perintah ini cuma bilang
+# "already exists" dan lanjut. Kalau dilewatin, cache.add() di is_rate_limited
+# bakal error dan semua endpoint yang di-rate-limit (login, register, lupa
+# password) balikin 500.
+python manage.py createcachetable
 python manage.py collectstatic --noinput
 deactivate
 
