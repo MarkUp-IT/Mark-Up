@@ -27,7 +27,7 @@ const autofillFix = `
   }
 `;
 
-function Field({ label, type = "text", value, onChange, error, rightIcon }) {
+function Field({ label, type = "text", value, onChange, error, rightIcon, placeholder }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label className="text-[13px] text-[#B19EEF] font-medium">{label}</label>
@@ -36,6 +36,7 @@ function Field({ label, type = "text", value, onChange, error, rightIcon }) {
           type={type}
           value={value}
           onChange={onChange}
+          placeholder={placeholder}
           className={`w-full h-[48px] bg-[#2B2B2B] rounded-[12px] px-4 ${
             rightIcon ? "pr-12" : ""
           } text-[14px] text-white outline-none focus:ring-2 focus:ring-[#B19EEF]/50 transition-shadow`}
@@ -128,7 +129,12 @@ export default function Register() {
       payload.append("phone", phone);
       payload.append("institution", institution);
       payload.append("current_status", currentStatus);
-      if (linkedIn.trim()) payload.append("linkedin_url", linkedIn.trim());
+      // Orang biasanya ngetik "linkedin.com/in/nama" tanpa skema. Dirapikan di
+      // sini biar yang tersimpan konsisten & bisa diklik, bukan ditolak.
+      const li = linkedIn.trim();
+      if (li) {
+        payload.append("linkedin_url", /^https?:\/\//i.test(li) ? li : `https://${li}`);
+      }
       if (photo) payload.append("profile_image", photo);
 
       await apiRequest("/api/accounts/register/", {
@@ -384,10 +390,10 @@ export default function Register() {
 
           <Field
             label="URL LinkedIn (opsional)"
-            type="url"
             value={linkedIn}
             onChange={(e) => setLinkedIn(e.target.value)}
             error={fieldErrors.linkedin_url}
+            placeholder="linkedin.com/in/namamu"
           />
 
           <div className="flex flex-col gap-1.5">

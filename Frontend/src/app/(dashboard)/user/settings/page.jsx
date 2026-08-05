@@ -38,6 +38,15 @@ function Field({ label, value, onChange, disabled, note, type = "text" }) {
 
 const SHOW_CV_SECTION = false;
 
+// Orang biasanya ngetik "linkedin.com/in/nama" tanpa skema. Dulu field ini
+// pakai type="url", jadi validasi bawaan browser NGEBLOKIR submit -- field yang
+// ditulis "opsional" malah kerasa wajib. Sekarang dirapikan di sini saja.
+function normalizeUrl(v) {
+  const t = (v || "").trim();
+  if (!t) return "";
+  return /^https?:\/\//i.test(t) ? t : `https://${t}`;
+}
+
 export default function Settings() {
   const shouldReduceMotion = useReducedMotion();
 
@@ -102,7 +111,7 @@ export default function Settings() {
           phone,
           institution,
           current_status: currentStatus,
-          linkedin_url: linkedIn,
+          linkedin_url: normalizeUrl(linkedIn),
         },
       });
       const u = res.user;
@@ -386,8 +395,7 @@ const handleDeleteAccount = async () => {
             label="URL LinkedIn (opsional)"
             value={linkedIn}
             onChange={setLinkedIn}
-            type="url"
-            note="Tempel link lengkap, contoh: https://linkedin.com/in/namamu (bukan username saja)"
+            note="Boleh ditulis singkat, contoh: linkedin.com/in/namamu"
           />
           {/* Akhir Tambahan Data */}
         </div>
