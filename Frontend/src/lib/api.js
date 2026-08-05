@@ -156,8 +156,17 @@ export async function apiRequest(
     const hasRefreshToken = Boolean(getRefreshToken());
 
     if (!hasRefreshToken) {
+      // Dulu di sini `return null` diam-diam. Bagi pemanggil itu nggak bisa
+      // dibedain dari "sukses tapi datanya kosong" -- yang langsung baca
+      // res.field jadi crash dengan TypeError yang nggak nyambung, dan yang
+      // punya try/catch pun nggak kena catch-nya sama sekali. Sesi habis itu
+      // kegagalan, jadi diperlakukan sama kayak cabang refresh yang gagal di
+      // bawah: dilempar sebagai ApiError 401.
       clearTokens();
-      return null;
+      throw new ApiError("Sesi berakhir, silakan login kembali.", {
+        status: 401,
+        url,
+      });
     } else if (isRefreshing) {
       const newToken = await new Promise((resolve) => subscribeToRefresh(resolve));
       if (newToken) {
