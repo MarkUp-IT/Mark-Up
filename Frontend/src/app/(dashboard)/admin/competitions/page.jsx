@@ -779,7 +779,7 @@ export default function Competitions() {
               Link Pendaftaran
             </p>
             <input
-              type="url"
+              type="text"
               name="registration_link"
               value={addForm.registration_link}
               onChange={handleAddChange}
@@ -950,7 +950,7 @@ export default function Competitions() {
               Link Pendaftaran
             </p>
             <input
-              type="url"
+              type="text"
               name="registration_link"
               value={editForm.registration_link}
               onChange={handleEditChange}
