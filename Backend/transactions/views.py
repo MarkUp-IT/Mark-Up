@@ -1,3 +1,5 @@
+import logging
+
 from django.db.models import Case, DecimalField, ExpressionWrapper, F, Sum, When
 from django.http import JsonResponse, HttpResponseNotAllowed, HttpResponseBadRequest
 from .models import (
@@ -30,6 +32,9 @@ from django.db import transaction as db_transaction
 from mentors.models import MentorAvailability, MentorProfile
 from .utils import get_request_data
 from django.views.decorators.csrf import csrf_exempt
+
+logger = logging.getLogger(__name__)
+
 
 def _resolve_period_range(period: str):
     """
@@ -922,8 +927,17 @@ def checkout_product(request):
             # di-reserve dulu supaya nggak direbut orang lain selama nunggu
             # verifikasi.
 
-    except Exception as e:
-        return JsonResponse({"detail": f"Checkout gagal: {str(e)}"}, status=500)
+    except Exception:
+        # Detail exception-nya SENGAJA nggak dikirim ke klien. str(e) di sini
+        # bisa berisi nama tabel/kolom/constraint dari psycopg, atau nama
+        # bucket & endpoint dari botocore -- itu peta gratis buat penyerang,
+        # dan user sendiri nggak bisa berbuat apa-apa sama pesan begitu.
+        # Traceback lengkapnya masuk log server buat tim.
+        logger.exception("Checkout gagal untuk user %s", getattr(request.user, "id", None))
+        return JsonResponse(
+            {"detail": "Checkout gagal diproses. Coba lagi, atau hubungi tim kami kalau terus berulang."},
+            status=500,
+        )
 
     # Notifikasi ke tim -- ada transaksi baru yang nunggu diverifikasi admin.
     # Dikirim setelah DB transaction commit (di luar block atomic) biar

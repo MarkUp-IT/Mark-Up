@@ -27,6 +27,18 @@ class Command(BaseCommand):
                 f"backup_database cuma didukung buat PostgreSQL, ENGINE saat ini: {db['ENGINE']}"
             )
 
+        # Dump ini berisi SELURUH database, hash password termasuk. Kalau
+        # storage-nya lagi jatuh ke fallback lokal, filenya mendarat di
+        # MEDIA_ROOT -- folder yang dulu disajikan Nginx apa adanya, jadi
+        # backup-nya bisa diunduh siapa pun yang nebak timestamp-nya.
+        # Object storage private (presigned URL) itu syarat, bukan opsi.
+        if not getattr(settings, "USE_S3_STORAGE", False):
+            raise CommandError(
+                "Object storage belum dikonfigurasi (S3_* di .env masih kosong), "
+                "jadi backup bakal ditulis ke folder media lokal. Itu nggak aman "
+                "buat dump database -- konfigurasikan object storage dulu."
+            )
+
         timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
         # Sengaja disimpan mentah (.sql, bukan .gz) -- sempat dicoba kompres
         # gzip, tapi storage S3-compatible yang dipakai (di belakang
