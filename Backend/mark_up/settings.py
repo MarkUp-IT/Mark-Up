@@ -213,7 +213,18 @@ CORS_ALLOW_CREDENTIALS = True
 # Belum ada SMTP beneran -- default ke console backend (email ke-print di
 # log server) biar alur lupa password tetap bisa dites di dev. Isi
 # EMAIL_HOST dkk di .env begitu ada kredensial SMTP asli buat production.
-if os.getenv("EMAIL_HOST"):
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
+
+# Urutan pilihan backend email:
+#   1. API Brevo lewat HTTPS -- provider hosting ini MEMBLOKIR SMTP keluar
+#      (DNS smtp-relay dibelokkan ke IP lokal & koneksinya diam tanpa banner,
+#      bikin send_mail menggantung sampai worker gunicorn mati). Port 443 lolos
+#      normal, jadi ini jalur yang dipakai kalau kuncinya ada.
+#   2. SMTP -- disimpan sebagai cadangan, buat hosting lain yang gak memblokir.
+#   3. Console -- dev lokal tanpa kredensial apa pun.
+if BREVO_API_KEY:
+    EMAIL_BACKEND = "mark_up.email_backend.BrevoAPIEmailBackend"
+elif os.getenv("EMAIL_HOST"):
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST = os.getenv("EMAIL_HOST")
     EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
