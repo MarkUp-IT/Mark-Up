@@ -113,6 +113,44 @@ def log_audit(request, action, table_name, object_id="", old_data=None, new_data
         ip_address=get_client_ip(request),
     )
 
+def send_mail_async(subject, message, recipient_list):
+    """Kirim email TANPA nahan response HTTP.
+
+    SMTP di server ini pernah menggantung >2 menit. Karena send_mail dipanggil
+    langsung di dalam view, requestnya ikut nunggu -- gunicorn (timeout 30 detik)
+    keburu ngebunuh workernya, user dapat 500, PADAHAL datanya sudah tersimpan.
+    Persis gejala "ditolak tapi muncul error, giliran di-refresh statusnya sudah
+    berubah".
+
+    Polanya sama dengan notify_team di bawah: thread daemon + fail_silently,
+    jadi email yang lambat/gagal gak pernah ngerusak aksi user.
+
+    Konsekuensi yang disengaja: pengirimannya jadi "kirim & lupakan" -- view gak
+    tahu lagi kalau emailnya gagal. Itu pertukaran yang sepadan; aksi user yang
+    sudah berhasil gak boleh dilaporkan gagal cuma gara-gara email nyangkut.
+    """
+    import threading
+    from django.conf import settings
+    from django.core.mail import send_mail
+
+    if not recipient_list:
+        return
+
+    def _send():
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=recipient_list,
+                fail_silently=True,
+            )
+        except Exception:
+            pass
+
+    threading.Thread(target=_send, daemon=True).start()
+
+
 def notify_team(subject, message):
     """Kirim notifikasi internal ke inbox tim (settings.TEAM_NOTIFICATION_EMAIL)
     buat kejadian yang butuh tindakan cepat -- transaksi baru nunggu verifikasi,

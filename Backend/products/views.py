@@ -50,7 +50,7 @@ from .models import (
 )
 from accounts.decorators import jwt_required, role_required
 from accounts.models import User, UserRole, AuditAction
-from accounts.utils import log_audit, notify_team, get_client_ip, is_rate_limited
+from accounts.utils import log_audit, notify_team, get_client_ip, is_rate_limited, send_mail_async
 from django.db.models import Q
 from mentors.models import MentorAvailability
 from transactions.models import (
@@ -2034,12 +2034,10 @@ def _send_bootcamp_review_email(reg):
             "Terima kasih sudah mendaftar di MARK-UP."
         )
 
-    send_mail(
+    send_mail_async(
         subject=subject,
         message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[reg.user.email],
-        fail_silently=True,
     )
 
 

@@ -6,7 +6,7 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, AccountDeletionTokenGenerator, get_client_ip, is_rate_limited, notify_team
+from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, AccountDeletionTokenGenerator, get_client_ip, is_rate_limited, notify_team, send_mail_async
 from .forms import RegisterForm, UpdateProfileForm
 from mark_up.imaging import compress_or_original, is_real_image, MAX_DIM_AVATAR
 from rest_framework_simplejwt.exceptions import TokenError
@@ -93,16 +93,14 @@ def register_view(request):
 	token = _email_verification_token.make_token(user)
 	verify_link = f"{settings.FRONTEND_BASE_URL}/verify-email?uid={uid}&token={token}"
 
-	send_mail(
+	send_mail_async(
 		subject="Verifikasi Email MARK-UP",
 		message=(
 			f"Halo {user.fullname},\n\n"
 			f"Terima kasih sudah mendaftar di MARK-UP. Buka tautan berikut untuk memverifikasi email kamu:\n{verify_link}\n\n"
 			"Jika kamu tidak merasa mendaftar, abaikan email ini."
 		),
-		from_email=settings.DEFAULT_FROM_EMAIL,
 		recipient_list=[user.email],
-		fail_silently=True,
 	)
 
 	return JsonResponse(
@@ -561,7 +559,7 @@ def delete_account(request):
 	token = _account_deletion_token.make_token(user)
 	confirm_link = f"{settings.FRONTEND_BASE_URL}/delete-account?uid={uid}&token={token}"
 
-	send_mail(
+	send_mail_async(
 		subject="Konfirmasi Penghapusan Akun MARK-UP",
 		message=(
 			f"Halo {user.fullname},\n\n"
@@ -573,9 +571,7 @@ def delete_account(request):
 			"tersimpan.\n\n"
 			"Jika kamu tidak meminta ini, abaikan saja email ini. Akun kamu tetap aman."
 		),
-		from_email=settings.DEFAULT_FROM_EMAIL,
 		recipient_list=[user.email],
-		fail_silently=True,
 	)
 
 	return JsonResponse(
@@ -680,16 +676,14 @@ def forgot_password(request):
 	token = _password_reset_token.make_token(user)
 	reset_link = f"{settings.FRONTEND_BASE_URL}/reset-password?uid={uid}&token={token}"
 
-	send_mail(
+	send_mail_async(
 		subject="Reset Password MARK-UP",
 		message=(
 			f"Halo {user.fullname},\n\n"
 			f"Buka tautan berikut untuk membuat kata sandi baru (berlaku 30 menit):\n{reset_link}\n\n"
 			"Jika kamu tidak meminta pengaturan ulang kata sandi, abaikan email ini."
 		),
-		from_email=settings.DEFAULT_FROM_EMAIL,
 		recipient_list=[user.email],
-		fail_silently=True,
 	)
 
 	return generic_response
@@ -815,16 +809,14 @@ def resend_verification_email(request):
 	token = _email_verification_token.make_token(user)
 	verify_link = f"{settings.FRONTEND_BASE_URL}/verify-email?uid={uid}&token={token}"
 
-	send_mail(
+	send_mail_async(
 		subject="Verifikasi Email MARK-UP",
 		message=(
 			f"Halo {user.fullname},\n\n"
 			f"Klik link berikut buat verifikasi email kamu:\n{verify_link}\n\n"
 			"Jika kamu tidak merasa mendaftar, abaikan email ini."
 		),
-		from_email=settings.DEFAULT_FROM_EMAIL,
 		recipient_list=[user.email],
-		fail_silently=True,
 	)
 
 	return generic_response
