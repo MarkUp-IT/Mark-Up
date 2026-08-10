@@ -462,7 +462,19 @@ class BootcampResource(models.Model):
         on_delete=models.CASCADE,
         related_name="resources",
     )
-    resource_type = models.CharField(max_length=30, choices=BootcampResourceType.choices)
+    resource_type = models.CharField(
+        max_length=30, choices=BootcampResourceType.choices, blank=True, default="",
+        help_text="Sekarang cuma label kategori. Hak aksesnya ditentukan `packages`.",
+    )
+    for_all_packages = models.BooleanField(
+        default=True,
+        help_text="True = semua peserta bootcamp ini boleh mengunduh (tetap harus sudah "
+                   "bayar -- bukan publik). False = cuma paket di `packages`.",
+    )
+    packages = models.ManyToManyField(
+        BootcampPackage, blank=True, related_name="resources",
+        help_text="Dipakai cuma kalau for_all_packages=False.",
+    )
     title = models.CharField(max_length=255)
     file = models.FileField(upload_to="bootcamp_resources/%Y/%m/")
     created_at = models.DateTimeField(auto_now_add=True)

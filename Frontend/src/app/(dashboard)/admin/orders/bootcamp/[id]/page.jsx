@@ -151,7 +151,25 @@ export default function BootcampOrderDetail() {
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newSession, setNewSession] = useState({ title: "", start_time: "", end_time: "" });
+  const [newSession, setNewSession] = useState({ title: "", start_time: "", end_time: "", meeting_link: "" });
+  // Siapa yang dapat sesi ini. Default semua peserta bootcamp ini.
+  const [sessionForAll, setSessionForAll] = useState(true);
+  const [sessionPackages, setSessionPackages] = useState([]);
+  const [bootcampPackages, setBootcampPackages] = useState([]);
+
+  // Daftar paket buat pilihan target sesi (sesi ini untuk semua / paket tertentu).
+  useEffect(() => {
+    let batal = false;
+    (async () => {
+      try {
+        const res = await apiRequest(`/api/products/${params.id}/packages/`, { auth: false });
+        if (!batal) setBootcampPackages(res?.packages || []);
+      } catch {
+        /* pilihan paket gak muncul, tapi form tetap bisa dipakai */
+      }
+    })();
+    return () => { batal = true; };
+  }, [params.id]);
   const [saving, setSaving] = useState(false);
   const [scheduleSession, setScheduleSession] = useState(null);
   const [scheduleForm, setScheduleForm] = useState({ start_time: "", end_time: "" });
@@ -331,7 +349,11 @@ export default function BootcampOrderDetail() {
     try {
       await apiRequest(`/api/programs/bootcamp-batches/${params.id}/sessions/add/`, {
         method: "POST",
-        body: newSession,
+        body: {
+          ...newSession,
+          for_all_packages: sessionForAll,
+          package_ids: sessionForAll ? [] : sessionPackages,
+        },
       });
       setShowAddModal(false);
       setNewSession({ title: "", start_time: "", end_time: "" });
@@ -539,6 +561,36 @@ export default function BootcampOrderDetail() {
                 />
               </div>
             </div>
+              <div className="flex flex-col gap-2 px-6 pb-5">
+                <label className="text-[#334155] text-[13px] font-medium">Sesi Ini Untuk</label>
+                <label className="flex items-center gap-2 text-[13px] text-[#1E293B] cursor-pointer">
+                  <input type="radio" checked={sessionForAll} onChange={() => setSessionForAll(true)} className="accent-[#148F89]" />
+                  Semua peserta bootcamp ini
+                </label>
+                <label className="flex items-center gap-2 text-[13px] text-[#1E293B] cursor-pointer">
+                  <input type="radio" checked={!sessionForAll} onChange={() => setSessionForAll(false)} className="accent-[#148F89]" />
+                  Paket tertentu saja
+                </label>
+                {!sessionForAll && (
+                  <div className="flex flex-col gap-1 pl-6">
+                    {bootcampPackages.map((pk) => (
+                      <label key={pk.id} className="flex items-center gap-2 text-[12.5px] text-[#334155] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={sessionPackages.includes(pk.id)}
+                          onChange={(e) => setSessionPackages((cur) => (e.target.checked ? [...cur, pk.id] : cur.filter((x) => x !== pk.id)))}
+                          className="accent-[#148F89]"
+                        />
+                        {pk.name}
+                      </label>
+                    ))}
+                    {sessionPackages.length === 0 && (
+                      <span className="text-[#B45309] text-[11.5px]">Belum ada paket dipilih -- sesi ini tidak akan diterima peserta mana pun.</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
             <div className="px-6 py-5 bg-[#F8FAFC] border-t border-[#E2E8F0] flex gap-3">
               <button
                 onClick={() => setShowAddModal(false)}

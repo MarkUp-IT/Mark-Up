@@ -99,6 +99,20 @@ class BootcampSession(models.Model):
     # di transactions/views.py.
     required_benefit = models.CharField(
         max_length=30, choices=BootcampSessionRequiredBenefit.choices, blank=True, default="",
+        help_text="USANG -- diganti field `packages`. Masih disimpan buat jejak data lama.",
+    )
+    # Penanda eksplisit, BUKAN "kosong berarti semua". Kalau pakai aturan
+    # kosong-berarti-semua, kasus "dibatasi tapi belum ada paket yang dipilih"
+    # jadi kebalikannya (malah kebuka ke semua orang) -- gampang salah setel.
+    for_all_packages = models.BooleanField(
+        default=True,
+        help_text="True = semua peserta bootcamp ini dapat sesi ini. False = cuma paket "
+                   "yang dipilih di `packages`.",
+    )
+    packages = models.ManyToManyField(
+        "products.BootcampPackage", blank=True, related_name="session_templates",
+        help_text="Dipakai cuma kalau for_all_packages=False. Menggantikan required_benefit "
+                   "yang cuma bisa 3 kategori tetap & gak bisa diatur admin dari panel.",
     )
 
     class Meta:
