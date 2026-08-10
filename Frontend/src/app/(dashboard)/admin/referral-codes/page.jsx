@@ -343,7 +343,7 @@ export default function ReferralCodes() {
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-bold text-[22px] text-[#0F172A]">Kode Referral & Voucher</h1>
-          <p className="text-[#64748B] text-[14px] mt-1">Kelola kode diskon yang bisa dipakai user pas checkout.</p>
+          <p className="text-[#64748B] text-[14px] mt-1">Kelola kode diskon yang dapat digunakan pengguna saat checkout.</p>
         </div>
         <button
           onClick={openAdd}
@@ -446,7 +446,7 @@ export default function ReferralCodes() {
               <X className="text-[#64748B]" size={20} />
             </button>
           </div>
-          <p className="text-[#64748B] text-[13px]">Bikin kode diskon baru buat dipakai user pas checkout.</p>
+          <p className="text-[#64748B] text-[13px]">Buat kode diskon baru untuk digunakan pengguna saat checkout.</p>
         </div>
 
         <div className="px-8 py-6 flex flex-col gap-5">
@@ -506,7 +506,7 @@ export default function ReferralCodes() {
             <CurrencyInput
               value={form.maxDiscount}
               onChange={(e) => setForm((f) => ({ ...f, maxDiscount: e.target.value }))}
-              placeholder="Cuma berlaku buat tipe persentase"
+              placeholder="Hanya berlaku untuk tipe persentase"
               className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] pr-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
@@ -632,7 +632,7 @@ export default function ReferralCodes() {
             <CurrencyInput
               value={form.maxDiscount}
               onChange={(e) => setForm((f) => ({ ...f, maxDiscount: e.target.value }))}
-              placeholder="Cuma berlaku buat tipe persentase"
+              placeholder="Hanya berlaku untuk tipe persentase"
               className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] pr-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>

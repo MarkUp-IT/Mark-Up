@@ -5,6 +5,7 @@ import { Plus, Trash2, FileText, Lock } from "lucide-react";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
+import FieldLabel from "./FieldLabel";
 
 const RESOURCE_TYPES = [
   { value: "record_incubation", label: "Record Incubation" },
@@ -27,11 +28,18 @@ export default function BootcampResourcePanel({ productId }) {
   const [packages, setPackages] = useState([]);
   const [saving, setSaving] = useState(false);
 
+  // Daftar resource DAN daftar paket diambil bersamaan. Paketnya wajib ada
+  // sejak awal: tanpa itu pilihan "Paket tertentu saja" tampil kosong walau
+  // bootcamp-nya sebenarnya punya paket.
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiRequest(`/api/products/${productId}/resources/`);
-      setResources(res?.resources || []);
+      const [resRes, pkgRes] = await Promise.all([
+        apiRequest(`/api/products/${productId}/resources/`),
+        apiRequest(`/api/products/${productId}/packages/`, { auth: false }),
+      ]);
+      setResources(resRes?.resources || []);
+      setPackages(pkgRes?.packages || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -69,27 +77,42 @@ export default function BootcampResourcePanel({ productId }) {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(data?.detail || Object.values(data?.errors || {}).flat().join(" ") || "Gagal menambahkan resource.");
+        throw new Error(data?.detail || Object.values(data?.errors || {}).flat().join(" ") || "Gagal menambahkan berkas.");
       }
-      toast.success("Resource Tersimpan");
+      toast.success("Berkas Tersimpan");
       resetForm();
       fetchData();
     } catch (err) {
-      toast.error("Gagal Menyimpan Resource", { description: err?.message || "Terjadi kesalahan." });
+      toast.error("Gagal Menyimpan Berkas", { description: err?.message || "Terjadi kesalahan." });
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Hapus resource ini? Peserta yang paketnya berhak gak akan bisa unduh lagi.")) return;
+    if (!confirm("Hapus berkas ini? Peserta yang sebelumnya berhak tidak akan dapat mengunduhnya lagi.")) return;
     try {
       await apiRequest(`/api/products/bootcamp-resources/${id}/`, { method: "DELETE" });
-      toast.success("Resource Dihapus");
+      toast.success("Berkas Dihapus");
       fetchData();
     } catch (err) {
-      toast.error("Gagal Menghapus Resource", { description: extractErrorMessage(err, "Terjadi kesalahan.") });
+      toast.error("Gagal Menghapus Berkas", { description: extractErrorMessage(err, "Terjadi kesalahan.") });
     }
+  };
+
+  // Ringkasan hak akses untuk ditampilkan di daftar. Sengaja eksplisit supaya
+  // admin bisa langsung melihat berkas mana yang terbatas tanpa membuka form.
+  const describeAccess = (r) => {
+    if (r.for_all_packages) return "Semua peserta";
+    const ids = r.package_ids || [];
+    if (ids.length === 0) return "Belum ada paket dipilih";
+    // `packages` hanya berisi paket AKTIF. Kalau id-nya tidak ketemu, paketnya
+    // sudah dinonaktifkan -- itu beda arti dengan "belum dipilih", jadi jangan
+    // disamakan supaya admin tidak salah menyimpulkan.
+    const nama = ids.map((id) => packages.find((pk) => pk.id === id)?.name).filter(Boolean);
+    if (nama.length === 0) return `Khusus ${ids.length} paket nonaktif`;
+    const sisa = ids.length - nama.length;
+    return `Khusus ${nama.join(", ")}${sisa > 0 ? ` (+${sisa} paket nonaktif)` : ""}`;
   };
 
   if (loading) return null;
@@ -97,20 +120,21 @@ export default function BootcampResourcePanel({ productId }) {
   return (
     <div className="bg-white border border-[#E2E8F0] rounded-[12px] p-5 flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-bold text-[15px] text-[#0F172A]">Resource Eksklusif Paket</h2>
+        <h2 className="font-bold text-[15px] text-[#0F172A]">Berkas Materi Bootcamp</h2>
         <button
           onClick={() => setShowAdd((s) => !s)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors"
         >
-          <Plus size={13} /> Tambah Resource
+          <Plus size={13} /> Tambah Berkas
         </button>
       </div>
       <p className="text-[#94A3B8] text-[11.5px] -mt-2">
-        File cuma bisa diunduh peserta yang paketnya punya benefit terkait (dicek dari centang benefit di kartu paket).
+        Berkas dapat dibagikan ke seluruh peserta bootcamp ini atau dibatasi hanya untuk paket tertentu.
+        Berkas hanya dapat diunduh oleh peserta yang pembayarannya sudah diverifikasi, tidak pernah terbuka untuk publik.
       </p>
 
       {resources.length === 0 ? (
-        <p className="text-[#94A3B8] text-[12.5px] italic">Belum ada resource.</p>
+        <p className="text-[#94A3B8] text-[12.5px] italic">Belum ada berkas materi.</p>
       ) : (
         <div className="flex flex-col gap-2">
           {resources.map((r) => (
@@ -120,7 +144,7 @@ export default function BootcampResourcePanel({ productId }) {
                 <div className="flex flex-col min-w-0">
                   <span className="text-[#1E293B] font-medium text-[13px] truncate">{r.title}</span>
                   <span className="text-[#64748B] text-[11px] flex items-center gap-1">
-                    <Lock size={10} /> {r.resource_type_label}
+                    <Lock size={10} /> {r.resource_type_label} &middot; {describeAccess(r)}
                   </span>
                 </div>
               </div>
@@ -134,30 +158,39 @@ export default function BootcampResourcePanel({ productId }) {
 
       {showAdd && (
         <div className="flex flex-col gap-2.5 p-3.5 rounded-[8px] bg-[#F8FAFC] border border-[#E2E8F0]">
-          <input
-            type="text"
-            placeholder="Judul resource"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
-          />
-          <select
-            value={resourceType}
-            onChange={(e) => setResourceType(e.target.value)}
-            className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
-          >
-            {RESOURCE_TYPES.map((rt) => (
-              <option key={rt.value} value={rt.value}>{rt.label}</option>
-            ))}
-          </select>
-          <label className="flex items-center gap-2 border border-dashed border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#64748B] hover:border-[#148F89]/50 cursor-pointer transition-colors">
-            <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-            {file ? file.name : "Pilih file (maks. 20MB)"}
-          </label>
+          <div className="flex flex-col gap-1.5">
+            <FieldLabel required>Judul File</FieldLabel>
+            <input
+              type="text"
+              placeholder="Contoh: Modul Business Case Fundamental"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <FieldLabel hint="hanya label pengelompokan">Kategori</FieldLabel>
+            <select
+              value={resourceType}
+              onChange={(e) => setResourceType(e.target.value)}
+              className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+            >
+              {RESOURCE_TYPES.map((rt) => (
+                <option key={rt.value} value={rt.value}>{rt.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <FieldLabel required>Berkas</FieldLabel>
+            <label className="flex items-center gap-2 border border-dashed border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#64748B] hover:border-[#148F89]/50 cursor-pointer transition-colors">
+              <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+              {file ? file.name : "Pilih berkas (maksimal 20 MB)"}
+            </label>
+          </div>
           {/* Siapa yang boleh mengunduh. "Semua peserta" tetap berarti sudah
               bayar bootcamp ini -- tidak ada file yang terbuka ke publik. */}
           <div className="flex flex-col gap-2">
-            <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Bisa Diakses Oleh</label>
+            <FieldLabel>Bisa Diakses Oleh</FieldLabel>
             <label className="flex items-center gap-2 text-[12.5px] text-[#1E293B] cursor-pointer">
               <input type="radio" checked={forAll} onChange={() => setForAll(true)} className="accent-[#148F89]" />
               Semua peserta bootcamp ini
@@ -169,7 +202,7 @@ export default function BootcampResourcePanel({ productId }) {
             {!forAll && (
               <div className="flex flex-col gap-1 pl-6">
                 {packages.length === 0 && (
-                  <span className="text-[#94A3B8] text-[11.5px] italic">Belum ada paket di bootcamp ini.</span>
+                  <span className="text-[#94A3B8] text-[11.5px] italic">Belum ada paket aktif di bootcamp ini.</span>
                 )}
                 {packages.map((pk) => (
                   <label key={pk.id} className="flex items-center gap-2 text-[12px] text-[#334155] cursor-pointer">
@@ -183,7 +216,7 @@ export default function BootcampResourcePanel({ productId }) {
                   </label>
                 ))}
                 {pickedPackages.length === 0 && (
-                  <span className="text-[#B45309] text-[11px]">Belum ada paket dipilih -- file ini tidak akan bisa diakses siapa pun.</span>
+                  <span className="text-[#B45309] text-[11px]">Belum ada paket yang dipilih. Berkas ini tidak akan dapat diakses oleh siapa pun.</span>
                 )}
               </div>
             )}

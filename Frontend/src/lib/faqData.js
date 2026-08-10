@@ -95,7 +95,7 @@ export const faqData = {
     },
     {
       q: "Bagaimana jika pembayaran saya gagal atau belum terverifikasi?",
-      a: 'Cek dulu status transaksi di halaman Transaksi -- kalau masih berstatus "Menunggu Verifikasi" padahal kamu sudah mengunggah bukti transfer, tunggu proses verifikasi tim kami (maksimal 1x24 jam) atau hubungi tim support kami dengan menyertakan bukti pembayaran agar bisa segera kami tindak lanjuti.',
+      a: 'Silakan periksa status transaksi di halaman Transaksi -- kalau masih berstatus "Menunggu Verifikasi" padahal kamu sudah mengunggah bukti transfer, tunggu proses verifikasi tim kami (maksimal 1x24 jam) atau hubungi tim support kami dengan menyertakan bukti pembayaran agar bisa segera kami tindak lanjuti.',
     },
   ],
   Akun: [

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Megaphone, Check, X } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
+import FieldLabel from "./FieldLabel";
 import { extractErrorMessage } from "@/lib/formErrors";
 
 // ISO (UTC) -> "YYYY-MM-DDTHH:mm" WIB buat input datetime-local.
@@ -126,7 +127,7 @@ export default function PromoPopupPanel() {
       </label>
 
       <div className="flex flex-col gap-1">
-        <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Produk yang Dipromosikan</label>
+        <FieldLabel>Produk yang Dipromosikan</FieldLabel>
         <select
           value={form.product_id}
           onChange={(e) => setForm((f) => ({ ...f, product_id: e.target.value }))}
@@ -143,7 +144,7 @@ export default function PromoPopupPanel() {
 
       <div className="flex gap-2">
         <div className="flex-1 flex flex-col gap-1">
-          <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Mulai Tayang</label>
+          <FieldLabel>Mulai Tayang</FieldLabel>
           <input
             type="datetime-local"
             value={form.starts_at}
@@ -154,7 +155,7 @@ export default function PromoPopupPanel() {
           <span className="text-[#94A3B8] text-[10.5px]">Kosong = langsung tayang.</span>
         </div>
         <div className="flex-1 flex flex-col gap-1">
-          <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Selesai Tayang</label>
+          <FieldLabel>Selesai Tayang</FieldLabel>
           <input
             type="datetime-local"
             value={form.ends_at}
@@ -162,13 +163,13 @@ export default function PromoPopupPanel() {
             style={{ colorScheme: "light" }}
             className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
           />
-          <span className="text-[#94A3B8] text-[10.5px]">Kosong = sampai dimatiin manual.</span>
+          <span className="text-[#94A3B8] text-[10.5px]">Kosongkan apabila ingin tayang sampai dinonaktifkan secara manual.</span>
         </div>
       </div>
 
       <div className="flex gap-2">
         <div className="flex-[2] flex flex-col gap-1">
-          <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Judul di Popup (opsional)</label>
+          <FieldLabel>Judul di Popup (opsional)</FieldLabel>
           <input
             type="text"
             placeholder="Kosong = pakai judul produknya"
@@ -178,7 +179,7 @@ export default function PromoPopupPanel() {
           />
         </div>
         <div className="flex-1 flex flex-col gap-1">
-          <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Teks Tombol</label>
+          <FieldLabel>Teks Tombol</FieldLabel>
           <input
             type="text"
             value={form.cta_label}

@@ -164,7 +164,7 @@ export default function MentorPayouts() {
           <p className="font-bold text-[14px] text-[#0F172A]">Komisi Mentoring (Global)</p>
           <p className="text-[#64748B] text-[12px] mt-0.5">
             Persen yang masuk kas MarkUp dari tiap payout mentoring. Sisanya buat mentor
-            {mentoringFee ? ` (mentor dapat ${100 - Number(mentoringFee)}%)` : ""}. Cuma berlaku ke payout mentoring baru.
+            {mentoringFee ? ` (mentor dapat ${100 - Number(mentoringFee)}%)` : ""}. Hanya berlaku untuk pencairan mentoring yang baru.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -210,7 +210,7 @@ export default function MentorPayouts() {
         </div>
 
         {!loading && filtered.length === 0 ? (
-          <EmptyState message="Nggak ada antrian pencairan di kategori ini." />
+          <EmptyState message="Tidak ada antrean pencairan pada kategori ini." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
             <div className="overflow-x-auto">

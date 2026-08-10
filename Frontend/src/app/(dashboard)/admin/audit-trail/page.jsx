@@ -122,7 +122,7 @@ export default function AuditTrail() {
         </div>
 
         {!loading && logs.length === 0 ? (
-          <EmptyState message="Nggak ada log yang cocok sama filter ini." />
+          <EmptyState message="Tidak ada log yang sesuai dengan filter ini." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
             <div className="overflow-x-auto">

@@ -64,7 +64,7 @@ function BootcampRegisterPageInner() {
     }
     if (selectedFile.size > maxSize) {
       toast.error("File Terlalu Besar", {
-        description: `Ukuran file (${formatMB(selectedFile.size)}) melebihi batas maksimal ${formatMB(maxSize)}. Kecilkan dulu ukuran filenya.`,
+        description: `Ukuran file (${formatMB(selectedFile.size)}) melebihi batas maksimal ${formatMB(maxSize)}. Mohon perkecil ukuran berkas terlebih dahulu.`,
       });
       setter(null);
       return;
@@ -118,7 +118,7 @@ function BootcampRegisterPageInner() {
   const handleSubmit = async () => {
     if (!selectedPackageId || !file || !commitmentLetterFile || !cvFile || submitting) return;
     if (!getAccessToken()) {
-      toast.error("Perlu masuk dulu", { description: "Silakan masuk ke akunmu sebelum mendaftar." });
+      toast.error("Perlu Masuk Terlebih Dahulu", { description: "Silakan masuk ke akunmu sebelum mendaftar." });
       return;
     }
     setSubmitting(true);
@@ -144,7 +144,7 @@ function BootcampRegisterPageInner() {
           data?.detail ||
           Object.values(data?.errors || {}).flat().join(" ") ||
           (res.status === 413
-            ? "Gabungan ukuran file terlalu besar buat server. Kecilkan ukuran PDF-nya lalu coba lagi."
+            ? "Gabungan ukuran berkas melebihi batas server. Mohon perkecil ukuran PDF, lalu coba kembali."
             : data === null
               ? "Terjadi kesalahan tak terduga di server. Coba lagi, atau kecilkan ukuran file kalau masih gagal."
               : (res.message || "Gagal mendaftar."));
@@ -173,7 +173,7 @@ function BootcampRegisterPageInner() {
           ini sepenuhnya -- gak bisa diklik atau discroll. */}
       {isLoggedIn === false && (
         <LoginRequiredDialog
-          title="Masuk Dulu buat Daftar"
+          title="Masuk Terlebih Dahulu untuk Mendaftar"
           message="Pendaftaran bootcamp butuh akun supaya status seleksi dan pembayaranmu bisa dilacak."
           backHref="/products"
         />
@@ -606,7 +606,7 @@ function BootcampRegisterPageInner() {
             <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-4">
               {!selectedPackageId && (
                 <p className="flex items-center gap-2 text-[#F59E0B] text-[12px]">
-                  <AlertCircle size={13} /> Pilih paket dulu di atas.
+                  <AlertCircle size={13} /> Silakan pilih paket terlebih dahulu di atas.
                 </p>
               )}
 

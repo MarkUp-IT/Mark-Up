@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Landmark, Pencil, Check, X } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
+import FieldLabel from "./FieldLabel";
 import { extractErrorMessage } from "@/lib/formErrors";
 
 /**
@@ -114,7 +115,7 @@ export default function BankAccountPanel() {
       ) : (
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-1">
-            <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Bank</label>
+            <FieldLabel>Bank</FieldLabel>
             <input
               type="text"
               value={form.bank_name}
@@ -123,7 +124,7 @@ export default function BankAccountPanel() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Nomor Rekening</label>
+            <FieldLabel>Nomor Rekening</FieldLabel>
             <input
               type="text"
               value={form.account_number}
@@ -132,7 +133,7 @@ export default function BankAccountPanel() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Atas Nama</label>
+            <FieldLabel>Atas Nama</FieldLabel>
             <input
               type="text"
               value={form.account_holder}

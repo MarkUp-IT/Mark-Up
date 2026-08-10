@@ -16,7 +16,7 @@ import { LogIn, ArrowLeft, Lock } from "lucide-react";
  * ketutup lapisan ini.
  */
 export default function LoginRequiredDialog({
-  title = "Masuk Dulu, Yuk",
+  title = "Masuk Terlebih Dahulu",
   message = "Kamu perlu masuk ke akunmu sebelum melanjutkan.",
   backHref = "/products",
   backLabel = "Kembali ke Produk",

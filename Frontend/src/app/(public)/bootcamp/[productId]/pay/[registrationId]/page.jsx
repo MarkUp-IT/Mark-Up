@@ -80,7 +80,7 @@ export default function BootcampPaymentPage() {
         const msg =
           data?.detail ||
           (res.status === 413
-            ? "Ukuran file terlalu besar buat server. Kecilkan ukuran filenya lalu coba lagi."
+            ? "Ukuran berkas melebihi batas server. Mohon perkecil ukuran berkas, lalu coba kembali."
             : data === null
               ? "Terjadi kesalahan tak terduga di server. Coba lagi."
               : (res.message || "Gagal mengirim pembayaran."));

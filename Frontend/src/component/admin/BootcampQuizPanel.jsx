@@ -5,6 +5,7 @@ import { Plus, Trash2, Pencil, Check, X, ShieldCheck } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
+import FieldLabel from "./FieldLabel";
 
 const EMPTY_FORM = {
   question_text: "", choice_a: "", choice_b: "", choice_c: "", choice_d: "", correct_choice: "a",
@@ -200,43 +201,60 @@ export default function BootcampQuizPanel({ productId }) {
         </button>
       </div>
       <p className="text-[#94A3B8] text-[11.5px] -mt-2">
-        Satu bootcamp bisa punya beberapa tes (mis. tahap awal & tahap akhir). Tiap tes bisa
-        ditautkan ke milestone timeline, dan tiap peserta cuma dapat satu kali percobaan per tes.
+        Satu bootcamp dapat memiliki beberapa tes, misalnya tahap awal dan tahap akhir. Setiap tes
+        dapat ditautkan ke milestone timeline, dan setiap peserta hanya memperoleh satu kali
+        percobaan untuk masing-masing tes.
       </p>
 
       {showAddQuiz && (
         <div className="flex flex-col gap-2.5 p-3.5 rounded-[8px] bg-[#F8FAFC] border border-[#E2E8F0]">
-          <input
-            type="text"
-            placeholder="Judul tes, mis. Tes Seleksi Tahap 1"
-            value={quizForm.title}
-            onChange={(e) => setQuizForm((f) => ({ ...f, title: e.target.value }))}
-            className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
-          />
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-1.5">
+            <FieldLabel required>Judul Tes</FieldLabel>
             <input
-              type="number" min={5} max={180} placeholder="Durasi (menit)"
-              value={quizForm.duration_minutes}
-              onChange={(e) => setQuizForm((f) => ({ ...f, duration_minutes: e.target.value }))}
-              className="flex-1 bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
-            />
-            <input
-              type="number" min={0} max={100} placeholder="Skor lulus (%)"
-              value={quizForm.passing_score_percent}
-              onChange={(e) => setQuizForm((f) => ({ ...f, passing_score_percent: e.target.value }))}
-              className="flex-1 bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+              type="text"
+              placeholder="Contoh: Tes Seleksi Tahap 1"
+              value={quizForm.title}
+              onChange={(e) => setQuizForm((f) => ({ ...f, title: e.target.value }))}
+              className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
             />
           </div>
-          <select
-            value={quizForm.timeline_item_id}
-            onChange={(e) => setQuizForm((f) => ({ ...f, timeline_item_id: e.target.value }))}
-            className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
-          >
-            <option value="">Tanpa tautan milestone timeline</option>
-            {timeline.map((t) => (
-              <option key={t.id} value={t.id}>{t.title}</option>
-            ))}
-          </select>
+          <div className="flex gap-2">
+            <div className="flex-1 flex flex-col gap-1.5">
+              <FieldLabel hint="5-180">Durasi Pengerjaan (menit)</FieldLabel>
+              <input
+                type="number" min={5} max={180}
+                value={quizForm.duration_minutes}
+                onChange={(e) => setQuizForm((f) => ({ ...f, duration_minutes: e.target.value }))}
+                className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+              />
+            </div>
+            <div className="flex-1 flex flex-col gap-1.5">
+              <FieldLabel hint="0-100">Ambang Nilai Lulus (%)</FieldLabel>
+              <input
+                type="number" min={0} max={100}
+                value={quizForm.passing_score_percent}
+                onChange={(e) => setQuizForm((f) => ({ ...f, passing_score_percent: e.target.value }))}
+                className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+              />
+            </div>
+          </div>
+          <span className="text-[#94A3B8] text-[10.5px] -mt-1">
+            Ambang nilai hanya menandai lulus atau tidak secara otomatis. Keputusan akhir menerima
+            atau menolak pendaftar tetap sepenuhnya di tangan admin.
+          </span>
+          <div className="flex flex-col gap-1.5">
+            <FieldLabel hint="opsional">Tautkan ke Milestone Timeline</FieldLabel>
+            <select
+              value={quizForm.timeline_item_id}
+              onChange={(e) => setQuizForm((f) => ({ ...f, timeline_item_id: e.target.value }))}
+              className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+            >
+              <option value="">Tanpa tautan milestone</option>
+              {timeline.map((t) => (
+                <option key={t.id} value={t.id}>{t.title}</option>
+              ))}
+            </select>
+          </div>
           <div className="flex gap-2">
             <button
               onClick={() => setShowAddQuiz(false)}
@@ -256,7 +274,7 @@ export default function BootcampQuizPanel({ productId }) {
       )}
 
       {quizzes.length === 0 ? (
-        <p className="text-[#94A3B8] text-[12.5px] italic">Belum ada tes. Tambah tes dulu sebelum bikin soal.</p>
+        <p className="text-[#94A3B8] text-[12.5px] italic">Belum ada tes. Tambahkan tes terlebih dahulu sebelum menyusun soal.</p>
       ) : (
         <div className="flex flex-col gap-1.5">
           {quizzes.map((qz) => (
@@ -314,7 +332,7 @@ export default function BootcampQuizPanel({ productId }) {
       )}
 
       {questions.length === 0 ? (
-        <p className="text-[#94A3B8] text-[12.5px] italic">Belum ada soal. Peserta gak bisa mulai tes sebelum ada minimal 1 soal.</p>
+        <p className="text-[#94A3B8] text-[12.5px] italic">Belum ada soal. Peserta tidak dapat memulai tes sebelum tersedia minimal satu soal.</p>
       ) : (
         <div className="flex flex-col gap-2">
           {questions.map((q, idx) => (
@@ -355,13 +373,17 @@ export default function BootcampQuizPanel({ productId }) {
 
       {showAdd && (
         <div className="flex flex-col gap-2.5 p-3.5 rounded-[8px] bg-[#F8FAFC] border border-[#E2E8F0]">
-          <textarea
-            placeholder="Pertanyaan"
-            value={form.question_text}
-            onChange={(e) => setForm((f) => ({ ...f, question_text: e.target.value }))}
-            rows={2}
-            className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 py-2 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89] resize-none"
-          />
+          <div className="flex flex-col gap-1.5">
+            <FieldLabel required>Pertanyaan</FieldLabel>
+            <textarea
+              placeholder="Tulis pertanyaan di sini"
+              value={form.question_text}
+              onChange={(e) => setForm((f) => ({ ...f, question_text: e.target.value }))}
+              rows={2}
+              className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 py-2 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89] resize-none"
+            />
+          </div>
+          <FieldLabel hint="klik huruf untuk menandai kunci jawaban" required>Pilihan Jawaban</FieldLabel>
           {CHOICE_KEYS.map((key) => (
             <div key={key} className="flex items-center gap-2">
               <button
@@ -385,7 +407,9 @@ export default function BootcampQuizPanel({ productId }) {
               />
             </div>
           ))}
-          <p className="text-[#94A3B8] text-[10.5px]">Klik huruf di kiri buat tandai pilihan jawaban yang benar.</p>
+          <p className="text-[#94A3B8] text-[10.5px]">
+            Huruf yang berwarna hijau adalah kunci jawaban. Klik huruf lain untuk memindahkannya.
+          </p>
           <div className="flex gap-2">
             <button
               onClick={() => setShowAdd(false)}
