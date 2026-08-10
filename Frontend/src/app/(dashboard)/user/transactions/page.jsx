@@ -183,7 +183,7 @@ export default function Transactions() {
 
       {!loading && !hasAny ? (
         <EmptyState
-          message="Kamu belum punya transaksi. Yuk jelajahi katalog produk kami."
+          message="Kamu belum memiliki transaksi. Silakan jelajahi katalog produk kami."
           ctaLabel="Jelajahi Produk"
           ctaHref="/products"
         />

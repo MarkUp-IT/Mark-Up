@@ -175,7 +175,7 @@ export default function AdminSettings() {
             </div>
             <div>
               <p className="text-[#1E293B] font-semibold text-[14px]">Password</p>
-              <p className="text-[#64748B] text-[12.5px]">Ganti password akun secara berkala buat keamanan.</p>
+              <p className="text-[#64748B] text-[12.5px]">Ganti kata sandi akun secara berkala demi keamanan.</p>
             </div>
           </div>
           <Link

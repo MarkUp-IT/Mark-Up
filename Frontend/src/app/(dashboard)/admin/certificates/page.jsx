@@ -247,7 +247,7 @@ export default function Certificates() {
               <X className="text-[#64748B]" size={20} />
             </button>
           </div>
-          <p className="text-[#64748B] text-[13px]">Terbitkan sertifikat baru buat user atau mentor.</p>
+          <p className="text-[#64748B] text-[13px]">Terbitkan sertifikat baru untuk pengguna atau mentor.</p>
         </div>
 
         <div className="px-8 py-6 flex flex-col gap-5">
@@ -338,7 +338,7 @@ export default function Certificates() {
               <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none" />
             </div>
             {products.length === 0 && (
-              <p className="text-[#64748B] text-[11px]">Belum ada produk bootcamp. Buat dulu di menu Produk.</p>
+              <p className="text-[#64748B] text-[11px]">Belum ada produk bootcamp. Buat terlebih dahulu melalui menu Produk.</p>
             )}
             {errors.product_id && <p className="text-[#DC2626] text-[11px]">{errors.product_id[0]}</p>}
           </div>

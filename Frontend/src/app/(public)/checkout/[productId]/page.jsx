@@ -230,7 +230,7 @@ function CheckoutDetailPageInner() {
     // manual di sini lagi -- gate kelengkapan profil di atas + backend yang jaga.
     if (isMentoring && (!selectedMentorId || !selectedSlotId)) {
       setFormError(
-        "Pilih mentor dan jadwal sesi dulu sebelum lanjut ke pembayaran.",
+        "Silakan pilih mentor dan jadwal sesi sebelum melanjutkan ke pembayaran.",
       );
       return;
     }
@@ -336,8 +336,8 @@ function CheckoutDetailPageInner() {
         }
 
         if (missingFields.length > 0) {
-          toast.error("Lengkapi profil kamu dulu", {
-            description: `Sebelum membeli produk, lengkapi dulu: ${missingFields.join(", ")}.`,
+          toast.error("Lengkapi Profil Kamu Terlebih Dahulu", {
+            description: `Sebelum membeli produk, mohon lengkapi: ${missingFields.join(", ")}.`,
           });
           router.replace("/user/settings");
           return;
@@ -389,7 +389,7 @@ function CheckoutDetailPageInner() {
 
       {isLoggedIn === false && (
         <LoginRequiredDialog
-          title="Masuk Dulu buat Lanjut"
+          title="Masuk Terlebih Dahulu untuk Melanjutkan"
           message="Pembelian butuh akun supaya pesanan dan pembayaranmu bisa dilacak."
           backHref="/products"
         />

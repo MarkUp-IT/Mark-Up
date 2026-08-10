@@ -54,14 +54,14 @@ export const metadata = {
     siteName: "MarkUp",
     title: "MarkUp — Wadah Akselerasi Talenta Muda Pencetak Para Juara",
     description:
-      "Bootcamp, private mentoring, dan modul e-learning buat kamu yang mau menang kompetisi. "
+      "Bootcamp, private mentoring, dan modul e-learning untuk kamu yang ingin memenangkan kompetisi. "
       + "Belajar langsung dari mentor berpengalaman di MarkUp (Mark-Up) Indonesia.",
   },
   twitter: {
     card: "summary_large_image",
     title: "MarkUp — Wadah Akselerasi Talenta Muda Pencetak Para Juara",
     description:
-      "Bootcamp, private mentoring, dan modul e-learning buat kamu yang mau menang kompetisi. "
+      "Bootcamp, private mentoring, dan modul e-learning untuk kamu yang ingin memenangkan kompetisi. "
       + "Belajar langsung dari mentor berpengalaman di MarkUp (Mark-Up) Indonesia.",
   },
   robots: {

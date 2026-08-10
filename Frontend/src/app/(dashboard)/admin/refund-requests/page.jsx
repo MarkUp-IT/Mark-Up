@@ -213,7 +213,7 @@ export default function RefundRequests() {
             </button>
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState message="Nggak ada pengajuan refund di kategori ini." />
+          <EmptyState message="Tidak ada pengajuan refund pada kategori ini." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
             <div className="overflow-x-auto">

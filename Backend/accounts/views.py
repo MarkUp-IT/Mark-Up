@@ -813,8 +813,8 @@ def resend_verification_email(request):
 		subject="Verifikasi Email MARK-UP",
 		message=(
 			f"Halo {user.fullname},\n\n"
-			f"Klik link berikut buat verifikasi email kamu:\n{verify_link}\n\n"
-			"Jika kamu tidak merasa mendaftar, abaikan email ini."
+			f"Silakan klik tautan berikut untuk memverifikasi email kamu:\n{verify_link}\n\n"
+			"Apabila kamu tidak merasa melakukan pendaftaran, abaikan email ini."
 		),
 		recipient_list=[user.email],
 	)

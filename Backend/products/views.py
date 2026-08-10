@@ -2334,7 +2334,7 @@ def update_bootcamp_package(request, package_id):
                     raise ValueError
                 package.selection_quota = quota
             except (TypeError, ValueError):
-                errors["selection_quota"] = ["Kuota harus angka >= 1, atau kosongkan buat gak ada batas."]
+                errors["selection_quota"] = ["Kuota harus berupa angka minimal 1, atau dikosongkan apabila tanpa batas."]
     if "name" in request_data:
         name = (request_data["name"] or "").strip()
         if not name:
@@ -2502,9 +2502,9 @@ def delete_bootcamp_package(request, package_id):
         return JsonResponse(
             {
                 "detail": (
-                    f"Paket ini sudah dipakai ({reg_count} pendaftaran, {lib_count} pembelian) "
-                    "jadi gak bisa dihapus. Nonaktifkan aja lewat tombol Aktif/Nonaktif "
-                    "supaya gak muncul di halaman pendaftaran, tapi riwayatnya tetap aman."
+                    f"Paket ini sudah digunakan ({reg_count} pendaftaran, {lib_count} pembelian) "
+                    "sehingga tidak dapat dihapus. Silakan nonaktifkan melalui tombol Aktif/Nonaktif "
+                    "agar tidak tampil di halaman pendaftaran, sementara riwayatnya tetap tersimpan."
                 )
             },
             status=400,
@@ -2922,7 +2922,7 @@ def start_or_resume_bootcamp_quiz(request, registration_id, quiz_id):
         return JsonResponse({"detail": "Paket ini tidak memerlukan tes seleksi."}, status=400)
     if registration.status != BootcampRegistration.Status.REGISTERED:
         return JsonResponse(
-            {"detail": "Tes cuma bisa dikerjakan selama status pendaftaran masih ditinjau."}, status=400
+            {"detail": "Tes hanya dapat dikerjakan selama status pendaftaran masih dalam peninjauan."}, status=400
         )
 
     # Tes harus punya bootcamp yang sama dengan paket pendaftaran ini -- kalau
@@ -3071,7 +3071,7 @@ def create_bootcamp_payment(request, registration_id):
 
     if registration.status != BootcampRegistration.Status.ACCEPTED:
         return JsonResponse(
-            {"detail": "Pembayaran cuma bisa dilakukan setelah pendaftaran Diterima."}, status=400
+            {"detail": "Pembayaran hanya dapat dilakukan setelah pendaftaran berstatus Diterima."}, status=400
         )
 
     deadline = registration.package.payment_deadline_at
@@ -3187,7 +3187,7 @@ def create_bootcamp_payment(request, registration_id):
         )
 
     notify_team(
-        f"Pembayaran bootcamp baru nunggu verifikasi ({txn.id})",
+        f"Pembayaran bootcamp baru menunggu verifikasi ({txn.id})",
         f"Ada pembayaran pendaftaran bootcamp yang perlu diverifikasi admin.\n\n"
         f"ID Transaksi: {txn.id}\n"
         f"Pembeli: {request.user.fullname} ({request.user.email})\n"
@@ -3344,7 +3344,7 @@ def assign_bootcamp_team_member(request, team_id):
 
     if not (library.package and library.package.benefit_team_pairing):
         return JsonResponse(
-            {"detail": "Peserta ini paketnya gak punya benefit Team Pairing."}, status=400
+            {"detail": "Paket yang diambil peserta ini tidak memiliki benefit Team Pairing."}, status=400
         )
 
     BootcampTeamMember.objects.update_or_create(user_library=library, defaults={"team": team})
@@ -3547,8 +3547,8 @@ def update_bootcamp_quiz(request, quiz_id):
             return JsonResponse(
                 {
                     "detail": (
-                        f"Tes ini sudah dikerjakan {attempt_count} peserta jadi gak bisa dihapus. "
-                        "Nonaktifkan aja supaya gak muncul ke peserta, hasilnya tetap tersimpan."
+                        f"Tes ini sudah dikerjakan oleh {attempt_count} peserta sehingga tidak dapat dihapus. "
+                        "Silakan nonaktifkan agar tidak tampil bagi peserta; hasil pengerjaan tetap tersimpan."
                     )
                 },
                 status=400,
@@ -3730,7 +3730,7 @@ def admin_promo_popup(request):
         errors["ends_at"] = ["Tanggal selesai harus setelah tanggal mulai."]
 
     if setting.is_active and not setting.product_id and "product_id" not in errors:
-        errors["product_id"] = ["Pilih produk dulu sebelum mengaktifkan popup."]
+        errors["product_id"] = ["Silakan pilih produk terlebih dahulu sebelum mengaktifkan popup."]
 
     if errors:
         return JsonResponse({"errors": errors}, status=400)

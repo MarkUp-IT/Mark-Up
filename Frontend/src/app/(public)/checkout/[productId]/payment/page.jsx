@@ -178,7 +178,7 @@ function CheckoutPaymentPageInner() {
       if (!proofFile || isExpired) return;
 
       if (isBootcamp && (!followProof || !waShareProof || !commitmentLetter)) {
-        setSubmitError("Lengkapi dulu bukti follow, bukti share WA, dan commitment letter.");
+        setSubmitError("Mohon lengkapi bukti follow, bukti bagikan WhatsApp, dan commitment letter.");
         return;
       }
 
@@ -272,7 +272,7 @@ function CheckoutPaymentPageInner() {
 
       {isLoggedIn === false && (
         <LoginRequiredDialog
-          title="Masuk Dulu buat Lanjut"
+          title="Masuk Terlebih Dahulu untuk Melanjutkan"
           message="Pembelian butuh akun supaya pesanan dan pembayaranmu bisa dilacak."
           backHref="/products"
         />

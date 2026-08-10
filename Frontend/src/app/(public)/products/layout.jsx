@@ -5,13 +5,13 @@ export const metadata = {
   title: "Program & Kelas — Bootcamp, Mentoring, Modul",
   description:
     "Jelajahi semua program MarkUp (Mark-Up): bootcamp intensif, private mentoring bareng mentor "
-    + "berpengalaman, dan modul e-learning. Disiapkan buat kamu yang mau menang business case "
+    + "berpengalaman, dan modul e-learning. Disiapkan untuk kamu yang ingin memenangkan business case "
     + "competition, paper competition, dan lomba mahasiswa lainnya.",
   alternates: { canonical: "/products" },
   openGraph: {
     title: "Program & Kelas MarkUp — Bootcamp, Mentoring, Modul",
     description:
-      "Bootcamp, private mentoring, dan modul e-learning buat persiapan kompetisi mahasiswa.",
+      "Bootcamp, private mentoring, dan modul e-learning untuk persiapan kompetisi mahasiswa.",
     url: "/products",
   },
 };

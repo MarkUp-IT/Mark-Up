@@ -199,7 +199,7 @@ export default function AllProducts() {
           </button>
         </div>
       ) : filtered.length === 0 ? (
-        <EmptyState message="Nggak ada produk yang cocok sama filter ini." />
+        <EmptyState message="Tidak ada produk yang sesuai dengan filter ini." />
       ) : (
         <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
           <div className="overflow-x-auto">

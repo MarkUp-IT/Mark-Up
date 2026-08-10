@@ -5,6 +5,7 @@ import { Plus, Trash2, Pencil, Check, X, Shuffle, Users } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
+import FieldLabel from "./FieldLabel";
 
 export default function BootcampTeamPanel({ productId }) {
   const [teams, setTeams] = useState([]);
@@ -70,7 +71,7 @@ export default function BootcampTeamPanel({ productId }) {
   };
 
   const handleDeleteTeam = async (teamId) => {
-    if (!confirm("Hapus tim ini? Semua anggotanya bakal balik ke daftar belum-punya-tim.")) return;
+    if (!confirm("Hapus tim ini? Seluruh anggotanya akan dikembalikan ke daftar peserta tanpa tim.")) return;
     try {
       await apiRequest(`/api/products/bootcamp-teams/${teamId}/`, { method: "DELETE" });
       toast.success("Tim Dihapus");
@@ -106,7 +107,7 @@ export default function BootcampTeamPanel({ productId }) {
   const handleRandomize = async () => {
     const count = Number(teamCount);
     if (!count || count < 1) return;
-    if (!confirm(`Ini bakal HAPUS semua tim yang ada sekarang dan bikin ${count} tim baru dengan anggota diacak ulang. Lanjut?`)) return;
+    if (!confirm(`Tindakan ini akan MENGHAPUS seluruh tim yang ada saat ini dan membentuk ${count} tim baru dengan anggota yang diacak ulang. Lanjutkan?`)) return;
     setRandomizing(true);
     try {
       const res = await apiRequest(`/api/products/${productId}/teams/randomize/`, {
@@ -242,21 +243,24 @@ export default function BootcampTeamPanel({ productId }) {
         ))}
       </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          type="text"
-          placeholder={'Nama tim baru (kosongkan buat auto "Tim N")'}
-          value={newTeamName}
-          onChange={(e) => setNewTeamName(e.target.value)}
-          className="flex-1 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
-        />
-        <button
-          onClick={handleAddTeam}
-          disabled={addingTeam}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-50"
-        >
-          <Plus size={13} /> Tambah Tim
-        </button>
+      <div className="flex flex-col gap-1.5">
+        <FieldLabel hint='kosongkan untuk penamaan otomatis "Tim N"'>Nama Tim Baru</FieldLabel>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="Contoh: Tim Alpha"
+            value={newTeamName}
+            onChange={(e) => setNewTeamName(e.target.value)}
+            className="flex-1 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+          />
+          <button
+            onClick={handleAddTeam}
+            disabled={addingTeam}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-50 shrink-0"
+          >
+            <Plus size={13} /> Tambah Tim
+          </button>
+        </div>
       </div>
     </div>
   );

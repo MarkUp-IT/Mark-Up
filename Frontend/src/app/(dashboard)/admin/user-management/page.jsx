@@ -150,7 +150,7 @@ export default function UserManagement() {
         </div>
 
         {!loading && users.length === 0 ? (
-          <EmptyState message="Nggak ada user yang cocok sama filter ini." />
+          <EmptyState message="Tidak ada pengguna yang sesuai dengan filter ini." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
             <div className="overflow-x-auto">
@@ -293,7 +293,7 @@ export default function UserManagement() {
                   style={{ width: "100px" }}
                   className="adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
                 />
-                <span className="text-[#64748B] text-[13px] font-medium">% buat mentor ini</span>
+                <span className="text-[#64748B] text-[13px] font-medium">% untuk mentor ini</span>
               </div>
               <p className="text-[#94A3B8] text-[11px] leading-relaxed">
                 Kosongkan buat pakai persentase komisi global (diatur di halaman

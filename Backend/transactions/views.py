@@ -340,7 +340,7 @@ def toggle_commitment_fee_refund(request, transaction_id):
         return JsonResponse({"detail": "Transaksi tidak ditemukan."}, status=404)
 
     if txn.commitment_fee_amount <= 0:
-        return JsonResponse({"detail": "Transaksi ini gak punya commitment fee."}, status=400)
+        return JsonResponse({"detail": "Transaksi ini tidak memiliki commitment fee."}, status=400)
     if txn.payment_status != PaymentStatus.PAID:
         return JsonResponse({"detail": "Transaksi ini belum lunas."}, status=400)
 
@@ -761,7 +761,7 @@ def checkout_product(request):
     # nge-redirect ke Pengaturan sebelum sampe sini, ini jaring pengaman.
     if not request.user.is_profile_complete():
         return JsonResponse(
-            {"detail": "Lengkapi dulu profil kamu di Pengaturan sebelum membeli produk."},
+            {"detail": "Mohon lengkapi profil kamu di halaman Pengaturan sebelum membeli produk."},
             status=400,
         )
 
@@ -825,7 +825,7 @@ def checkout_product(request):
             missing_docs.append("commitment letter")
         if missing_docs:
             return JsonResponse(
-                {"detail": "Lengkapi dulu: " + ", ".join(missing_docs) + "."},
+                {"detail": "Mohon lengkapi: " + ", ".join(missing_docs) + "."},
                 status=400,
             )
 
@@ -957,7 +957,7 @@ def checkout_product(request):
     # latency email nggak nahan lock DB.
     product_title = getattr(detail, "title", None) or "-"
     notify_team(
-        f"Transaksi baru nunggu verifikasi ({txn.id})",
+        f"Transaksi baru menunggu verifikasi ({txn.id})",
         f"Ada transaksi baru yang butuh diverifikasi admin.\n\n"
         f"ID Transaksi: {txn.id}\n"
         f"Pembeli: {request.user.fullname} ({request.user.email})\n"

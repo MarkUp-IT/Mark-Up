@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash2, Pencil, Check, X, Lock, Clock } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
+import FieldLabel from "./FieldLabel";
 import { extractErrorMessage } from "@/lib/formErrors";
 
 // ISO (UTC di server) -> "YYYY-MM-DDTHH:mm" WIB, format buat datetime-local.
@@ -297,29 +298,40 @@ export default function BootcampTimelinePanel({ productId }) {
 
         {showAddMilestone && (
           <div className="flex flex-col gap-2.5 p-3.5 rounded-[8px] bg-[#F8FAFC] border border-[#E2E8F0]">
-            <input
-              type="text"
-              placeholder="Judul milestone, mis. Pendaftaran Mentee"
-              value={milestoneForm.title}
-              onChange={(e) => setMilestoneForm((f) => ({ ...f, title: e.target.value }))}
-              className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
-            />
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel required>Judul Milestone</FieldLabel>
               <input
-                type="date"
-                value={milestoneForm.start_date}
-                onChange={(e) => setMilestoneForm((f) => ({ ...f, start_date: e.target.value }))}
-                className="flex-1 bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
-              />
-              <input
-                type="date"
-                placeholder="Tanggal selesai (opsional)"
-                value={milestoneForm.end_date}
-                min={milestoneForm.start_date || undefined}
-                onChange={(e) => setMilestoneForm((f) => ({ ...f, end_date: e.target.value }))}
-                className="flex-1 bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                type="text"
+                placeholder="Contoh: Pendaftaran Mentee"
+                value={milestoneForm.title}
+                onChange={(e) => setMilestoneForm((f) => ({ ...f, title: e.target.value }))}
+                className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
               />
             </div>
+            <div className="flex gap-2">
+              <div className="flex-1 flex flex-col gap-1.5">
+                <FieldLabel required>Tanggal Mulai</FieldLabel>
+                <input
+                  type="date"
+                  value={milestoneForm.start_date}
+                  onChange={(e) => setMilestoneForm((f) => ({ ...f, start_date: e.target.value }))}
+                  className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                />
+              </div>
+              <div className="flex-1 flex flex-col gap-1.5">
+                <FieldLabel hint="opsional">Tanggal Selesai</FieldLabel>
+                <input
+                  type="date"
+                  value={milestoneForm.end_date}
+                  min={milestoneForm.start_date || undefined}
+                  onChange={(e) => setMilestoneForm((f) => ({ ...f, end_date: e.target.value }))}
+                  className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                />
+              </div>
+            </div>
+            <span className="text-[#94A3B8] text-[10.5px] -mt-1">
+              Kosongkan tanggal selesai apabila milestone berlangsung satu hari saja.
+            </span>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowAddMilestone(false)}
@@ -353,30 +365,37 @@ export default function BootcampTimelinePanel({ productId }) {
 
         {showAddPackage && (
           <div className="flex flex-col gap-2.5 p-3.5 rounded-[8px] bg-[#F8FAFC] border border-[#E2E8F0]">
-            <input
-              type="text"
-              placeholder="Nama paket baru, mis. Kelas Alumni"
-              value={newPackageForm.name}
-              onChange={(e) => setNewPackageForm((f) => ({ ...f, name: e.target.value }))}
-              className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
-            />
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel required>Nama Paket</FieldLabel>
+              <input
+                type="text"
+                placeholder="Contoh: Kelas Alumni"
+                value={newPackageForm.name}
+                onChange={(e) => setNewPackageForm((f) => ({ ...f, name: e.target.value }))}
+                className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+              />
+            </div>
             <div className="flex gap-2">
-              <input
-                type="number"
-                min={0}
-                placeholder="Harga (Rp)"
-                value={newPackageForm.price}
-                onChange={(e) => setNewPackageForm((f) => ({ ...f, price: e.target.value }))}
-                className="flex-1 bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
-              />
-              <input
-                type="number"
-                min={0}
-                placeholder="Commitment fee (Rp)"
-                value={newPackageForm.commitment_fee}
-                onChange={(e) => setNewPackageForm((f) => ({ ...f, commitment_fee: e.target.value }))}
-                className="flex-1 bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
-              />
+              <div className="flex-1 flex flex-col gap-1.5">
+                <FieldLabel hint="rupiah" required>Harga Paket</FieldLabel>
+                <input
+                  type="number"
+                  min={0}
+                  value={newPackageForm.price}
+                  onChange={(e) => setNewPackageForm((f) => ({ ...f, price: e.target.value }))}
+                  className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                />
+              </div>
+              <div className="flex-1 flex flex-col gap-1.5">
+                <FieldLabel hint="rupiah, 0 jika tidak ada">Commitment Fee</FieldLabel>
+                <input
+                  type="number"
+                  min={0}
+                  value={newPackageForm.commitment_fee}
+                  onChange={(e) => setNewPackageForm((f) => ({ ...f, commitment_fee: e.target.value }))}
+                  className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                />
+              </div>
             </div>
             <label className="flex items-center gap-2 text-[12.5px] text-[#1E293B] cursor-pointer">
               <input
@@ -448,7 +467,7 @@ export default function BootcampTimelinePanel({ productId }) {
                           <p className="text-[#64748B] text-[11.5px]">
                             {pkg.selection_quota
                               ? `${pkg.accepted_count}/${pkg.selection_quota} diterima`
-                              : `${pkg.accepted_count} diterima (gak ada kuota)`}
+                              : `${pkg.accepted_count} diterima (tanpa kuota)`}
                           </p>
                         </>
                       )}
@@ -461,7 +480,7 @@ export default function BootcampTimelinePanel({ productId }) {
                   ) : (
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-col gap-1">
-                        <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Nama Paket</label>
+                        <FieldLabel>Nama Paket</FieldLabel>
                         <input
                           type="text"
                           value={packageForm.name}
@@ -471,7 +490,7 @@ export default function BootcampTimelinePanel({ productId }) {
                       </div>
                       <div className="flex gap-2">
                         <div className="flex-1 flex flex-col gap-1">
-                          <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Harga (Rp)</label>
+                          <FieldLabel>Harga (Rp)</FieldLabel>
                           <input
                             type="number"
                             min={0}
@@ -481,7 +500,7 @@ export default function BootcampTimelinePanel({ productId }) {
                           />
                         </div>
                         <div className="flex-1 flex flex-col gap-1">
-                          <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Commitment Fee (Rp)</label>
+                          <FieldLabel>Commitment Fee (Rp)</FieldLabel>
                           <input
                             type="number"
                             min={0}
@@ -492,7 +511,7 @@ export default function BootcampTimelinePanel({ productId }) {
                         </div>
                       </div>
                       <div className="flex flex-col gap-1">
-                        <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Buka</label>
+                        <FieldLabel>Buka</FieldLabel>
                         <input
                           type="datetime-local"
                           value={packageForm.registration_opens_at}
@@ -502,7 +521,7 @@ export default function BootcampTimelinePanel({ productId }) {
                         />
                       </div>
                       <div className="flex flex-col gap-1">
-                        <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Tutup</label>
+                        <FieldLabel>Tutup</FieldLabel>
                         <input
                           type="datetime-local"
                           value={packageForm.registration_closes_at}
@@ -512,7 +531,7 @@ export default function BootcampTimelinePanel({ productId }) {
                         />
                       </div>
                       <div className="flex flex-col gap-1">
-                        <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Batas Waktu Bayar (setelah Diterima)</label>
+                        <FieldLabel>Batas Waktu Bayar (setelah Diterima)</FieldLabel>
                         <input
                           type="datetime-local"
                           value={packageForm.payment_deadline_at}
@@ -520,7 +539,7 @@ export default function BootcampTimelinePanel({ productId }) {
                           style={{ colorScheme: "light" }}
                           className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                         />
-                        <span className="text-[#94A3B8] text-[10.5px]">Kosongkan kalau gak ada batas waktu otomatis.</span>
+                        <span className="text-[#94A3B8] text-[10.5px]">Kosongkan apabila tidak ada batas waktu otomatis.</span>
                       </div>
                       <label className="flex items-center gap-2 px-3 h-9 rounded-[6px] bg-[#F8FAFC] border border-[#E2E8F0] cursor-pointer w-fit">
                         <input
@@ -535,7 +554,7 @@ export default function BootcampTimelinePanel({ productId }) {
                         <>
                           <div className="flex gap-2">
                             <div className="flex-1 flex flex-col gap-1">
-                              <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Durasi Tes (menit)</label>
+                              <FieldLabel>Durasi Tes (menit)</FieldLabel>
                               <input
                                 type="number"
                                 min={5}
@@ -546,7 +565,7 @@ export default function BootcampTimelinePanel({ productId }) {
                               />
                             </div>
                             <div className="flex-1 flex flex-col gap-1">
-                              <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Skor Kelulusan (%)</label>
+                              <FieldLabel>Skor Kelulusan (%)</FieldLabel>
                               <input
                                 type="number"
                                 min={0}
@@ -558,26 +577,26 @@ export default function BootcampTimelinePanel({ productId }) {
                             </div>
                           </div>
                           <div className="flex flex-col gap-1">
-                            <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Kuota Diterima (opsional)</label>
+                            <FieldLabel>Kuota Diterima (opsional)</FieldLabel>
                             <input
                               type="number"
                               min={1}
-                              placeholder="Kosongkan = gak ada batas"
+                              placeholder="Kosongkan apabila tanpa batas"
                               value={packageForm.selection_quota}
                               onChange={(e) => setPackageForm((f) => ({ ...f, selection_quota: e.target.value }))}
                               className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                             />
                             <span className="text-[#94A3B8] text-[10.5px]">
-                              Cuma indikator progres -- gak ngunci tombol Terima di halaman Tinjau Pendaftaran.
+                              Hanya indikator progres. Kuota ini tidak mengunci tombol Terima di halaman Tinjau Pendaftaran.
                             </span>
                           </div>
                         </>
                       )}
                       {Number(packageForm.commitment_fee) > 0 && (
                         <div className="flex flex-col gap-1">
-                          <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">
+                          <FieldLabel>
                             Syarat Kehadiran buat Refund Commitment Fee (jumlah sesi)
-                          </label>
+                          </FieldLabel>
                           <input
                             type="number"
                             min={0}
@@ -585,11 +604,11 @@ export default function BootcampTimelinePanel({ productId }) {
                             onChange={(e) => setPackageForm((f) => ({ ...f, min_attendance_sessions: e.target.value }))}
                             className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                           />
-                          <span className="text-[#94A3B8] text-[10.5px]">0 = gak ada syarat kehadiran.</span>
+                          <span className="text-[#94A3B8] text-[10.5px]">Isi 0 apabila tidak ada syarat kehadiran.</span>
                         </div>
                       )}
                       <div className="flex flex-col gap-1.5">
-                        <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Benefit</label>
+                        <FieldLabel>Benefit</FieldLabel>
                         <span className="text-[#94A3B8] text-[10.5px] -mt-1">
                           Yang ini ngatur hak akses beneran (unduh file, sesi mana yang kelihatan, team pairing).
                         </span>
@@ -612,9 +631,9 @@ export default function BootcampTimelinePanel({ productId }) {
                           Disimpan langsung pas ditambah/hapus (bukan nunggu tombol
                           Simpan) supaya beda perlakuannya jelas dari benefit bawaan. */}
                       <div className="flex flex-col gap-1.5">
-                        <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Benefit Tambahan</label>
+                        <FieldLabel>Benefit Tambahan</FieldLabel>
                         <span className="text-[#94A3B8] text-[10.5px] -mt-1">
-                          Bebas, cuma tampilan di kartu paket. Langsung tersimpan begitu ditambah/dihapus.
+                          Bersifat bebas dan hanya ditampilkan pada kartu paket. Perubahan langsung tersimpan.
                         </span>
                         {(pkg.extra_benefits || []).length > 0 && (
                           <div className="flex flex-col gap-1">
