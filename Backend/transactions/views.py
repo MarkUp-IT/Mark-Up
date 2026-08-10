@@ -666,14 +666,27 @@ def _create_bootcamp_sessions(user_library, product):
     di-clone ke semua pembeli, sama kayak perilaku sebelumnya."""
     templates = (
         BootcampSessionTemplate.objects.filter(bootcamp=product.id)
-        .prefetch_related("session_mentors__mentor_profile")
+        .prefetch_related("session_mentors__mentor_profile", "packages")
         .order_by("start_time")
     )
     package = user_library.package
 
     order = 0
     for template in templates:
-        if template.required_benefit:
+        # Pembatasan sekarang per-paket & eksplisit. for_all_packages=True
+        # berarti semua pembeli bootcamp ini dapat; kalau False, cuma paket
+        # yang terdaftar. Sengaja TIDAK pakai aturan "daftar kosong = semua":
+        # sesi yang dibatasi tapi belum dipilih paketnya harus tetap tertutup,
+        # bukan malah kebuka ke semua orang.
+        if not template.for_all_packages:
+            if not package or not template.packages.filter(pk=package.pk).exists():
+                continue
+        elif template.required_benefit:
+            # Jaring pengaman buat data/jalur lama yang masih pakai
+            # required_benefit dan belum dipindah ke daftar paket. Tanpa ini,
+            # sesi eksklusif yang dibuat cara lama diam-diam kebuka ke SEMUA
+            # peserta -- pelonggaran izin yang gak kelihatan sampai ada yang
+            # protes. Aturan lamanya tetap ditegakkan sampai datanya dipindah.
             if not package or not getattr(package, f"benefit_{template.required_benefit}", False):
                 continue
         order += 1

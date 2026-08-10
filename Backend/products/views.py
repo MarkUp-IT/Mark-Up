@@ -316,15 +316,14 @@ def _serialize_unlocked_bootcamp_resources(user_library):
     if package is None:
         return []
 
-    unlocked_types = [
-        rt for rt in BootcampResourceType.values if getattr(package, f"benefit_{rt}", False)
-    ]
-    if not unlocked_types:
-        return []
-
+    # File yang boleh diunduh: yang ditandai untuk semua peserta, ATAU yang
+    # paketnya cocok. Aksesnya tetap mensyaratkan sudah beli bootcamp ini
+    # (fungsi ini cuma dipanggil buat user_library yang valid) -- bukan publik.
     resources = BootcampResource.objects.filter(
-        bootcamp_id=user_library.product_id, resource_type__in=unlocked_types
-    )
+        bootcamp_id=user_library.product_id,
+    ).filter(
+        models.Q(for_all_packages=True) | models.Q(packages=package)
+    ).distinct()
     return [
         {
             "id": str(r.id),
@@ -2581,6 +2580,8 @@ def _serialize_bootcamp_resource(resource):
         "resource_type_label": resource.get_resource_type_display(),
         "title": resource.title,
         "file": resource.file.url if resource.file else None,
+        "for_all_packages": resource.for_all_packages,
+        "package_ids": [str(p.id) for p in resource.packages.all()],
         "created_at": resource.created_at.isoformat(),
     }
 
@@ -2612,8 +2613,10 @@ def add_bootcamp_resource(request, product_id):
     errors = {}
     if not title:
         errors["title"] = ["Judul wajib diisi."]
-    if resource_type not in BootcampResourceType.values:
-        errors["resource_type"] = ["Jenis benefit tidak valid."]
+    # Sekarang cuma label kategori (boleh kosong) -- hak aksesnya ditentukan
+    # pilihan paket di bawah, bukan lagi jenis ini.
+    if resource_type and resource_type not in BootcampResourceType.values:
+        errors["resource_type"] = ["Jenis materi tidak valid."]
     if not file:
         errors["file"] = ["File wajib diunggah."]
     elif file.size > MAX_BOOTCAMP_RESOURCE_SIZE:
@@ -2626,9 +2629,20 @@ def add_bootcamp_resource(request, product_id):
     except BootcampProduct.DoesNotExist:
         return JsonResponse({"detail": "Produk bootcamp tidak ditemukan."}, status=404)
 
+    # "semua" = semua peserta bootcamp ini (yang sudah bayar), bukan publik.
+    for_all = str(request.POST.get("for_all_packages", "true")).lower() not in ("false", "0")
+    package_ids = [x for x in (request.POST.getlist("package_ids") or []) if x]
+
     resource = BootcampResource.objects.create(
         bootcamp_id=product_id, resource_type=resource_type, title=title, file=file,
+        for_all_packages=for_all,
     )
+    if not for_all and package_ids:
+        # Cuma paket milik bootcamp ini -- jangan sampai admin nyantol paket
+        # dari bootcamp lain lewat request yang dikarang.
+        resource.packages.set(
+            BootcampPackage.objects.filter(id__in=package_ids, bootcamp_id=product_id)
+        )
 
     return JsonResponse(
         {"detail": "Resource berhasil ditambahkan.", "resource": _serialize_bootcamp_resource(resource)},

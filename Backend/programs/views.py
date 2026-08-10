@@ -262,6 +262,8 @@ def update_competition(request, competition_id):
 def _serialize_bootcamp_session_template(session):
     assignments = list(session.session_mentors.select_related("mentor_profile__user").all())
     return {
+        "for_all_packages": session.for_all_packages,
+        "package_ids": [str(p.id) for p in session.packages.all()],
         "id": str(session.id),
         "title": session.title,
         "description": session.description or "",
@@ -358,6 +360,12 @@ def add_bootcamp_session_template(request, product_id):
             {"errors": {"required_benefit": ["Pilihan benefit tidak valid."]}}, status=400,
         )
 
+    # Siapa yang dapat sesi ini. Default "semua peserta bootcamp ini";
+    # kalau dibatasi, admin milih paketnya sendiri (bukan lagi lewat 3
+    # kategori benefit tetap yang dulu gak bisa diatur dari panel).
+    for_all = bool(request_data.get("for_all_packages", True))
+    package_ids = request_data.get("package_ids") or []
+
     next_order = (
         BootcampSession.objects.filter(bootcamp_id=product_id).count() + 1
     )
@@ -370,7 +378,15 @@ def add_bootcamp_session_template(request, product_id):
         meeting_link=request_data.get("meeting_link", ""),
         order=next_order,
         required_benefit=required_benefit,
+        for_all_packages=for_all,
     )
+    if not for_all and package_ids:
+        # Dibatasi ke paket milik bootcamp ini saja, biar admin gak bisa
+        # (sengaja atau tidak) nyantol paket dari bootcamp lain.
+        from products.models import BootcampPackage
+        session.packages.set(
+            BootcampPackage.objects.filter(id__in=package_ids, bootcamp_id=product_id)
+        )
 
     log_audit(request, AuditAction.CREATE, "bootcamp_sessions", object_id=session.id)
 

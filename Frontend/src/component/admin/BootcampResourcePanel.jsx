@@ -20,6 +20,11 @@ export default function BootcampResourcePanel({ productId }) {
   const [title, setTitle] = useState("");
   const [resourceType, setResourceType] = useState(RESOURCE_TYPES[0].value);
   const [file, setFile] = useState(null);
+  // Siapa yang boleh mengunduh. Default "semua peserta bootcamp ini" -- tetap
+  // harus sudah bayar, bukan publik.
+  const [forAll, setForAll] = useState(true);
+  const [pickedPackages, setPickedPackages] = useState([]);
+  const [packages, setPackages] = useState([]);
   const [saving, setSaving] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -43,6 +48,8 @@ export default function BootcampResourcePanel({ productId }) {
     setResourceType(RESOURCE_TYPES[0].value);
     setFile(null);
     setShowAdd(false);
+    setForAll(true);
+    setPickedPackages([]);
   };
 
   const handleSave = async () => {
@@ -53,6 +60,8 @@ export default function BootcampResourcePanel({ productId }) {
       formData.append("title", title.trim());
       formData.append("resource_type", resourceType);
       formData.append("file", file);
+      formData.append("for_all_packages", forAll ? "true" : "false");
+      if (!forAll) pickedPackages.forEach((id) => formData.append("package_ids", id));
       const res = await fetch(`${API_BASE}/api/products/${productId}/resources/add/`, {
         method: "POST",
         headers: { Authorization: `Bearer ${getAccessToken()}` },
@@ -145,6 +154,41 @@ export default function BootcampResourcePanel({ productId }) {
             <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
             {file ? file.name : "Pilih file (maks. 20MB)"}
           </label>
+          {/* Siapa yang boleh mengunduh. "Semua peserta" tetap berarti sudah
+              bayar bootcamp ini -- tidak ada file yang terbuka ke publik. */}
+          <div className="flex flex-col gap-2">
+            <label className="text-[#64748B] text-[10.5px] font-semibold uppercase">Bisa Diakses Oleh</label>
+            <label className="flex items-center gap-2 text-[12.5px] text-[#1E293B] cursor-pointer">
+              <input type="radio" checked={forAll} onChange={() => setForAll(true)} className="accent-[#148F89]" />
+              Semua peserta bootcamp ini
+            </label>
+            <label className="flex items-center gap-2 text-[12.5px] text-[#1E293B] cursor-pointer">
+              <input type="radio" checked={!forAll} onChange={() => setForAll(false)} className="accent-[#148F89]" />
+              Paket tertentu saja
+            </label>
+            {!forAll && (
+              <div className="flex flex-col gap-1 pl-6">
+                {packages.length === 0 && (
+                  <span className="text-[#94A3B8] text-[11.5px] italic">Belum ada paket di bootcamp ini.</span>
+                )}
+                {packages.map((pk) => (
+                  <label key={pk.id} className="flex items-center gap-2 text-[12px] text-[#334155] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={pickedPackages.includes(pk.id)}
+                      onChange={(e) => setPickedPackages((cur) => (e.target.checked ? [...cur, pk.id] : cur.filter((x) => x !== pk.id)))}
+                      className="accent-[#148F89]"
+                    />
+                    {pk.name}
+                  </label>
+                ))}
+                {pickedPackages.length === 0 && (
+                  <span className="text-[#B45309] text-[11px]">Belum ada paket dipilih -- file ini tidak akan bisa diakses siapa pun.</span>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-2">
             <button
               onClick={resetForm}
