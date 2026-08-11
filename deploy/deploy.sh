@@ -32,4 +32,26 @@ echo "==> Restart service"
 sudo systemctl restart gunicorn
 pm2 restart markup-frontend
 
+# ---------------------------------------------------------------------------
+# CRON yang harus terpasang di server (pasang sekali, `crontab -e`):
+#
+#   # Backup database harian
+#   0 2 * * * cd /var/www/markup/Backend && ./.venv/bin/python manage.py backup_database >> /var/log/markup_backup.log 2>&1
+#
+#   # Link Zoom sesi mentoring, dibuat ~24 jam sebelum sesi.
+#   # Dijalankan tiap 15 menit supaya sesi yang baru dijadwalkan mepet tetap
+#   # kebagian link. Aman diulang: yang sudah punya link dilewati.
+#   */15 * * * * cd /var/www/markup/Backend && ./.venv/bin/python manage.py generate_zoom_links --execute >> /var/log/markup_zoom.log 2>&1
+#
+#   # Link rekaman cloud. Tiap jam, karena Zoom butuh waktu memproses rekaman
+#   # setelah meeting bubar.
+#   17 * * * * cd /var/www/markup/Backend && ./.venv/bin/python manage.py fetch_zoom_recordings --execute >> /var/log/markup_zoom.log 2>&1
+#
+# Keduanya WAJIB pakai --execute. Tanpa itu perintahnya cuma dry-run: melapor
+# tanpa mengubah apa pun, dan link tidak akan pernah terisi.
+#
+# Butuh ZOOM_CRED_KEY di Backend/.env. Bikin sekali:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# ---------------------------------------------------------------------------
+
 echo "==> Selesai"
