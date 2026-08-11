@@ -3889,6 +3889,7 @@ def _simpan_kredensial(acc, request_data, errors, wajib_secret):
         acc.auto_record = bool(request_data["auto_record"])
 
 
+@csrf_exempt
 @jwt_required
 @role_required(UserRole.ADMIN)
 def add_zoom_account(request):
@@ -3913,6 +3914,7 @@ def add_zoom_account(request):
     )
 
 
+@csrf_exempt
 @jwt_required
 @role_required(UserRole.ADMIN)
 def zoom_account_detail(request, account_id):
@@ -3962,6 +3964,7 @@ def zoom_account_detail(request, account_id):
     )
 
 
+@csrf_exempt
 @jwt_required
 @role_required(UserRole.ADMIN)
 def test_zoom_account(request, account_id):
