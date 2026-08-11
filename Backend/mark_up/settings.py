@@ -243,6 +243,23 @@ FRONTEND_BASE_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 
+# Kunci Fernet buat mengenkripsi client_secret akun Zoom sebelum masuk DB.
+# Kredensial ini disimpan di database (BUKAN .env) karena akun Zoom-nya dirotasi
+# berkala dan harus bisa diganti dari panel admin tanpa redeploy. Konsekuensinya
+# secret itu ikut kebawa kalau dump database bocor -- makanya dienkripsi.
+# Bikin sekali:  python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Kalau kosong, penyimpanan kredensial DITOLAK (lihat mark_up/zoom.py) -- sengaja
+# gagal berisik, jangan diam-diam nyimpen plaintext.
+ZOOM_CRED_KEY = os.getenv("ZOOM_CRED_KEY", "")
+
+# Link Zoom dibuat H-berapa jam sebelum sesi. Sengaja mepet, bukan pas sesi
+# dijadwalkan: akun Zoom-nya dirotasi ~2 minggu sekali, jadi meeting yang dibuat
+# jauh-jauh hari bisa mati hostnya pas hari-H.
+ZOOM_GENERATE_LEAD_HOURS = int(os.getenv("ZOOM_GENERATE_LEAD_HOURS", "24"))
+# Jeda antar meeting di satu akun. Satu akun Zoom cuma bisa meng-host SATU
+# meeting live dalam satu waktu, jadi jendela pemakaiannya dikasih bantalan.
+ZOOM_BUFFER_MINUTES = int(os.getenv("ZOOM_BUFFER_MINUTES", "15"))
+
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 

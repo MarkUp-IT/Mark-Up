@@ -12,3 +12,4 @@ Pillow
 django-storages
 boto3
 google-auth
+cryptography

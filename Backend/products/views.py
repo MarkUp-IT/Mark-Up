@@ -47,6 +47,7 @@ from .models import (
     create_default_bootcamp_packages,
     BootcampRequirement,
     create_default_bootcamp_requirements,
+    ZoomAccount,
 )
 from accounts.decorators import jwt_required, role_required
 from accounts.models import User, UserRole, AuditAction
@@ -661,12 +662,59 @@ def schedule_my_product_session(request, session_id):
     slot.is_booked = True
     slot.save()
 
+    jadwal_bergeser = session.start_time != slot.start_time
+
     session.availability_slot = slot
     session.start_time = slot.start_time
     session.status = MentoringSession.SessionStatus.SCHEDULED
     session.save()
 
+    # Kalau link Zoom-nya sudah dibuat otomatis tapi jadwalnya bergeser, meeting
+    # lama harus dilepas: jamnya sudah salah, dan selama masih tercatat, jendela
+    # waktu itu tetap dianggap "milik" akun tersebut sehingga bisa memblokir
+    # sesi lain. Dikosongkan saja, biar cron membuat ulang di akun yang cocok
+    # dengan jadwal baru.
+    if jadwal_bergeser and session.zoom_meeting_id:
+        _lepas_meeting_zoom(session)
+
     return JsonResponse(_serialize_mentoring_session(session), status=200)
+
+
+def _lepas_meeting_zoom(session):
+    """Hapus meeting Zoom sebuah sesi lalu kosongkan jejaknya.
+
+    Sengaja gagal-aman: kalau Zoom tidak bisa dihubungi, field lokal tetap
+    dibersihkan supaya sesi bisa dapat link baru. Efek terburuknya cuma satu
+    meeting yatim di akun Zoom, jauh lebih ringan daripada peserta memegang
+    link dengan jam yang salah.
+    """
+    akun = session.zoom_account
+    meeting_id = session.zoom_meeting_id
+    session.zoom_link = ""
+    session.zoom_meeting_id = ""
+    session.zoom_account = None
+    session.zoom_generated_at = None
+    session.zoom_error = ""
+    session.save(update_fields=[
+        "zoom_link", "zoom_meeting_id", "zoom_account",
+        "zoom_generated_at", "zoom_error",
+    ])
+
+    if not akun or not meeting_id:
+        return
+
+    def _hapus():
+        try:
+            from mark_up.zoom import delete_meeting
+
+            delete_meeting(akun, meeting_id)
+        except Exception:
+            logger.warning("Gagal menghapus meeting Zoom %s", meeting_id, exc_info=True)
+
+    # Di thread terpisah supaya reschedule user tidak menunggu panggilan ke Zoom.
+    import threading
+
+    threading.Thread(target=_hapus, daemon=True).start()
 
 
 @csrf_exempt
@@ -3738,3 +3786,208 @@ def admin_promo_popup(request):
     setting.save()
     log_audit(request, AuditAction.UPDATE, "promo_popup_setting", object_id=None)
     return JsonResponse({"detail": "Setelan popup disimpan.", **serialize()}, status=200)
+
+
+# ---------- Akun Zoom (kolam akun buat otomatisasi link mentoring) ----------
+#
+# Kredensial disimpan di DB (bukan .env) supaya akun bisa dirotasi dari panel
+# tanpa redeploy. Karena itu client_secret dienkripsi, dan endpoint di bawah
+# TIDAK PERNAH mengembalikannya utuh -- cuma 4 karakter terakhir buat pengenal.
+
+
+def _serialize_zoom_account(acc, sesi_mendatang=0):
+    """Bentuk aman buat frontend. client_secret sengaja tidak ikut."""
+    ekor = ""
+    try:
+        from mark_up.zoom import decrypt_secret
+
+        rahasia = decrypt_secret(acc.client_secret_encrypted)
+        ekor = rahasia[-4:] if len(rahasia) >= 4 else "****"
+    except Exception:
+        # Gagal dekripsi (mis. ZOOM_CRED_KEY berubah) bukan alasan bikin daftar
+        # akun error total -- tandai saja supaya admin tahu harus simpan ulang.
+        ekor = "?"
+
+    return {
+        "id": str(acc.id),
+        "label": acc.label,
+        "account_id": acc.account_id,
+        "client_id": acc.client_id,
+        "client_secret_hint": f"****{ekor}",
+        "is_active": acc.is_active,
+        "auto_record": acc.auto_record,
+        "last_check_at": acc.last_check_at.isoformat() if acc.last_check_at else None,
+        "last_check_ok": acc.last_check_ok,
+        "last_check_note": acc.last_check_note,
+        "upcoming_sessions": sesi_mendatang,
+    }
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_zoom_accounts(request):
+    """Daftar akun Zoom + berapa sesi mendatang yang bergantung ke tiap akun.
+
+    Angka 'sesi mendatang' itu penting: sebelum menonaktifkan sebuah akun,
+    admin perlu tahu masih ada berapa sesi yang link-nya di-host akun tersebut.
+    """
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    sekarang = timezone.now()
+    pemakaian = {
+        row["zoom_account"]: row["n"]
+        for row in MentoringSession.objects.filter(
+            zoom_account__isnull=False, start_time__gte=sekarang,
+        ).values("zoom_account").annotate(n=models.Count("id"))
+    }
+
+    akun = ZoomAccount.objects.all()
+    return JsonResponse(
+        {
+            "accounts": [
+                _serialize_zoom_account(a, pemakaian.get(a.id, 0)) for a in akun
+            ],
+            "key_ready": bool(getattr(settings, "ZOOM_CRED_KEY", "")),
+            "lead_hours": getattr(settings, "ZOOM_GENERATE_LEAD_HOURS", 24),
+        },
+        status=200,
+    )
+
+
+def _simpan_kredensial(acc, request_data, errors, wajib_secret):
+    """Isi field akun dari payload. Secret bersifat write-only: kosong = biarkan."""
+    if "label" in request_data or wajib_secret:
+        label = (request_data.get("label") or "").strip()
+        if not label:
+            errors["label"] = ["Label akun wajib diisi."]
+        else:
+            acc.label = label[:120]
+
+    for field in ("account_id", "client_id"):
+        if field in request_data or wajib_secret:
+            nilai = (request_data.get(field) or "").strip()
+            if not nilai:
+                errors[field] = ["Wajib diisi."]
+            else:
+                setattr(acc, field, nilai[:120])
+
+    secret = (request_data.get("client_secret") or "").strip()
+    if secret:
+        from mark_up.zoom import ZoomCredentialError, encrypt_secret
+
+        try:
+            acc.client_secret_encrypted = encrypt_secret(secret)
+        except ZoomCredentialError as exc:
+            errors["client_secret"] = [str(exc)]
+    elif wajib_secret:
+        errors["client_secret"] = ["Client secret wajib diisi."]
+
+    if "is_active" in request_data:
+        acc.is_active = bool(request_data["is_active"])
+    if "auto_record" in request_data:
+        acc.auto_record = bool(request_data["auto_record"])
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def add_zoom_account(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    acc = ZoomAccount()
+    errors = {}
+    _simpan_kredensial(acc, request_data, errors, wajib_secret=True)
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    acc.save()
+    log_audit(request, AuditAction.CREATE, "zoom_account", object_id=acc.id)
+    return JsonResponse(
+        {"detail": "Akun Zoom ditambahkan.", "account": _serialize_zoom_account(acc)},
+        status=201,
+    )
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def zoom_account_detail(request, account_id):
+    try:
+        acc = ZoomAccount.objects.get(id=account_id)
+    except ZoomAccount.DoesNotExist:
+        return JsonResponse({"detail": "Akun Zoom tidak ditemukan."}, status=404)
+
+    if request.method == "DELETE":
+        # Sesi yang pernah pakai akun ini tetap aman (FK-nya SET_NULL), tapi
+        # link meeting-nya bakal mati begitu akunnya dicabut dari Zoom.
+        terpakai = MentoringSession.objects.filter(
+            zoom_account=acc, start_time__gte=timezone.now()
+        ).count()
+        if terpakai:
+            return JsonResponse(
+                {
+                    "detail": (
+                        f"Akun ini masih dipakai {terpakai} sesi mendatang, jadi tidak "
+                        "dapat dihapus. Nonaktifkan saja supaya tidak dipilih untuk "
+                        "meeting baru, sementara sesi yang sudah terjadwal tetap aman."
+                    )
+                },
+                status=400,
+            )
+        acc.delete()
+        log_audit(request, AuditAction.DELETE, "zoom_account", object_id=account_id)
+        return JsonResponse({"detail": "Akun Zoom dihapus."}, status=200)
+
+    if request.method not in ("PATCH", "PUT"):
+        return HttpResponseNotAllowed(["PATCH", "PUT", "DELETE"])
+
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    errors = {}
+    _simpan_kredensial(acc, request_data, errors, wajib_secret=False)
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    acc.save()
+    log_audit(request, AuditAction.UPDATE, "zoom_account", object_id=acc.id)
+    return JsonResponse(
+        {"detail": "Akun Zoom diperbarui.", "account": _serialize_zoom_account(acc)},
+        status=200,
+    )
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def test_zoom_account(request, account_id):
+    """Uji kredensial ke Zoom & lihat apakah akunnya sedang dipakai meeting live."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    # Endpoint ini memanggil pihak ketiga dari dalam request. Dibatasi supaya
+    # tombol yang diklik berkali-kali gak menahan banyak worker sekaligus.
+    if is_rate_limited(f"rl:zoomtest:{request.user.id}", limit=20, window_seconds=300):
+        return JsonResponse(
+            {"detail": "Terlalu sering menguji koneksi. Coba lagi beberapa menit lagi."},
+            status=429,
+        )
+
+    try:
+        acc = ZoomAccount.objects.get(id=account_id)
+    except ZoomAccount.DoesNotExist:
+        return JsonResponse({"detail": "Akun Zoom tidak ditemukan."}, status=404)
+
+    from mark_up.zoom import check_account
+
+    hasil = check_account(acc)
+    acc.last_check_at = timezone.now()
+    acc.last_check_ok = bool(hasil.get("ok"))
+    acc.last_check_note = (hasil.get("pesan") or "")[:500]
+    acc.save(update_fields=["last_check_at", "last_check_ok", "last_check_note"])
+
+    return JsonResponse({"result": hasil, "account": _serialize_zoom_account(acc)}, status=200)
