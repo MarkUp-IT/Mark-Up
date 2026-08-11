@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import Link from "next/link";
@@ -32,7 +31,7 @@ export default function BootcampOrders() {
   const totalPending = bootcamps.reduce((sum, b) => sum + b.pending, 0);
 
   return (
-    <DashboardLayout title="Kelola Pesanan · Bootcamp">
+    <>
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-bold text-[22px] text-[#0F172A]">Manajemen Konten Bootcamp</h1>
@@ -122,6 +121,6 @@ export default function BootcampOrders() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

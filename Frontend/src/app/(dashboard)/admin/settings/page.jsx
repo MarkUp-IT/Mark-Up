@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { Camera, Lock } from "lucide-react";
 import Link from "next/link";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
@@ -76,7 +75,7 @@ export default function AdminSettings() {
   };
 
   return (
-    <DashboardLayout title="Pengaturan">
+    <>
       <div>
         <h1 className="font-bold text-[22px] text-[#0F172A]">Pengaturan Akun</h1>
         <p className="text-[#64748B] text-[14px] mt-1">
@@ -186,6 +185,6 @@ export default function AdminSettings() {
           </Link>
         </div>
       </form>
-    </DashboardLayout>
+    </>
   );
 }

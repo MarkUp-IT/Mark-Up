@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Award, Download, Eye, Search } from "lucide-react";
-import DashboardLayout from "@/component/mentor/DashboardLayout";
 import EmptyState from "@/component/mentor/EmptyState";
 import { apiRequest } from "@/lib/api";
 
@@ -54,7 +53,7 @@ export default function MentorCertificates() {
   });
 
   return (
-    <DashboardLayout title="Certificates">
+    <>
       {/* Intro */}
       <motion.div {...sectionReveal} className="flex flex-col gap-1">
         <h2 className="text-[22px] sm:text-[25px] font-bold text-white">
@@ -143,6 +142,6 @@ export default function MentorCertificates() {
           ))}
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

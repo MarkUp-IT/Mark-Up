@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Landmark, Copy, CheckCircle2, AlertCircle, Upload, FileText, Trash2, Clock, AlertTriangle } from "lucide-react";
-import Navbar from "@/component/Navbar";
 import { apiRequest, apiRequestRaw, getAccessToken } from "@/lib/api";
 import { useBankInfo } from "@/lib/bankInfo";
 import { toast } from "sonner";
@@ -114,7 +113,6 @@ export default function BootcampPaymentPage() {
 
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white">
-      <Navbar variant="solid" />
 
       <div className="max-w-[640px] mx-auto px-4 pt-32 pb-16 flex flex-col gap-6">
         <Link href={`/bootcamp/${productId}/register`} className="text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit">

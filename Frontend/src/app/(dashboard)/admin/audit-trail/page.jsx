@@ -7,7 +7,6 @@ import {
   X,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
@@ -76,7 +75,7 @@ export default function AuditTrail() {
   ).length;
 
   return (
-    <DashboardLayout title="Audit Trail">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -244,6 +243,6 @@ export default function AuditTrail() {
           </button>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

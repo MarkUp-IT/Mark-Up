@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 import { motion, useReducedMotion } from "framer-motion";
 import { useState, useEffect } from "react";
@@ -133,7 +132,6 @@ export default function MentorPage() {
         }}
       />
 
-      <Navbar />
 
       <div className="main-content flex flex-col gap-16 md:gap-24 items-center mt-28 md:mt-36 mb-24 relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6">
         {/* Hero Section */}

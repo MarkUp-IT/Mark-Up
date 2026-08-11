@@ -2,7 +2,6 @@
 
 import { Eye, X, Landmark, Check, Search } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
@@ -139,7 +138,7 @@ export default function MentorPayouts() {
   const pendingCount = payouts.filter((p) => p.status === "pending").length;
 
   return (
-    <DashboardLayout title="Pencairan Mentor">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -379,6 +378,6 @@ export default function MentorPayouts() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

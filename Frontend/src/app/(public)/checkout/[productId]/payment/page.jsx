@@ -15,7 +15,6 @@ import {
   Trash2,
   Timer,
 } from "lucide-react";
-import Navbar from "@/component/Navbar";
 import { getAccessToken, API_BASE } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
 import { useBankInfo } from "@/lib/bankInfo";
@@ -268,7 +267,6 @@ function CheckoutPaymentPageInner() {
           }}
         />
 
-        <Navbar />
 
       {isLoggedIn === false && (
         <LoginRequiredDialog

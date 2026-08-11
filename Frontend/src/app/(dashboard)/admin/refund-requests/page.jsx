@@ -9,7 +9,6 @@ import {
   Loader2,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { toast } from "sonner";
@@ -136,7 +135,7 @@ export default function RefundRequests() {
   const approvedCount = requests.filter((r) => r.status === "approved").length;
 
   return (
-    <DashboardLayout title="Pengajuan Refund">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -411,6 +410,6 @@ export default function RefundRequests() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

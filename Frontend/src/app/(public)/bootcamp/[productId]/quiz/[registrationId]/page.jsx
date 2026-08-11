@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Check, Clock, ShieldCheck, AlertTriangle } from "lucide-react";
-import Navbar from "@/component/Navbar";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -113,7 +112,6 @@ function BootcampQuizPageInner() {
 
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white">
-      <Navbar variant="solid" />
 
       <div className="max-w-[720px] mx-auto px-4 pt-32 pb-16 flex flex-col gap-6">
         {loading ? (

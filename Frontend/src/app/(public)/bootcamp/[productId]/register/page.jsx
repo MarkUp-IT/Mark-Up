@@ -4,7 +4,6 @@ import { useState, useEffect, Suspense } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Check, X, Upload, ShieldCheck, Clock, FileText, AlertCircle, Lock, Info } from "lucide-react";
-import Navbar from "@/component/Navbar";
 import Linkify from "@/component/Linkify";
 import BootcampTimeline from "@/component/BootcampTimeline";
 import { apiRequest, apiRequestRaw, getAccessToken } from "@/lib/api";
@@ -166,7 +165,6 @@ function BootcampRegisterPageInner() {
 
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white">
-      <Navbar variant="solid" />
 
       {/* Gerbang login. Isi halaman tetap kerender di belakang sebagai konteks
           (biar user lihat dia mau daftar bootcamp apa), tapi ketutup lapisan

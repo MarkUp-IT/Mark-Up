@@ -9,7 +9,6 @@ import {
   Lock,
   Check,
 } from "lucide-react";
-import DashboardLayout from "@/component/mentor/DashboardLayout";
 import { apiRequest } from "@/lib/api";
 
 const focusRing =
@@ -294,7 +293,7 @@ export default function MentoringSchedule() {
   };
 
   return (
-    <DashboardLayout title="Jadwal Mentoring">
+    <>
       <style>{darkModeFix}</style>
       <motion.div {...sectionReveal} className="flex flex-col gap-1">
         <h1 className="font-bold text-[22px] sm:text-[25px] text-white">
@@ -581,6 +580,6 @@ export default function MentoringSchedule() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

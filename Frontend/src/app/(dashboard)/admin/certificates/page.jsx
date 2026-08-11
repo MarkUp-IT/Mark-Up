@@ -9,7 +9,6 @@ import {
   Search,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
@@ -160,7 +159,7 @@ export default function Certificates() {
   const instructorCount = certificates.filter((c) => c.type === "instructor").length;
 
   return (
-    <DashboardLayout title="Sertifikat">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -395,6 +394,6 @@ export default function Certificates() {
           </button>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

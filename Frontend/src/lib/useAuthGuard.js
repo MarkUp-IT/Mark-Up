@@ -24,6 +24,12 @@ export function useAuthGuard(allowedRoles) {
   const [checked, setChecked] = useState(false);
   const rolesKey = allowedRoles.join(",");
 
+  // Profil diambil SEKALI per dashboard, bukan tiap pindah halaman.
+  //
+  // Dulu `pathname` ikut jadi dependency, jadi setiap klik menu memicu request
+  // /api/accounts/me/ lagi. Itu tidak terasa selama DashboardLayout masih ikut
+  // mati-hidup, tapi begitu layout-nya dipertahankan (lihat
+  // app/(dashboard)/*/layout.jsx) sisa pemuatan ulang ini jadi murni pemborosan.
   useEffect(() => {
     let isMounted = true;
 
@@ -44,14 +50,6 @@ export function useAuthGuard(allowedRoles) {
           router.replace(user.dashboard_href || "/login");
           return;
         }
-        if (
-          user.role === "MENTOR" &&
-          user.is_profile_complete === false &&
-          !pathname?.startsWith("/mentor/settings")
-        ) {
-          router.replace("/mentor/settings");
-          return;
-        }
         setProfile(user);
         setChecked(true);
       })
@@ -65,7 +63,21 @@ export function useAuthGuard(allowedRoles) {
       isMounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rolesKey, router, pathname]);
+  }, [rolesKey, router]);
+
+  // Gate mentor berprofil belum lengkap dipisah ke effect sendiri karena INI
+  // yang memang harus dievaluasi ulang tiap pindah halaman: mentor boleh
+  // membuka /mentor/settings, tapi tidak halaman dashboard lainnya. Dipisah
+  // supaya pengecekan per-rute tidak menyeret pengambilan profil ikut berulang.
+  useEffect(() => {
+    if (
+      profile?.role === "MENTOR" &&
+      profile?.is_profile_complete === false &&
+      !pathname?.startsWith("/mentor/settings")
+    ) {
+      router.replace("/mentor/settings");
+    }
+  }, [profile, pathname, router]);
 
   return { profile, checked };
 }

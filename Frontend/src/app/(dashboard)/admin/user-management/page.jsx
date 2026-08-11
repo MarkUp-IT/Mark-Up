@@ -3,7 +3,6 @@
 import { Search, ChevronDown, PenLine, Eye, X } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
@@ -103,7 +102,7 @@ export default function UserManagement() {
   const totalMentors = users.filter((u) => u.role === "MENTOR").length;
 
   return (
-    <DashboardLayout title="Manajemen User">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -334,6 +333,6 @@ export default function UserManagement() {
           </button>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

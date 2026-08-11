@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { Search, X } from "lucide-react";
-import DashboardLayout from "@/component/user/DashboardLayout";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
 
@@ -128,7 +127,7 @@ export default function Transactions() {
     : `Belum ada transaksi dengan status "${activeFilter}".`;
 
   return (
-    <DashboardLayout title="Transaksi">
+    <>
       <motion.div {...sectionReveal} className="flex flex-col gap-1">
         <h1 className="text-[28px] sm:text-[32px] font-bold text-white leading-tight">Transaksi Saya</h1>
         <p className="text-[#9CA3AF] text-[14px] mt-1">
@@ -307,6 +306,6 @@ export default function Transactions() {
           </motion.div>
         </motion.div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

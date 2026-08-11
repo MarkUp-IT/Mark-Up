@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import ZoomAccountPanel from "@/component/admin/ZoomAccountPanel";
@@ -23,7 +22,7 @@ export default function MentoringOrders() {
   const totalUnscheduled = packages.reduce((sum, p) => sum + p.unscheduled_sessions, 0);
 
   return (
-    <DashboardLayout title="Kelola Pesanan · Mentoring">
+    <>
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-bold text-[22px] text-[#0F172A]">Manajemen Mentoring</h1>
@@ -96,6 +95,6 @@ export default function MentoringOrders() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

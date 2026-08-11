@@ -17,7 +17,6 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
-import DashboardLayout from "@/component/mentor/DashboardLayout";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 
 function Field({ label, value, onChange, disabled, note, textarea, icon }) {
@@ -399,14 +398,14 @@ export default function MentorSettings() {
 
   if (loading) {
     return (
-      <DashboardLayout title="Settings">
+      <>
         <p className="text-[#6B7280] text-[13px]">Memuat pengaturan...</p>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout title="Settings">
+    <>
       <motion.div {...sectionReveal} className="flex flex-col gap-1">
         <h1 className="text-[28px] sm:text-[32px] font-bold text-white leading-tight">
           Pengaturan Akun
@@ -834,6 +833,6 @@ export default function MentorSettings() {
           </motion.form>
         </motion.div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Send, Users, Check } from "lucide-react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
@@ -86,15 +85,15 @@ export default function MentoringOrderDetail() {
 
   if (loading) {
     return (
-      <DashboardLayout title="Detail Mentoring">
+      <>
         <p className="text-[#64748B] text-[14px]">Memuat...</p>
-      </DashboardLayout>
+      </>
     );
   }
 
   if (!pkg) {
     return (
-      <DashboardLayout title="Detail Mentoring">
+      <>
         <Link
           href="/admin/orders/mentoring"
           className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#148F89] text-[13px] font-medium transition-colors w-fit"
@@ -105,12 +104,12 @@ export default function MentoringOrderDetail() {
         <p className="text-[#64748B] text-[14px]">
           Paket dengan ID &ldquo;{params?.id}&rdquo; tidak ditemukan.
         </p>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout title="Detail Mentoring">
+    <>
       <Link
         href="/admin/orders/mentoring"
         className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#148F89] text-[13px] font-medium transition-colors w-fit"
@@ -212,6 +211,6 @@ export default function MentoringOrderDetail() {
         </div>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

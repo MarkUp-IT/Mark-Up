@@ -4,7 +4,6 @@ import { useState } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Mail, Phone, MapPin, Send } from "lucide-react";
-import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 import { apiRequest } from "@/lib/api";
 
@@ -71,7 +70,6 @@ export default function ContactPage() {
         }}
       />
 
-      <Navbar />
 
       <div className="main-content flex flex-col gap-12 items-center mt-28 md:mt-36 mb-24 relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6">
         {/* Hero */}

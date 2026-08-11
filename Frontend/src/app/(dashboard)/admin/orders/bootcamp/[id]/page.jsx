@@ -14,7 +14,6 @@ import {
   CalendarClock,
   Pencil,
 } from "lucide-react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import EmptyState from "@/component/admin/EmptyState";
 import BootcampTimelinePanel from "@/component/admin/BootcampTimelinePanel";
 import BootcampQuizPanel from "@/component/admin/BootcampQuizPanel";
@@ -376,7 +375,7 @@ export default function BootcampOrderDetail() {
   };
 
   return (
-    <DashboardLayout title="Detail Bootcamp">
+    <>
       <Link
         href="/admin/orders/bootcamp"
         className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#148F89] text-[13px] font-medium transition-colors w-fit"
@@ -796,6 +795,6 @@ export default function BootcampOrderDetail() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

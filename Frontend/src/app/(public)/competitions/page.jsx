@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Link from "next/link";
@@ -116,7 +115,6 @@ export default function InfoLombaPage() {
         />
       </div>
 
-      <Navbar />
 
       <div className="main-content flex flex-col items-center mt-28 md:mt-36 mb-24 relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6">
         {/* HERO SECTION */}

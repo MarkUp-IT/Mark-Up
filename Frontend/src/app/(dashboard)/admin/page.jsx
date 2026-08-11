@@ -11,7 +11,6 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useState, useEffect, useCallback } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { api, ApiError } from "@/lib/api";
@@ -140,7 +139,7 @@ export default function AdminDashboard() {
   }, [fetchLogs]);
 
   return (
-    <DashboardLayout title="Dashboard">
+    <>
       <style>{`.adm-h-42 { height: 42px; }`}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -341,6 +340,6 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
-import DashboardLayout from "@/component/mentor/DashboardLayout";
 import EmptyState from "@/component/mentor/EmptyState";
 import { apiRequest } from "@/lib/api";
 
@@ -119,7 +118,7 @@ export default function MentorDashboard() {
   const mentoringList = isRiwayat ? pastMentoring : showMentoring ? activeMentoring : [];
 
   return (
-    <DashboardLayout title="Active Classes">
+    <>
       <motion.div
         {...sectionReveal}
         className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6"
@@ -246,6 +245,6 @@ export default function MentorDashboard() {
           )}
         </motion.div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

@@ -5,9 +5,9 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, PlayCircle, Users, Clock } from "lucide-react";
-import DashboardLayout from "@/component/mentor/DashboardLayout";
 import EmptyState from "@/component/mentor/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { useTimpaJudulDashboard } from "@/lib/dashboardChrome";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#148F89] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0F081C]";
@@ -115,6 +115,17 @@ export default function ClassDetail() {
       .sort((a, b) => a.order - b.order);
   }, [raw, isBootcamp, userLibraryId]);
 
+  // Satu-satunya halaman yang judulnya bergantung data, bukan rute: URL-nya
+  // sama untuk kelas bootcamp maupun mentoring. Saat masih memuat atau kosong,
+  // judulnya dibiarkan "Detail Kelas" dari peta rute -- sama seperti sebelumnya.
+  useTimpaJudulDashboard(
+    !loading && sessions.length > 0
+      ? isBootcamp
+        ? "Detail Bootcamp"
+        : "Detail Mentoring"
+      : null
+  );
+
   const itemReveal = (index) => ({
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
     whileInView: { opacity: 1, y: 0 },
@@ -127,15 +138,15 @@ export default function ClassDetail() {
 
   if (loading) {
     return (
-      <DashboardLayout title="Detail Kelas">
+      <>
         <p className="text-[#6B7280] text-[13px]">Memuat detail kelas...</p>
-      </DashboardLayout>
+      </>
     );
   }
 
   if (sessions.length === 0) {
     return (
-      <DashboardLayout title="Detail Kelas">
+      <>
         <Link
           href="/mentor/active-classes"
           className="inline-flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit"
@@ -148,7 +159,7 @@ export default function ClassDetail() {
           ctaLabel="Lihat Semua Kelas"
           ctaHref="/mentor/active-classes"
         />
-      </DashboardLayout>
+      </>
     );
   }
 
@@ -158,7 +169,7 @@ export default function ClassDetail() {
   const completedSessions = sessions.filter((s) => s.status === "completed").length;
 
   return (
-    <DashboardLayout title={isBootcamp ? "Detail Bootcamp" : "Detail Mentoring"}>
+    <>
       <Link
         href="/mentor/active-classes"
         className="inline-flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit"
@@ -276,6 +287,6 @@ export default function ClassDetail() {
               </motion.div>
             ))}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

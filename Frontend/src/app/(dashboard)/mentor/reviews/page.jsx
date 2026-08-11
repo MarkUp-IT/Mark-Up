@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Star } from "lucide-react";
-import DashboardLayout from "@/component/mentor/DashboardLayout";
 import EmptyState from "@/component/mentor/EmptyState";
 import { apiRequest } from "@/lib/api";
 
@@ -76,14 +75,14 @@ export default function MentorReviews() {
 
   if (loading) {
     return (
-      <DashboardLayout title="Reviews">
+      <>
         <p className="text-[#6B7280] text-[13px]">Memuat ulasan...</p>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout title="Reviews">
+    <>
       <motion.div {...sectionReveal} className="flex flex-col gap-1">
         <h1 className="text-[28px] sm:text-[32px] font-bold text-white leading-tight">
           Ulasan Mentee
@@ -157,6 +156,6 @@ export default function MentorReviews() {
           ))}
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }
