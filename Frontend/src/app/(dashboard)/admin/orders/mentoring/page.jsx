@@ -5,6 +5,7 @@ import Link from "next/link";
 import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
+import ZoomAccountPanel from "@/component/admin/ZoomAccountPanel";
 import { apiRequest } from "@/lib/api";
 
 export default function MentoringOrders() {
@@ -37,6 +38,11 @@ export default function MentoringOrders() {
         <StatCard label="Sesi Belum Dijadwalkan" value={totalUnscheduled} unit="sesi" loading={loading} />
         <StatCard label="Link Belum Dibagikan" value={totalPendingLinks} unit="sesi" variant="warning" loading={loading} />
       </div>
+
+      {/* Kolam akun Zoom ditaruh di sini, bukan di halaman Pengaturan, supaya
+          sebidang dengan angka "Link Belum Dibagikan" -- kalau otomatisasinya
+          bermasalah, penyebab dan penyelesaiannya kelihatan berdampingan. */}
+      <ZoomAccountPanel />
 
       <div className="flex flex-col gap-4">
         <h2 className="text-[16px] font-semibold text-[#0F172A]">Daftar Paket</h2>

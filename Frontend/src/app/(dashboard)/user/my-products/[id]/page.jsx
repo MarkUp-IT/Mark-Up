@@ -400,6 +400,14 @@ export default function ProductDetail() {
 
     return (
       <div className="flex items-center gap-2">
+        {/* Link Zoom mentoring dibuat otomatis menjelang sesi, jadi wajar kalau
+            masih kosong untuk jadwal yang jauh. Tanpa keterangan ini, peserta
+            cuma melihat baris tanpa tombol dan mengira ada yang error. */}
+        {!joinLink && (
+          <span className="text-[#9CA3AF] text-[12px] whitespace-nowrap">
+            Link tersedia menjelang sesi
+          </span>
+        )}
         {joinLink && (
           <a
             href={joinLink}

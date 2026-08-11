@@ -954,6 +954,28 @@ class MentoringSession(models.Model):
     zoom_link = models.URLField(blank=True)
     recording_url = models.URLField(blank=True)
 
+    # --- Otomatisasi Zoom -------------------------------------------------
+    # zoom_link tetap jadi muara akhirnya (dipakai serializer & frontend), baik
+    # link itu dibuat otomatis maupun ditempel manual admin. Field di bawah cuma
+    # jejak buat mengelola meeting-nya: siapa host-nya & ID-nya buat dihapus
+    # saat reschedule dan buat menarik rekaman.
+    zoom_account = models.ForeignKey(
+        "products.ZoomAccount",
+        on_delete=models.SET_NULL,
+        related_name="mentoring_sessions",
+        blank=True,
+        null=True,
+        help_text="Akun Zoom yang meng-host meeting ini. SET_NULL supaya "
+                  "menghapus akun tidak ikut menghapus riwayat sesi.",
+    )
+    zoom_meeting_id = models.CharField(max_length=32, blank=True, default="")
+    zoom_generated_at = models.DateTimeField(blank=True, null=True)
+    zoom_error = models.CharField(
+        max_length=500, blank=True, default="",
+        help_text="Alasan pembuatan link otomatis gagal (mis. semua akun sibuk "
+                  "di jam itu). Dikosongkan lagi begitu berhasil.",
+    )
+
     class Meta:
         verbose_name = "Mentoring Session"
         verbose_name_plural = "Mentoring Sessions"
@@ -961,6 +983,55 @@ class MentoringSession(models.Model):
 
     def __str__(self) -> str:
         return f"{self.mentoring} - session {self.order}"
+
+
+class ZoomAccount(models.Model):
+    """Satu akun Zoom (Server-to-Server OAuth app) di kolam akun.
+
+    Kenapa banyak akun & kenapa di database, bukan .env:
+
+    1. Satu akun Zoom cuma bisa meng-host SATU meeting live dalam satu waktu.
+       Sesi mentoring yang jamnya beririsan karena itu harus dipecah ke akun
+       berbeda -- lihat pemilihan akun di management command generate_zoom_links.
+    2. Akunnya dirotasi berkala, jadi kredensial harus bisa diganti dari panel
+       admin tanpa redeploy.
+
+    Akun lama sebaiknya DINONAKTIFKAN, bukan dihapus, supaya sesi lama tetap
+    bisa ditelusuri host-nya siapa.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    label = models.CharField(
+        max_length=120,
+        help_text="Nama panggilan biar gampang dibedakan, mis. 'Akun Utama Agustus'.",
+    )
+    account_id = models.CharField(max_length=120)
+    client_id = models.CharField(max_length=120)
+    client_secret_encrypted = models.TextField(
+        help_text="Terenkripsi Fernet pakai ZOOM_CRED_KEY. JANGAN pernah "
+                  "dikirim balik ke frontend -- lihat _serialize_zoom_account.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Hanya akun aktif yang dipakai membuat meeting baru. Akun "
+                  "nonaktif tetap dipakai untuk menarik rekaman meeting lama.",
+    )
+    auto_record = models.BooleanField(
+        default=True,
+        help_text="Nyalakan cloud recording otomatis di tiap meeting yang "
+                  "dibuat akun ini. Butuh akun Zoom berbayar.",
+    )
+    last_check_at = models.DateTimeField(blank=True, null=True)
+    last_check_ok = models.BooleanField(blank=True, null=True)
+    last_check_note = models.CharField(max_length=500, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Zoom Account"
+        verbose_name_plural = "Zoom Accounts"
+        ordering = ["-is_active", "label"]
+
+    def __str__(self) -> str:
+        return self.label
 
 
 class RefundRequest(models.Model):
