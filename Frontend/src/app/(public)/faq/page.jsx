@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Search, ChevronDown, Headphones, Mail } from "lucide-react";
-import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 
 import { categories, faqData } from "@/lib/faqData";
@@ -58,7 +57,6 @@ export default function FAQPage() {
         />
       </div>
 
-      <Navbar />
 
       <div className="main-content flex flex-col gap-12 md:gap-16 items-center mt-28 md:mt-36 mb-24 relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6">
         {/* Hero */}

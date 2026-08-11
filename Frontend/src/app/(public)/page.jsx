@@ -5,10 +5,8 @@ import { motion, useInView, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import CountUp from "@/component/CountUp";
 import DarkVeil from "@/component/DarkVeil";
-import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 import BootcampPromoPopup from "@/component/BootcampPromoPopup";
-import { useDashboardOnlyGuard } from "@/lib/useDashboardOnlyGuard";
 
 const hashtagsRow1 = [
   "#Mentoring",
@@ -142,7 +140,6 @@ const AmbientGlow = ({ tint = "177,158,239", className = "" }) => (
 );
 
 export default function HomePage() {
-  useDashboardOnlyGuard();
   const statsRef = useRef(null);
   const isStatsInView = useInView(statsRef, { once: true, margin: "-100px" });
 
@@ -170,7 +167,6 @@ export default function HomePage() {
   return (
     <div className="w-full font-jakarta text-white bg-[#060010] min-h-screen relative flex flex-col overflow-x-hidden">
       <BootcampPromoPopup />
-      <Navbar />
       {/* svh (small viewport height, statis), bukan dvh (dynamic) -- dvh ikut
           berubah live pas address bar browser HP collapse waktu discroll,
           bikin kontainer ini (dan render ulang shader DarkVeil di dalamnya)

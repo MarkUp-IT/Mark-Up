@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Download } from "lucide-react";
-import DashboardLayout from "@/component/user/DashboardLayout";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
 
@@ -58,15 +57,15 @@ export default function TransactionDetail() {
 
   if (loading) {
     return (
-      <DashboardLayout title="Detail Transaksi">
+      <>
         <p className="text-[#9CA3AF] text-[13px]">Memuat transaksi...</p>
-      </DashboardLayout>
+      </>
     );
   }
 
   if (!tx) {
     return (
-      <DashboardLayout title="Detail Transaksi">
+      <>
         <Link
           href="/user/transactions"
           className="inline-flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit"
@@ -79,12 +78,12 @@ export default function TransactionDetail() {
           ctaLabel="Lihat Semua Transaksi"
           ctaHref="/user/transactions"
         />
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout title="Detail Transaksi">
+    <>
       <Link
         href="/user/transactions"
         className="inline-flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit"
@@ -157,6 +156,6 @@ export default function TransactionDetail() {
           )}
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

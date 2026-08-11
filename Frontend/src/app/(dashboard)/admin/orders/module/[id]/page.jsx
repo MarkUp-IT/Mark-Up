@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, FileText } from "lucide-react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import CurrencyInput from "@/component/admin/CurrencyInput";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
@@ -64,15 +63,15 @@ export default function ModuleContentEditor() {
 
   if (loading) {
     return (
-      <DashboardLayout title="Kelola Konten Modul">
+      <>
         <p className="text-[#64748B] text-[14px]">Memuat...</p>
-      </DashboardLayout>
+      </>
     );
   }
 
   if (notFound) {
     return (
-      <DashboardLayout title="Kelola Konten Modul">
+      <>
         <Link
           href="/admin/orders/module"
           className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#148F89] text-[13px] font-medium transition-colors w-fit"
@@ -81,12 +80,12 @@ export default function ModuleContentEditor() {
           Kembali ke Daftar Modul
         </Link>
         <p className="text-[#64748B] text-[14px]">Modul tidak ditemukan.</p>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout title="Kelola Konten Modul">
+    <>
       <Link
         href="/admin/orders/module"
         className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#148F89] text-[13px] font-medium transition-colors w-fit"
@@ -178,6 +177,6 @@ export default function ModuleContentEditor() {
           {saving ? "Menyimpan..." : "Simpan Perubahan"}
         </button>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { X, FileText, ShieldCheck } from "lucide-react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
@@ -97,7 +96,7 @@ export default function AdminBootcampRegistrations() {
   const pendingCount = registrations.filter((r) => r.status === "registered").length;
 
   return (
-    <DashboardLayout title="Pendaftaran Bootcamp">
+    <>
       <div className="flex flex-col gap-1">
         <h1 className="font-bold text-[22px] text-[#0F172A]">Pendaftaran Bootcamp</h1>
         <p className="text-[#64748B] text-[14px]">
@@ -316,6 +315,6 @@ export default function AdminBootcampRegistrations() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

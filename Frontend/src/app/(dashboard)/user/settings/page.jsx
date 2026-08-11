@@ -12,7 +12,6 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
-import DashboardLayout from "@/component/user/DashboardLayout";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -270,7 +269,7 @@ const handleDeleteAccount = async () => {
   }, []);
 
   return (
-    <DashboardLayout title="Pengaturan Akun">
+    <>
       <motion.div {...sectionReveal} className="flex flex-col gap-1">
         <h1 className="text-[28px] sm:text-[32px] font-bold text-white leading-tight">
           Pengaturan Akun
@@ -620,6 +619,6 @@ const handleDeleteAccount = async () => {
           </motion.div>
         )}
       </AnimatePresence>
-    </DashboardLayout>
+    </>
   );
 }

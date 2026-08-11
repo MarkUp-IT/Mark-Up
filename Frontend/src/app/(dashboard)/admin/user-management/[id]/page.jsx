@@ -12,7 +12,6 @@ import {
   Mail,
   Phone,
 } from "lucide-react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import { apiRequest } from "@/lib/api";
 
 const ROLE_LABEL = { ADMIN: "Admin", MENTOR: "Mentor", STUDENT: "User" };
@@ -44,15 +43,15 @@ export default function UserDetail() {
 
   if (loading) {
     return (
-      <DashboardLayout title="Detail Profil">
+      <>
         <p className="text-[#64748B] text-[14px]">Memuat profil...</p>
-      </DashboardLayout>
+      </>
     );
   }
 
   if (notFound || !profile) {
     return (
-      <DashboardLayout title="Detail Profil">
+      <>
         <Link
           href="/admin/user-management"
           className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#148F89] text-[13px] font-medium transition-colors w-fit"
@@ -63,7 +62,7 @@ export default function UserDetail() {
         <p className="text-[#64748B] text-[14px]">
           Profil dengan ID &ldquo;{params?.id}&rdquo; tidak ditemukan.
         </p>
-      </DashboardLayout>
+      </>
     );
   }
 
@@ -71,7 +70,7 @@ export default function UserDetail() {
   const mentorProfile = profile.mentor_profile;
 
   return (
-    <DashboardLayout title="Detail Profil">
+    <>
       <Link
         href="/admin/user-management"
         className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#148F89] text-[13px] font-medium transition-colors w-fit"
@@ -229,6 +228,6 @@ export default function UserDetail() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

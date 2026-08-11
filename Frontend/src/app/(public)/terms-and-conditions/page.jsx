@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { Headphones, Mail } from "lucide-react";
-import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 
 const sections = [
@@ -134,7 +133,6 @@ export default function TermsAndConditionsPage() {
         }}
       />
 
-      <Navbar />
 
       <div className="main-content flex flex-col gap-12 items-center mt-28 md:mt-36 mb-24 relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6">
         {/* Hero */}

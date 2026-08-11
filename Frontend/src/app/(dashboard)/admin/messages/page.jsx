@@ -2,7 +2,6 @@
 
 import { Eye, X, Mail } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
@@ -66,7 +65,7 @@ export default function ContactMessages() {
   const newCount = messages.filter((m) => m.status === "new").length;
 
   return (
-    <DashboardLayout title="Pesan Masuk">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -184,6 +183,6 @@ export default function ContactMessages() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

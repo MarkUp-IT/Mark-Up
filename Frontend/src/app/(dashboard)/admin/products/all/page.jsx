@@ -3,7 +3,6 @@
 import { ArrowLeft, Search, ChevronDown, Download, Loader2 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import EmptyState from "@/component/admin/EmptyState";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -110,7 +109,7 @@ export default function AllProducts() {
   }
 
   return (
-    <DashboardLayout title="Semua Produk">
+    <>
       <style>{heightFix}</style>
 
       <Link
@@ -260,6 +259,6 @@ export default function AllProducts() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

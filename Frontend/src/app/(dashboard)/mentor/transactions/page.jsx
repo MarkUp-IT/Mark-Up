@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Search, X } from "lucide-react";
-import DashboardLayout from "@/component/mentor/DashboardLayout";
 import EmptyState from "@/component/mentor/EmptyState";
 import { apiRequest } from "@/lib/api";
 
@@ -119,7 +118,7 @@ export default function MentorTransactions() {
     : `Belum ada transaksi dengan status "${activeFilter}".`;
 
   return (
-    <DashboardLayout title="Transactions">
+    <>
       <motion.div {...sectionReveal} className="flex flex-col gap-1">
         <h2 className="text-[22px] sm:text-[25px] font-bold text-white">Riwayat Pendapatan</h2>
         <p className="text-[#9CA3AF] text-[13px]">
@@ -284,6 +283,6 @@ export default function MentorTransactions() {
           </motion.div>
         </motion.div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

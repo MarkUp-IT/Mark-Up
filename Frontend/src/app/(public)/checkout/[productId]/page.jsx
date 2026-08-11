@@ -18,7 +18,6 @@ import {
   Search,
   CalendarClock,
 } from "lucide-react";
-import Navbar from "@/component/Navbar";
 import Linkify from "@/component/Linkify";
 import { toast } from "sonner";
 import LoginRequiredDialog from "@/component/LoginRequiredDialog";
@@ -385,7 +384,6 @@ function CheckoutDetailPageInner() {
         .mentor-scroll::-webkit-scrollbar-thumb:hover { background: #3D3159; }
       `}</style>
 
-      <Navbar />
 
       {isLoggedIn === false && (
         <LoginRequiredDialog

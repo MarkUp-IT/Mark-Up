@@ -11,7 +11,6 @@ import {
   Minus,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import CurrencyInput from "@/component/admin/CurrencyInput";
@@ -337,7 +336,7 @@ export default function ReferralCodes() {
   const totalUsed = codes.reduce((sum, c) => sum + c.used_count, 0);
 
   return (
-    <DashboardLayout title="Kode Referral">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -685,6 +684,6 @@ export default function ReferralCodes() {
           </button>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

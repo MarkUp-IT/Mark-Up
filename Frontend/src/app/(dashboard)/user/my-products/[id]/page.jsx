@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import Linkify from "@/component/Linkify";
-import DashboardLayout from "@/component/user/DashboardLayout";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
 import { extractErrorMessage } from "@/lib/formErrors";
@@ -181,7 +180,7 @@ export default function ProductDetail() {
 
   if (loading) {
     return (
-      <DashboardLayout title="Detail Produk">
+      <>
         <Link
           href="/user/my-products"
           className="inline-flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit"
@@ -192,13 +191,13 @@ export default function ProductDetail() {
         <div className="text-center py-12">
           <p className="text-[#9CA3AF] text-[13px]">Memuat data produk...</p>
         </div>
-      </DashboardLayout>
+      </>
     );
   }
 
   if (!product) {
     return (
-      <DashboardLayout title="Detail Produk">
+      <>
         <Link
           href="/user/my-products"
           className="inline-flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit"
@@ -211,7 +210,7 @@ export default function ProductDetail() {
           ctaLabel="Lihat Semua Produk"
           ctaHref="/user/my-products"
         />
-      </DashboardLayout>
+      </>
     );
   }
 
@@ -459,7 +458,7 @@ export default function ProductDetail() {
   };
 
   return (
-    <DashboardLayout title="Detail Produk">
+    <>
       <Link
         href="/user/my-products"
         className="inline-flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit"
@@ -1005,6 +1004,6 @@ export default function ProductDetail() {
           </motion.div>
         </motion.div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { FileText, Star, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import DashboardLayout from "@/component/user/DashboardLayout";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
 import { extractErrorMessage } from "@/lib/formErrors";
@@ -270,7 +269,7 @@ export default function MyProducts() {
   ];
 
   return (
-    <DashboardLayout title="My Products">
+    <>
       <motion.div
         {...sectionReveal}
         className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6"
@@ -590,6 +589,6 @@ export default function MyProducts() {
           </motion.form>
         </motion.div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

@@ -11,7 +11,6 @@ import {
   Loader2,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import BankAccountPanel from "@/component/admin/BankAccountPanel";
@@ -157,7 +156,7 @@ export default function Transactions() {
   }
 
   return (
-    <DashboardLayout title="Transaksi">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -503,6 +502,6 @@ export default function Transactions() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

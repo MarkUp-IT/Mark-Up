@@ -21,7 +21,6 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useState, useEffect } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import PromoPopupPanel from "@/component/admin/PromoPopupPanel";
@@ -529,7 +528,7 @@ export default function Products() {
   };
 
   return (
-    <DashboardLayout title="Produk">
+    <>
       <style>{heightFix}</style>
 
       <PromoPopupPanel />
@@ -1578,6 +1577,6 @@ export default function Products() {
           </button>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

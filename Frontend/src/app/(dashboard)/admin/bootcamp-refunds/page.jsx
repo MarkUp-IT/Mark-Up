@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { CheckCircle2, Circle } from "lucide-react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
@@ -62,7 +61,7 @@ export default function AdminBootcampRefunds() {
   const pendingCount = refunds.filter((r) => !r.refunded_at).length;
 
   return (
-    <DashboardLayout title="Pengembalian Commitment Fee">
+    <>
       <div className="flex flex-col gap-1">
         <h1 className="font-bold text-[22px] text-[#0F172A]">Pengembalian Commitment Fee</h1>
         <p className="text-[#64748B] text-[14px]">
@@ -171,6 +170,6 @@ export default function AdminBootcampRefunds() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }
