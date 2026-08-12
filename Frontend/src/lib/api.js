@@ -3,26 +3,77 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhos
 const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
 
-export function getAccessToken() {
+/**
+ * Akses localStorage SELALU lewat pembungkus ini.
+ *
+ * Menyentuh localStorage bisa MELEMPAR, bukan sekadar mengembalikan null:
+ * browser yang memblokir penyimpanan situs (Chrome "Block all cookies", mode
+ * privat tertentu, Brave/Safari dengan proteksi ketat, sebagian webview)
+ * melempar SecurityError begitu propertinya dibaca.
+ *
+ * Dulu dipanggil langsung, jadi error itu naik ke React dan seluruh halaman
+ * diganti layar "Halaman ini gagal ditampilkan" -- termasuk halaman publik
+ * yang sebenarnya tidak butuh login sama sekali.
+ *
+ * Gagal-aman: kalau storage tidak bisa diakses, pengguna dianggap belum login.
+ * Situs tetap bisa dijelajahi; hanya sesi login yang tidak bisa disimpan.
+ */
+function bacaStorage(key) {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(ACCESS_TOKEN_KEY);
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function tulisStorage(key, value) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* penyimpanan diblokir atau penuh -- diabaikan, jangan merusak halaman */
+  }
+}
+
+function hapusStorage(key) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    /* sama seperti di atas */
+  }
+}
+
+/** true kalau sesi login tidak akan bertahan (penyimpanan diblokir browser). */
+export function isStorageBlocked() {
+  if (typeof window === "undefined") return false;
+  try {
+    const uji = "__markup_uji_storage__";
+    window.localStorage.setItem(uji, "1");
+    window.localStorage.removeItem(uji);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+export function getAccessToken() {
+  return bacaStorage(ACCESS_TOKEN_KEY);
 }
 
 export function getRefreshToken() {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
+  return bacaStorage(REFRESH_TOKEN_KEY);
 }
 
 export function setTokens({ access, refresh }) {
-  if (typeof window === "undefined") return;
-  if (access) localStorage.setItem(ACCESS_TOKEN_KEY, access);
-  if (refresh) localStorage.setItem(REFRESH_TOKEN_KEY, refresh);
+  if (access) tulisStorage(ACCESS_TOKEN_KEY, access);
+  if (refresh) tulisStorage(REFRESH_TOKEN_KEY, refresh);
 }
 
 export function clearTokens() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  hapusStorage(ACCESS_TOKEN_KEY);
+  hapusStorage(REFRESH_TOKEN_KEY);
 }
 
 export class ApiError extends Error {
