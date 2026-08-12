@@ -6,6 +6,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Search, X } from "lucide-react";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
+import AttentionBanner from "@/component/AttentionBanner";
 
 const FILTERS = ["Semua", "Lunas", "Diproses", "Ditolak"];
 
@@ -112,6 +113,10 @@ export default function Transactions() {
 
   const hasAny = transactions.length > 0;
 
+  // Pembayaran ditolak inilah yang dihitung badge angka di sidebar
+  // (get_student_sidebar_badges -> payment_status=FAILED).
+  const ditolak = transactions.filter((t) => t.status === "FAILED");
+
   const filtered = transactions.filter((t) => {
     const matchesFilter = activeFilter === "Semua" || statusMeta[t.status]?.bucket === activeFilter;
     const query = searchQuery.trim().toLowerCase();
@@ -133,6 +138,18 @@ export default function Transactions() {
         <p className="text-[#9CA3AF] text-[14px] mt-1">
           Riwayat semua pembelian produk, bootcamp, dan sesi mentoring kamu di Mark-Up.
         </p>
+      </motion.div>
+
+      <motion.div {...sectionReveal}>
+        <AttentionBanner
+          judul={`${ditolak.length} pembayaran ditolak`}
+          keterangan="Ini yang membuat angka merah muncul di menu Transaksi. Klik untuk melihat alasannya."
+          butir={ditolak.map((t) => ({
+            key: t.transaction_id,
+            label: t.product_title || t.transaction_id,
+            anchor: `transaksi-${t.transaction_id}`,
+          }))}
+        />
       </motion.div>
 
       <motion.div {...sectionReveal} className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -195,7 +212,14 @@ export default function Transactions() {
               key={tx.transaction_id}
               {...cardReveal(index)}
               onClick={() => setSelectedTx(tx)}
-              className="w-full text-left bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-[#148F89]/50 transition-colors"
+              id={tx.status === "FAILED" ? `transaksi-${tx.transaction_id}` : undefined}
+              className={`w-full text-left bg-[#170F26] border rounded-[12px] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors scroll-mt-32 ${
+                // Transaksi yang ditolak inilah yang bikin angka merah di menu
+                // Transaksi menyala -- ditandai supaya langsung ketemu.
+                tx.status === "FAILED"
+                  ? "border-[#F59E0B]/70 hover:border-[#F59E0B]"
+                  : "border-[#2D2342] hover:border-[#148F89]/50"
+              }`}
             >
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2 flex-wrap">

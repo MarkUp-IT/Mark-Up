@@ -115,21 +115,34 @@ class User(AbstractUser):
     def __str__(self):
         return self.fullname
 
-    def is_profile_complete(self):
-        """Field wajib biar student bisa checkout: nama, WhatsApp, institusi,
-        dan status/semester.
+    # Field wajib biar student bisa checkout. (nama_field, label yang dilihat user)
+    #
+    # Label-nya ikut disimpan di sini supaya badge "profil belum lengkap" dan
+    # sorotan di halaman Pengaturan Akun memakai SATU daftar yang sama. Kalau
+    # daftarnya dipisah, keduanya bisa berbeda diam-diam: angka merah muncul
+    # tapi tidak ada satu pun kolom yang tersorot.
+    #
+    # LinkedIn & foto profil sengaja TIDAK diwajibkan -- keduanya bikin orang
+    # mandek di gerbang profil padahal bukan data yang dipakai buat transaksi.
+    # CV/portofolio juga tidak di sini: sekarang diminta saat daftar bootcamp
+    # (per pendaftaran, biar selalu versi terbaru), bukan sekali di profil.
+    PROFILE_REQUIRED_FIELDS = (
+        ("fullname", "Nama Lengkap"),
+        ("phone", "Nomor WhatsApp"),
+        ("institution", "Universitas / Institusi Asal"),
+        ("current_status", "Status Saat Ini"),
+    )
 
-        LinkedIn & foto profil sengaja TIDAK diwajibkan lagi -- keduanya bikin
-        orang mandek di gerbang profil padahal bukan data yang kepakai buat
-        transaksi. CV/portofolio juga gak di sini: sekarang diminta pas daftar
-        bootcamp (per pendaftaran, biar selalu versi terbaru), bukan sekali di
-        profil."""
-        return bool(
-            self.fullname
-            and (self.phone or "").strip()
-            and (self.institution or "").strip()
-            and (self.current_status or "").strip()
-        )
+    def missing_profile_fields(self):
+        """[{key, label}] untuk field wajib yang masih kosong."""
+        return [
+            {"key": key, "label": label}
+            for key, label in self.PROFILE_REQUIRED_FIELDS
+            if not (getattr(self, key, "") or "").strip()
+        ]
+
+    def is_profile_complete(self):
+        return not self.missing_profile_fields()
 
 
 class ContactMessageStatus(models.TextChoices):
