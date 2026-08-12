@@ -36,6 +36,31 @@ const nextConfig = {
   async headers() {
     return [
       {
+        // HTML halaman WAJIB divalidasi ulang tiap kunjungan.
+        //
+        // Bawaannya Next.js mengirim "s-maxage=..." tanpa max-age. s-maxage
+        // cuma dipatuhi cache perantara; browser mengabaikannya dan -- karena
+        // tidak ada larangan apa pun -- boleh memakai ulang HTML lama sesuka
+        // hati. HTML lama menunjuk ke nama berkas JS lama, yang di-cache
+        // "immutable" selama setahun. Hasilnya pengguna bisa terus menjalankan
+        // kode versi lama tanpa sekali pun menghubungi server, jadi perbaikan
+        // yang sudah live tidak pernah sampai ke mereka. Ini benar-benar
+        // terjadi: satu pengguna tetap melihat layar error berjam-jam setelah
+        // bug-nya diperbaiki, dan log server bersih karena browsernya memang
+        // tidak meminta apa-apa.
+        //
+        // "no-cache" BUKAN berarti tidak disimpan -- browser tetap menyimpan,
+        // hanya wajib bertanya dulu. Kalau tidak ada perubahan, jawabannya 304
+        // tanpa isi, jadi nyaris tanpa biaya.
+        //
+        // Sec-Fetch-Dest: document dipakai supaya aturan ini HANYA kena ke
+        // navigasi halaman. Berkas di /_next/static/ punya nama ber-hash dan
+        // tetap "immutable" -- itu memang aman disimpan lama.
+        source: "/:path*",
+        has: [{ type: "header", key: "Sec-Fetch-Dest", value: "document" }],
+        headers: [{ key: "Cache-Control", value: "no-cache" }],
+      },
+      {
         source: "/:path*",
         headers: [
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
