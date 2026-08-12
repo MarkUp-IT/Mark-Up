@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
 import { extractErrorMessage } from "@/lib/formErrors";
+import AttentionBanner from "@/component/AttentionBanner";
 
 const FILTERS = ["Semua", "Bootcamp", "Mentoring", "Modul", "Riwayat"];
 
@@ -40,12 +41,19 @@ function ProductCard({
   hasRating,
   onRate,
 }) {
+  // Kartu inilah yang bikin angka merah di menu Produk Saya menyala: sudah
+  // selesai tapi belum dinilai. Ditandai supaya penyebabnya kelihatan tanpa
+  // harus menyisir satu per satu.
+  const perluDinilai = isCompleted && !hasRating;
   return (
     <div
-      className={`relative h-full flex flex-col rounded-[12px] overflow-hidden border transition-colors ${
-        isCompleted
-          ? "border-[#2D2342] opacity-80 hover:opacity-100"
-          : "border-[#2D2342] hover:border-[#4C1D95]"
+      id={perluDinilai && id ? `produk-${id}` : undefined}
+      className={`relative h-full flex flex-col rounded-[12px] overflow-hidden border transition-colors scroll-mt-32 ${
+        perluDinilai
+          ? "border-[#F59E0B]/70 hover:border-[#F59E0B]"
+          : isCompleted
+            ? "border-[#2D2342] opacity-80 hover:opacity-100"
+            : "border-[#2D2342] hover:border-[#4C1D95]"
       }`}
     >
       <Link
@@ -253,6 +261,15 @@ export default function MyProducts() {
     }
   };
 
+  // Produk yang bikin angka merah di menu Produk Saya menyala: sudah selesai
+  // tapi belum dinilai. Aturannya disamakan dengan badge di backend
+  // (get_student_sidebar_badges) -- modul sengaja tidak ikut dihitung di sana.
+  const perluDinilai = [...data.bootcamp, ...data.mentoring].filter(
+    (item) =>
+      item.status === "completed" &&
+      !(!!item.hasRating || ratedIds.includes(item.id))
+  );
+
   const stats = [
     {
       label: "Mentoring Aktif",
@@ -319,6 +336,20 @@ export default function MyProducts() {
           ))}
         </div>
       </motion.div>
+
+      {!loading && !loadError && (
+        <motion.div {...sectionReveal}>
+          <AttentionBanner
+            judul={`${perluDinilai.length} produk selesai belum kamu nilai`}
+            keterangan="Ini yang membuat angka merah muncul di menu Produk Saya. Klik untuk menuju kartunya."
+            butir={perluDinilai.map((p) => ({
+              key: p.id,
+              label: p.title,
+              anchor: `produk-${p.id}`,
+            }))}
+          />
+        </motion.div>
+      )}
 
       {/* Sebelumnya state `loading` diset tapi nggak pernah dirender, dan
           kegagalan muat nggak keliatan sama sekali. Sekarang dua-duanya punya

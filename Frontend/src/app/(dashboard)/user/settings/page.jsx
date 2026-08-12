@@ -14,17 +14,34 @@ import {
 } from "lucide-react";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 import { toast } from "sonner";
+import AttentionBanner from "@/component/AttentionBanner";
 
-function Field({ label, value, onChange, disabled, note, type = "text" }) {
+/**
+ * `anchor` + `perluDiisi` dipakai untuk menyorot kolom yang bikin badge angka
+ * di sidebar menyala. Sorotannya hilang sendiri begitu kolomnya diketik,
+ * bukan menunggu disimpan -- supaya terasa langsung terjawab.
+ */
+function Field({ label, value, onChange, disabled, note, type = "text", anchor, perluDiisi }) {
+  const kosong = perluDiisi && !(value || "").trim();
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-[#E2E8F0] text-[13px] font-medium">{label}</label>
+    <div className="flex flex-col gap-1.5 scroll-mt-32" id={anchor}>
+      <label className="text-[#E2E8F0] text-[13px] font-medium flex items-center gap-2">
+        {label}
+        {kosong && (
+          <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-[#F59E0B]/15 text-[#FBBF24] border border-[#F59E0B]/30">
+            Belum diisi
+          </span>
+        )}
+      </label>
       <input
         type={type}
         value={value}
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         disabled={disabled}
-        className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[14px] outline-none transition-colors ${
+        aria-invalid={kosong || undefined}
+        className={`w-full bg-[#0F081C] border rounded-[8px] px-4 py-3 text-[14px] outline-none transition-colors ${
+          kosong ? "border-[#F59E0B]/70" : "border-[#2D2342]"
+        } ${
           disabled
             ? "text-[#6B7280] cursor-not-allowed"
             : "text-white focus:border-[#148F89]/60"
@@ -68,7 +85,13 @@ export default function Settings() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState(null);
 
+  const [missingFields, setMissingFields] = useState([]);
   const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Sebuah kolom disorot hanya kalau backend memang menandainya kurang. Nilai
+  // kosongnya sendiri dicek ulang di dalam <Field>, jadi sorotannya lenyap
+  // begitu diketik tanpa perlu menunggu tersimpan.
+  const perluDiisi = (key) => missingFields.some((f) => f.key === key);
   const [isSaving, setIsSaving] = useState(false);
 
 
@@ -243,6 +266,9 @@ const handleDeleteAccount = async () => {
         const res = await apiRequest("/api/accounts/me/profile/");
         const u = res.user;
         setEmail(u.email);
+        // Daftar kolom yang bikin badge angka di sidebar menyala. Datang dari
+        // backend, memakai aturan yang sama dengan badge-nya.
+        setMissingFields(u.missing_profile_fields || []);
         setProfileImage(u.profile_image || null); // BARU
         setCvUrl(u.cv_url || null);
         setCvFileName(u.cv_filename || null);
@@ -367,8 +393,24 @@ const handleDeleteAccount = async () => {
           </p>
         </div>
 
+        <AttentionBanner
+          judul={`${missingFields.length} data wajib belum diisi`}
+          keterangan="Ini yang membuat angka merah muncul di menu Pengaturan Akun. Klik salah satu untuk langsung menuju kolomnya."
+          butir={missingFields.map((f) => ({
+            key: f.key,
+            label: f.label,
+            anchor: `profil-${f.key}`,
+          }))}
+        />
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Nama Lengkap" value={fullName} onChange={setFullName} />
+          <Field
+            label="Nama Lengkap"
+            value={fullName}
+            onChange={setFullName}
+            anchor="profil-fullname"
+            perluDiisi={perluDiisi("fullname")}
+          />
           <Field
             label="Email"
             value={email}
@@ -376,19 +418,29 @@ const handleDeleteAccount = async () => {
             type="email"
             note="Hubungi support untuk mengubah email."
           />
-          <Field label="Nomor WhatsApp" value={phone} onChange={setPhone} />
+          <Field
+            label="Nomor WhatsApp"
+            value={phone}
+            onChange={setPhone}
+            anchor="profil-phone"
+            perluDiisi={perluDiisi("phone")}
+          />
 
           {/* Mulai Tambahan Data Baris #11, #13 */}
           <Field
             label="Universitas / Institusi Asal"
             value={institution}
             onChange={setInstitution}
+            anchor="profil-institution"
+            perluDiisi={perluDiisi("institution")}
           />
           <Field
             label="Semester Saat Ini"
             value={currentStatus}
             onChange={setCurrentStatus}
             note="Contoh: Mahasiswa Semester 5, Fresh Graduate, dll."
+            anchor="profil-current_status"
+            perluDiisi={perluDiisi("current_status")}
           />
           <Field
             label="URL LinkedIn (opsional)"

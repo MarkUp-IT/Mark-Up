@@ -1024,6 +1024,10 @@ def profile_view(request):
 			"profile_image": _get_profile_image_url(user, request),
             "cv_url": _get_cv_url(user, request),
             "cv_filename": _get_cv_filename(user),
+            # Dipakai halaman Pengaturan Akun buat menyorot kolom mana yang
+            # bikin badge angka di sidebar menyala. Sengaja dari sumber yang
+            # sama dengan badge-nya supaya tidak pernah berbeda.
+            "missing_profile_fields": user.missing_profile_fields(),
         }
         return JsonResponse({"user": data}, status=200)
 

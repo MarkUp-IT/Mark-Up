@@ -14,16 +14,28 @@ import {
   Plus,
   X,
   Landmark,
-  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
+import AttentionBanner from "@/component/AttentionBanner";
 
-function Field({ label, value, onChange, disabled, note, textarea, icon }) {
+/**
+ * `anchor` + `perluDiisi` menyorot syarat yang bikin badge angka di sidebar
+ * menyala. Sorotannya hilang begitu kolomnya diketik, tanpa menunggu disimpan.
+ */
+function Field({ label, value, onChange, disabled, note, textarea, icon, anchor, perluDiisi }) {
   const Component = textarea ? "textarea" : "input";
+  const kosong = perluDiisi && !(value || "").trim();
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-[#E2E8F0] text-[13px] font-medium">{label}</label>
+    <div className="flex flex-col gap-1.5 scroll-mt-32" id={anchor}>
+      <label className="text-[#E2E8F0] text-[13px] font-medium flex items-center gap-2">
+        {label}
+        {kosong && (
+          <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-[#F59E0B]/15 text-[#FBBF24] border border-[#F59E0B]/30">
+            Belum diisi
+          </span>
+        )}
+      </label>
       <div className="relative">
         {icon && (
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6B7280]">
@@ -35,7 +47,10 @@ function Field({ label, value, onChange, disabled, note, textarea, icon }) {
           onChange={onChange ? (e) => onChange(e.target.value) : undefined}
           disabled={disabled}
           rows={textarea ? 3 : undefined}
-          className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 ${
+          aria-invalid={kosong || undefined}
+          className={`w-full bg-[#0F081C] border rounded-[8px] px-4 py-3 ${
+            kosong ? "border-[#F59E0B]/70" : "border-[#2D2342]"
+          } ${
             icon ? "pl-11" : ""
           } text-[14px] outline-none transition-colors resize-none ${
             disabled
@@ -62,6 +77,10 @@ export default function MentorSettings() {
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [isProfileComplete, setIsProfileComplete] = useState(true);
+  const [missingFields, setMissingFields] = useState([]);
+
+  // Sebuah syarat disorot hanya kalau backend memang menandainya kurang.
+  const perluDiisi = (key) => missingFields.some((f) => f.key === key);
 
   const [initialInfo, setInitialInfo] = useState({
     fullName: "",
@@ -149,6 +168,9 @@ export default function MentorSettings() {
         ]);
 
         setIsProfileComplete(meStatusRes?.user?.is_profile_complete ?? true);
+        // Syarat mana saja yang bikin badge angka di sidebar menyala. Dari
+        // backend, memakai aturan yang sama dengan badge-nya.
+        setMissingFields(profileRes?.missing_profile_fields || []);
 
         setExpertiseOptions(expertiseRes?.expertise || []);
 
@@ -415,27 +437,29 @@ export default function MentorSettings() {
         </p>
       </motion.div>
 
-      {!isProfileComplete && (
-        <motion.div
-          {...sectionReveal}
-          className="bg-[#F59E0B]/10 border border-[#F59E0B]/30 rounded-[12px] p-4 flex items-start gap-3"
-        >
-          <AlertTriangle size={18} className="text-[#F59E0B] shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[#F59E0B] font-semibold text-[13px]">
-              Lengkapi dulu data wajib di bawah ini
-            </p>
-            <p className="text-[#FCD34D]/80 text-[12px] mt-1">
-              Sebelum lengkap, kamu hanya dapat mengakses halaman Pengaturan ini dan belum muncul di halaman Mentors publik. Kolom wajib: Foto Profil, Nama, Nomor WhatsApp, LinkedIn, Instagram, minimal 1 Keahlian, dan Rekening Bank.
-            </p>
-          </div>
-        </motion.div>
-      )}
+      {/* Dulu spanduk ini menyebut SEMUA syarat sebagai kalimat tetap, jadi
+          mentor tetap harus menebak mana yang kurang miliknya. Sekarang yang
+          ditampilkan hanya yang benar-benar belum terpenuhi, dan tiap butirnya
+          bisa diklik untuk melompat ke bagiannya. */}
+      <motion.div {...sectionReveal}>
+        <AttentionBanner
+          judul={`${missingFields.length} syarat belum terpenuhi`}
+          keterangan="Ini yang membuat angka merah muncul di menu Settings. Sebelum lengkap, kamu hanya dapat mengakses halaman ini dan belum muncul di halaman Mentors publik."
+          butir={missingFields.map((f) => ({
+            key: f.key,
+            label: f.label,
+            anchor: `mentor-${f.key}`,
+          }))}
+        />
+      </motion.div>
 
       {/* Foto Profil */}
       <motion.div
         {...sectionReveal}
-        className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col sm:flex-row sm:items-center gap-5"
+        id="mentor-profile_image"
+        className={`bg-[#170F26] border rounded-[12px] p-6 flex flex-col sm:flex-row sm:items-center gap-5 scroll-mt-32 ${
+          perluDiisi("profile_image") ? "border-[#F59E0B]/70" : "border-[#2D2342]"
+        }`}
       >
         <div className="relative shrink-0">
           <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#2D2342] bg-[#0F081C] flex items-center justify-center">
@@ -502,13 +526,21 @@ export default function MentorSettings() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Nama Lengkap *" value={fullName} onChange={setFullName} />
           <Field label="Email" value={email} disabled note="Hubungi support untuk mengubah email." />
-          <Field label="Nomor WhatsApp *" value={phone} onChange={setPhone} />
+          <Field
+            label="Nomor WhatsApp *"
+            value={phone}
+            onChange={setPhone}
+            anchor="mentor-phone"
+            perluDiisi={perluDiisi("phone")}
+          />
           <Field
             label="LinkedIn *"
             value={linkedin}
             onChange={setLinkedin}
             icon={<Link2 size={16} />}
             note="Tempel link lengkap, contoh: https://linkedin.com/in/namamu"
+            anchor="mentor-linkedin_url"
+            perluDiisi={perluDiisi("linkedin_url")}
           />
           <Field
             label="Instagram *"
@@ -516,6 +548,8 @@ export default function MentorSettings() {
             onChange={setInstagram}
             icon={<Instagram size={16} />}
             note="Tempel link lengkap, contoh: https://instagram.com/namamu (bukan username saja)"
+            anchor="mentor-instagram_url"
+            perluDiisi={perluDiisi("instagram_url")}
           />
           <Field
             label="Headline"
@@ -550,7 +584,10 @@ export default function MentorSettings() {
       <motion.form
         {...sectionReveal}
         onSubmit={handleSaveExpertise}
-        className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col gap-4"
+        id="mentor-expertises"
+        className={`bg-[#170F26] border rounded-[12px] p-6 flex flex-col gap-4 scroll-mt-32 ${
+          perluDiisi("expertises") ? "border-[#F59E0B]/70" : "border-[#2D2342]"
+        }`}
       >
         <div>
           <h3 className="text-white font-semibold text-[15px]">Keahlian</h3>
@@ -686,14 +723,28 @@ export default function MentorSettings() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Nama Bank *" value={bankName} onChange={setBankName} />
-          <Field label="Nomor Rekening *" value={accountNumber} onChange={setAccountNumber} />
+          <Field
+            label="Nama Bank *"
+            value={bankName}
+            onChange={setBankName}
+            anchor="mentor-bank_name"
+            perluDiisi={perluDiisi("bank_name")}
+          />
+          <Field
+            label="Nomor Rekening *"
+            value={accountNumber}
+            onChange={setAccountNumber}
+            anchor="mentor-bank_account"
+            perluDiisi={perluDiisi("bank_account")}
+          />
         </div>
         <Field
           label="Nama Pemilik Rekening *"
           value={accountHolder}
           onChange={setAccountHolder}
           note="Harus sama persis dengan nama di buku tabungan/rekening."
+          anchor="mentor-bank_account_holder"
+          perluDiisi={perluDiisi("bank_account_holder")}
         />
 
         <div className="flex items-center gap-3">

@@ -351,6 +351,9 @@ def my_profile_view(request):
                     _serialize_experience(exp)
                     for exp in mentor_profile.mentor_experiences.all()
                 ],
+                # Dipakai halaman Settings buat menyorot syarat mana yang bikin
+                # badge angka di sidebar menyala. Sumbernya sama dengan badge.
+                "missing_profile_fields": mentor_profile.missing_profile_fields(),
             },
             status=200,
         )

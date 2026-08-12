@@ -74,22 +74,32 @@ class MentorProfile(models.Model):
     def __str__(self):
         return f"{self.user.fullname}"
 
-    def is_profile_complete(self):
-        """Field wajib biar mentor lolos gate dashboard (lihat useAuthGuard
-        di FE) & muncul di /mentors publik -- foto, WhatsApp, LinkedIn,
-        Instagram, rekening, minimal 1 keahlian. Bio, headline, dan
-        pengalaman kerja sengaja dibiarkan opsional."""
+    def missing_profile_fields(self):
+        """[{key, label}] untuk syarat profil mentor yang belum terpenuhi.
+
+        Ini yang menentukan mentor lolos gate dashboard (lihat useAuthGuard di
+        frontend) sekaligus muncul di /mentors publik. Bio, headline, dan
+        pengalaman kerja sengaja dibiarkan opsional.
+
+        Daftarnya dipakai bersama oleh badge "profil belum lengkap" DAN sorotan
+        di halaman Settings, supaya angka merah selalu punya penjelasan yang
+        cocok -- bukan angka tanpa petunjuk apa yang kurang.
+        """
         user = self.user
-        return bool(
-            user.profile_image
-            and user.phone
-            and self.linkedin_url
-            and self.instagram_url
-            and self.bank_name
-            and self.bank_account
-            and self.bank_account_holder
-            and self.mentor_expertises.exists()
-        )
+        syarat = [
+            ("profile_image", "Foto Profil", bool(user.profile_image)),
+            ("phone", "Nomor WhatsApp", bool((user.phone or "").strip())),
+            ("linkedin_url", "LinkedIn", bool((self.linkedin_url or "").strip())),
+            ("instagram_url", "Instagram", bool((self.instagram_url or "").strip())),
+            ("bank_name", "Nama Bank", bool((self.bank_name or "").strip())),
+            ("bank_account", "Nomor Rekening", bool((self.bank_account or "").strip())),
+            ("bank_account_holder", "Nama Pemilik Rekening", bool((self.bank_account_holder or "").strip())),
+            ("expertises", "Minimal 1 Keahlian", self.mentor_expertises.exists()),
+        ]
+        return [{"key": k, "label": l} for k, l, terisi in syarat if not terisi]
+
+    def is_profile_complete(self):
+        return not self.missing_profile_fields()
 
 
 class MentorExperience(models.Model):
