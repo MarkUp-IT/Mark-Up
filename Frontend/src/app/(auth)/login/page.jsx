@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
-import { api, ApiError, setTokens } from "@/lib/api";
+import { api, ApiError, setTokens, isStorageBlocked } from "@/lib/api";
 import GoogleSignInButton from "@/component/GoogleSignInButton";
 
 // Paksa background input autofill browser tetap gelap -- browser (Chrome dkk)
@@ -91,6 +91,19 @@ function LoginInner() {
         access: data.access,
         refresh: data.refresh,
       });
+
+      // Kalau browser memblokir penyimpanan situs, token barusan tidak
+      // tersimpan -- user akan langsung terlempar keluar begitu pindah halaman.
+      // Lebih baik dikatakan terus terang daripada dia bingung sendiri.
+      if (isStorageBlocked()) {
+        showToast(
+          "error",
+          "Browser memblokir penyimpanan situs",
+          "Login tidak bisa disimpan. Izinkan cookie & data situs untuk mark-up.id, atau keluar dari mode penyamaran, lalu coba lagi.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
 
       showToast(
         "success",
