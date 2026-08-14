@@ -100,7 +100,18 @@ def get_mentors(request):
         # boleh nongol di direktori publik -- sebelumnya query ini cuma
         # nyaring profil belum lengkap, gak pernah ngecek status akun sama
         # sekali.
-        .filter(user__status=UserStatus.ACTIVE)
+        #
+        # Peran juga WAJIB dicek, bukan cuma keberadaan MentorProfile-nya.
+        # MentorProfile dibuat saat admin mengubah peran seseorang jadi MENTOR,
+        # tapi menurunkan perannya lagi TIDAK menghapus baris itu (sengaja --
+        # riwayat sesi & payout-nya masih menggantung ke sana). Tanpa cek ini,
+        # akun yang perannya sudah dikembalikan ke STUDENT tetap tampil di
+        # direktori mentor publik. Sudah pernah kejadian di produksi.
+        #
+        # Berlaku juga buat admin (dropdown assign-mentor): orang yang bukan
+        # mentor lagi memang tidak boleh ditugaskan ke sesi baru. Penugasan
+        # lama tidak terpengaruh karena tersimpan di sesinya sendiri.
+        .filter(user__role=UserRole.MENTOR, user__status=UserStatus.ACTIVE)
         .order_by("-rating")
     )
 
