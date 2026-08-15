@@ -16,6 +16,60 @@ from .decorators import jwt_required, role_required
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 import json
+import logging
+
+logger = logging.getLogger("markup.client")
+
+
+@csrf_exempt
+def report_client_error(request):
+    """Terima laporan error yang terjadi DI BROWSER pengguna.
+
+    Kenapa perlu: error boundary React cuma menampilkan layar "Halaman ini
+    gagal ditampilkan" ke pengguna, sementara pesan aslinya berhenti di console
+    browser mereka. Akibatnya laporan yang masuk selalu berupa screenshot layar
+    merah tanpa satu pun petunjuk teknis, dan penyebabnya cuma bisa ditebak.
+    Sudah dua kali kejadian dan dua kali tidak bisa direproduksi.
+
+    Sengaja TANPA login: error paling sering terjadi di halaman publik, justru
+    saat pengguna belum masuk.
+
+    Karena terbuka, ada tiga pembatas:
+      - rate limit ketat per IP (log flooding = gangguan, bukan sekadar bising)
+      - payload dipotong keras
+      - cuma ditulis ke log, tidak disimpan ke database
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    ip = get_client_ip(request)
+    if is_rate_limited(f"rl:clienterr:ip:{ip}", limit=20, window_seconds=3600):
+        # Diam-diam dianggap sukses: ini cuma telemetri, jangan sampai
+        # pembatasnya sendiri memunculkan error baru di halaman error.
+        return JsonResponse({"ok": True}, status=200)
+
+    data = get_request_data(request) or {}
+
+    def potong(nilai, maks):
+        teks = str(nilai or "")
+        return teks[:maks]
+
+    logger.error(
+        "ERROR DI BROWSER\n"
+        "  halaman   : %s\n"
+        "  pesan     : %s\n"
+        "  digest    : %s\n"
+        "  browser   : %s\n"
+        "  ip        : %s\n"
+        "  stack     : %s",
+        potong(data.get("url"), 300),
+        potong(data.get("message"), 500),
+        potong(data.get("digest"), 100),
+        potong(request.META.get("HTTP_USER_AGENT"), 300),
+        ip,
+        potong(data.get("stack"), 2000),
+    )
+    return JsonResponse({"ok": True}, status=200)
 
 
 def _get_profile_image_url(user, request):

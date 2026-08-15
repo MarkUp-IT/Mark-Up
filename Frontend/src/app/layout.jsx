@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import SmoothScrollProvider from "@/component/SmoothScroll";
 import { Toaster } from "@/components/ui/sonner";
 import { SITE_URL, SITE_KEYWORDS, ORGANIZATION_JSON_LD, WEBSITE_JSON_LD } from "@/lib/seo";
+import ClientErrorReporter from "@/component/ClientErrorReporter";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -100,6 +101,7 @@ export default function RootLayout({ children }) {
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(WEBSITE_JSON_LD) }}
         />
+        <ClientErrorReporter />
         <SmoothScrollProvider>{children}</SmoothScrollProvider>
         <Toaster position="top-right" richColors />
       </body>

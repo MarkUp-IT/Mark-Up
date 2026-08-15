@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { reportClientError } from "@/lib/reportClientError";
 
 // Error boundary tingkat rute. Tanpa berkas ini, satu error render di komponen
 // mana pun bikin Next nampilin layar bawaan -- di produksi bunyinya cuma
@@ -10,12 +11,26 @@ import Link from "next/link";
 //
 // Wajib client component: error boundary di React cuma bisa jalan di klien.
 export default function Error({ error, reset }) {
+  const [detailTampil, setDetailTampil] = useState(false);
+
   useEffect(() => {
-    // Ditulis ke console supaya tetap kelacak lewat DevTools / error tracker.
-    // Pesan mentahnya SENGAJA nggak ditampilin ke user: isinya bisa berupa
-    // detail internal (stack, nama modul) yang nggak berguna buat mereka.
     console.error("Render error:", error);
+    // Dikirim ke server juga. Tanpa ini, pesan aslinya berhenti di console
+    // browser pengguna dan yang sampai ke kami cuma screenshot layar ini --
+    // sudah dua kali kejadian dan dua kali tidak bisa direproduksi.
+    reportClientError(error, "render");
   }, [error]);
+
+  // Pesan mentah tidak ditampilkan langsung karena isinya teknis dan tidak
+  // berguna buat kebanyakan orang. Tapi disembunyikan di balik satu klik,
+  // supaya kalau kami minta, satu screenshot saja sudah cukup menjelaskan.
+  const detail = [
+    error?.message && `Pesan: ${error.message}`,
+    error?.digest && `Kode: ${error.digest}`,
+    typeof window !== "undefined" && `Halaman: ${window.location.href}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return (
     <main className="font-jakarta bg-[#060010] text-white min-h-screen flex flex-col items-center justify-center px-6 py-16 text-center">
@@ -56,6 +71,23 @@ export default function Error({ error, reset }) {
           Kembali ke Beranda
         </Link>
       </div>
+
+      {detail && (
+        <div className="mt-8 w-full max-w-[560px]">
+          <button
+            type="button"
+            onClick={() => setDetailTampil((v) => !v)}
+            className="text-[#6B6577] text-[12.5px] underline hover:text-[#A19DAB] transition-colors"
+          >
+            {detailTampil ? "Sembunyikan detail teknis" : "Lihat detail teknis"}
+          </button>
+          {detailTampil && (
+            <pre className="mt-3 whitespace-pre-wrap break-words rounded-[8px] border border-[#2D2342] bg-[#170F26] px-4 py-3 text-left font-mono text-[11.5px] leading-relaxed text-[#A19DAB]">
+              {detail}
+            </pre>
+          )}
+        </div>
+      )}
 
       <p className="mt-10 text-[#6B6577] text-[13px]">
         Masih bermasalah?{" "}
