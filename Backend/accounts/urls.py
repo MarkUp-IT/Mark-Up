@@ -18,6 +18,7 @@ from .views import (
     change_password,
     delete_account,
     confirm_delete_account,
+    report_client_error,
     forgot_password,
     reset_password,
     verify_email,
@@ -58,4 +59,7 @@ urlpatterns = [
     path("audit-logs/", get_audit_logs, name="api_audit_logs_list"),
     path("admin/sidebar-badges/", get_admin_sidebar_badges, name="api_admin_sidebar_badges"),
     path("me/sidebar-badges/", get_student_sidebar_badges, name="api_student_sidebar_badges"),
+    # Laporan error yang terjadi di browser pengguna -- tanpa login, lihat
+    # report_client_error di views.py untuk alasan & pembatasnya.
+    path("client-error/", report_client_error, name="api_report_client_error"),
 ]

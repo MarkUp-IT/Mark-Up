@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { reportClientError } from "@/lib/reportClientError";
 
 // Jaring terakhir: error yang kejadian di root layout itu sendiri nggak bisa
 // ditangkep error.jsx (error.jsx dirender DI DALAM layout yang lagi rusak).
@@ -13,6 +14,7 @@ import { useEffect } from "react";
 export default function GlobalError({ error, reset }) {
   useEffect(() => {
     console.error("Global error:", error);
+    reportClientError(error, "global");
   }, [error]);
 
   return (
