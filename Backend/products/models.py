@@ -156,6 +156,37 @@ class BootcampProduct(BaseProductDetail):
                    "ditampilkan sebagai informasi di halaman pendaftaran publik.",
     )
 
+    # --- Apa yang harus diisi pendaftar ---------------------------------
+    # Dua-duanya bisa dinyalakan/dimatikan sendiri-sendiri: boleh keduanya,
+    # salah satu saja, atau tidak sama sekali. Default True supaya batch yang
+    # sudah jalan tidak berubah perilakunya begitu migrasi ini dipasang.
+    require_commitment_letter = models.BooleanField(
+        default=True,
+        help_text="Wajibkan unggah commitment/motivation letter (PDF). Matikan "
+                  "kalau sudah diganti pertanyaan isian.",
+    )
+    enable_registration_questions = models.BooleanField(
+        default=False,
+        help_text="Tampilkan pertanyaan isian di formulir pendaftaran. "
+                  "Pertanyaannya diatur di BootcampRegistrationQuestion.",
+    )
+
+    # --- Email hasil seleksi --------------------------------------------
+    # Kosong = pakai teks bawaan di _send_bootcamp_review_email. Sengaja
+    # begitu supaya bootcamp yang belum diatur tetap mengirim email yang benar,
+    # bukan email kosong.
+    email_accepted_subject = models.CharField(max_length=255, blank=True, default="")
+    email_accepted_body = models.TextField(
+        blank=True, default="",
+        help_text="Placeholder yang tersedia: {nama} {bootcamp} {paket} {total} "
+                  "{commitment_fee} {link_bayar} {catatan_admin}",
+    )
+    email_rejected_subject = models.CharField(max_length=255, blank=True, default="")
+    email_rejected_body = models.TextField(
+        blank=True, default="",
+        help_text="Placeholder yang tersedia: {nama} {bootcamp} {paket} {catatan_admin}",
+    )
+
     class Meta:
         verbose_name = "Bootcamp Product"
         verbose_name_plural = "Bootcamp Products"
@@ -549,6 +580,85 @@ class BootcampRegistration(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user} -> {self.package} ({self.status})"
+
+
+class BootcampRegistrationQuestion(models.Model):
+    """Satu pertanyaan isian di formulir pendaftaran bootcamp.
+
+    Menggantikan peran commitment/motivation letter yang dulu harus ditulis
+    sendiri lalu diunggah sebagai PDF -- langkah itu bikin banyak calon
+    pendaftar mundur di tengah jalan. Keduanya sekarang bisa dipakai bersamaan,
+    salah satu saja, atau tidak sama sekali (lihat dua saklar di
+    BootcampProduct).
+
+    Diatur per bootcamp, jadi semua paket di batch itu mendapat pertanyaan yang
+    sama.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct,
+        on_delete=models.CASCADE,
+        related_name="registration_questions",
+    )
+    text = models.TextField(max_length=1000)
+    helper_text = models.CharField(
+        max_length=300, blank=True, default="",
+        help_text="Keterangan kecil di bawah pertanyaan, mis. contoh jawaban.",
+    )
+    is_required = models.BooleanField(default=True)
+    max_words = models.PositiveIntegerField(
+        default=0,
+        help_text="Batas kata jawaban. 0 = tanpa batas. Ditegakkan di server, "
+                  "bukan cuma ditampilkan di formulir.",
+    )
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Dimatikan = tidak muncul di formulir baru. Jawaban lama "
+                  "TETAP tersimpan dan tetap terbaca admin.",
+    )
+
+    class Meta:
+        verbose_name = "Bootcamp Registration Question"
+        verbose_name_plural = "Bootcamp Registration Questions"
+        ordering = ["order", "id"]
+
+    def __str__(self) -> str:
+        return self.text[:60]
+
+
+class BootcampRegistrationAnswer(models.Model):
+    """Jawaban seorang pendaftar untuk satu pertanyaan.
+
+    `question_text` sengaja DISALIN saat jawaban dibuat, tidak cuma mengandalkan
+    relasi ke pertanyaannya. Kalau admin mengubah kalimat pertanyaan atau
+    menghapusnya setelah orang menjawab, jawaban lama harus tetap bisa dibaca
+    apa adanya -- tanpa ini, jawaban lama akan terbaca menjawab pertanyaan yang
+    berbeda dari yang sebenarnya dilihat pendaftar saat itu.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    registration = models.ForeignKey(
+        "products.BootcampRegistration",
+        on_delete=models.CASCADE,
+        related_name="answers",
+    )
+    question = models.ForeignKey(
+        BootcampRegistrationQuestion,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="answers",
+    )
+    question_text = models.TextField(max_length=1000)
+    answer_text = models.TextField(blank=True, default="")
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Bootcamp Registration Answer"
+        verbose_name_plural = "Bootcamp Registration Answers"
+        ordering = ["order", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.question_text[:40]} -> {self.answer_text[:30]}"
 
 
 class QuizChoiceKey(models.TextChoices):

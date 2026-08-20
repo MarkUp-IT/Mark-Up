@@ -44,6 +44,10 @@ function BootcampRegisterPageInner() {
   const [timeline, setTimeline] = useState([]);
   const [requirements, setRequirements] = useState([]);
   const [commitmentLetterMaxWords, setCommitmentLetterMaxWords] = useState(500);
+  const [perluCommitmentLetter, setPerluCommitmentLetter] = useState(true);
+  const [pertanyaan, setPertanyaan] = useState([]);
+  // { [id pertanyaan]: teks jawaban }
+  const [jawaban, setJawaban] = useState({});
   const [loading, setLoading] = useState(true);
   const [myRegs, setMyRegs] = useState([]);
   const [selectedPackageId, setSelectedPackageId] = useState("");
@@ -87,6 +91,11 @@ function BootcampRegisterPageInner() {
       if (reqRes?.commitment_letter_max_words) {
         setCommitmentLetterMaxWords(reqRes.commitment_letter_max_words);
       }
+      // Dua isian ini diatur admin per bootcamp: commitment letter boleh
+      // dimatikan, dan pertanyaan boleh dinyalakan sebagai gantinya (atau
+      // keduanya, atau tidak sama sekali).
+      setPerluCommitmentLetter(reqRes?.require_commitment_letter !== false);
+      setPertanyaan(reqRes?.questions || []);
       if (getAccessToken()) {
         const regRes = await apiRequest("/api/products/bootcamp-registrations/me/");
         setMyRegs((regRes?.registrations || []).filter((r) => r.bootcamp_id === productId));
@@ -115,7 +124,19 @@ function BootcampRegisterPageInner() {
   const singlePackageMode = packages.length === 1;
 
   const handleSubmit = async () => {
-    if (!selectedPackageId || !file || !commitmentLetterFile || !cvFile || submitting) return;
+    if (!selectedPackageId || !file || !cvFile || submitting) return;
+    if (perluCommitmentLetter && !commitmentLetterFile) return;
+    // Pertanyaan wajib harus terisi. Server tetap memeriksa ulang -- ini cuma
+    // supaya orang tidak perlu menunggu request bolak-balik.
+    const belumDijawab = pertanyaan.filter(
+      (q) => q.is_required && !(jawaban[q.id] || "").trim()
+    );
+    if (belumDijawab.length > 0) {
+      toast.error("Masih ada pertanyaan yang belum dijawab", {
+        description: belumDijawab[0].text,
+      });
+      return;
+    }
     if (!getAccessToken()) {
       toast.error("Perlu Masuk Terlebih Dahulu", { description: "Silakan masuk ke akunmu sebelum mendaftar." });
       return;
@@ -125,8 +146,11 @@ function BootcampRegisterPageInner() {
       const formData = new FormData();
       formData.append("package_id", selectedPackageId);
       formData.append("requirement_doc", file);
-      formData.append("commitment_letter", commitmentLetterFile);
+      if (commitmentLetterFile) formData.append("commitment_letter", commitmentLetterFile);
       formData.append("cv", cvFile);
+      if (pertanyaan.length > 0) {
+        formData.append("answers", JSON.stringify(jawaban));
+      }
       if (portfolioFile) formData.append("portfolio", portfolioFile);
       // Lewat apiRequest (bukan fetch mentah) supaya kalau access token keburu
       // kedaluwarsa pas user lama ngisi form, tokennya di-refresh otomatis dan
@@ -473,7 +497,69 @@ function BootcampRegisterPageInner() {
               </div>
             </div>
 
-            {/* Commitment Letter -- terpisah dari PDF syarat di atas */}
+            {/* Pertanyaan pendaftaran -- pengganti motivation letter. Cuma
+                tampil kalau admin menyalakannya dan ada pertanyaan aktif. */}
+            {pertanyaan.length > 0 && (
+              <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-5">
+                <div>
+                  <h2 className="font-bold text-[15px]">Pertanyaan Pendaftaran</h2>
+                  <p className="text-[#9CA3AF] text-[12px] mt-1">
+                    Jawab langsung di sini, tidak perlu mengunggah berkas.
+                  </p>
+                </div>
+
+                {pertanyaan.map((q, i) => {
+                  const isi = jawaban[q.id] || "";
+                  const jumlahKata = isi.trim() ? isi.trim().split(/\s+/).length : 0;
+                  const lewatBatas = q.max_words > 0 && jumlahKata > q.max_words;
+                  return (
+                    <div key={q.id} className="flex flex-col gap-2">
+                      <label className="flex items-start gap-2.5 text-[13px] text-[#E2E8F0]">
+                        <span className="shrink-0 w-5 h-5 rounded-full bg-[#148F89]/15 text-[#148F89] text-[11px] font-bold flex items-center justify-center mt-0.5">
+                          {i + 1}
+                        </span>
+                        <span>
+                          {q.text}
+                          {q.is_required ? (
+                            <span className="text-[#F87171]"> *</span>
+                          ) : (
+                            <span className="text-[#6B7280] text-[11.5px]"> (opsional)</span>
+                          )}
+                        </span>
+                      </label>
+                      {q.helper_text && (
+                        <p className="text-[#6B7280] text-[11.5px] pl-7.5">{q.helper_text}</p>
+                      )}
+                      <textarea
+                        rows={4}
+                        value={isi}
+                        onChange={(e) =>
+                          setJawaban((prev) => ({ ...prev, [q.id]: e.target.value }))
+                        }
+                        placeholder="Tulis jawabanmu di sini"
+                        className={`w-full bg-[#0F081C] border rounded-[8px] px-4 py-3 text-[13.5px] text-white outline-none transition-colors resize-y ${
+                          lewatBatas ? "border-[#F87171]" : "border-[#2D2342] focus:border-[#148F89]/60"
+                        }`}
+                      />
+                      {q.max_words > 0 && (
+                        <p
+                          className={`text-[11.5px] ${
+                            lewatBatas ? "text-[#F87171]" : "text-[#6B7280]"
+                          }`}
+                        >
+                          {jumlahKata} / {q.max_words} kata
+                          {lewatBatas ? " -- melebihi batas" : ""}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Commitment Letter -- terpisah dari PDF syarat di atas. Bisa
+                dimatikan admin kalau sudah digantikan pertanyaan di atas. */}
+            {perluCommitmentLetter && (
             <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-4">
               <div>
                 <h2 className="font-bold text-[15px]">Commitment Letter</h2>
@@ -524,6 +610,7 @@ function BootcampRegisterPageInner() {
                 </p>
               </div>
             </div>
+            )}
 
             {/* CV (wajib) & Portofolio (opsional) -- dulu diunggah sekali di
                 profil user; sekarang diminta per pendaftaran biar yang masuk
@@ -610,7 +697,14 @@ function BootcampRegisterPageInner() {
 
               <button
                 onClick={handleSubmit}
-                disabled={!selectedPackageId || !file || !commitmentLetterFile || !cvFile || submitting}
+                disabled={
+                  !selectedPackageId ||
+                  !file ||
+                  !cvFile ||
+                  (perluCommitmentLetter && !commitmentLetterFile) ||
+                  pertanyaan.some((q) => q.is_required && !(jawaban[q.id] || "").trim()) ||
+                  submitting
+                }
                 className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[14px] hover:bg-[#117A75] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? "Mengirim..." : "Kirim Pendaftaran"}
