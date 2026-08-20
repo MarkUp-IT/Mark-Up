@@ -48,6 +48,18 @@ function BootcampRegisterPageInner() {
   const [pertanyaan, setPertanyaan] = useState([]);
   // { [id pertanyaan]: teks jawaban }
   const [jawaban, setJawaban] = useState({});
+
+  // Pertanyaan disaring sesuai paket yang sedang dipilih. Server menyaring
+  // ulang saat pendaftaran dikirim, jadi ini murni supaya formulirnya langsung
+  // berubah begitu pilihan paket diganti.
+  //
+  // Sengaja BUKAN "daftar paket kosong berarti semua": pertanyaan yang
+  // dibatasi tapi paketnya belum dipilih admin tidak ditanyakan ke siapa pun.
+  const pertanyaanBerlaku = pertanyaan.filter(
+    (q) =>
+      q.for_all_packages ||
+      (selectedPackageId && (q.package_ids || []).includes(selectedPackageId))
+  );
   const [loading, setLoading] = useState(true);
   const [myRegs, setMyRegs] = useState([]);
   const [selectedPackageId, setSelectedPackageId] = useState("");
@@ -128,7 +140,7 @@ function BootcampRegisterPageInner() {
     if (perluCommitmentLetter && !commitmentLetterFile) return;
     // Pertanyaan wajib harus terisi. Server tetap memeriksa ulang -- ini cuma
     // supaya orang tidak perlu menunggu request bolak-balik.
-    const belumDijawab = pertanyaan.filter(
+    const belumDijawab = pertanyaanBerlaku.filter(
       (q) => q.is_required && !(jawaban[q.id] || "").trim()
     );
     if (belumDijawab.length > 0) {
@@ -148,8 +160,15 @@ function BootcampRegisterPageInner() {
       formData.append("requirement_doc", file);
       if (commitmentLetterFile) formData.append("commitment_letter", commitmentLetterFile);
       formData.append("cv", cvFile);
-      if (pertanyaan.length > 0) {
-        formData.append("answers", JSON.stringify(jawaban));
+      if (pertanyaanBerlaku.length > 0) {
+        // Cuma jawaban pertanyaan yang berlaku untuk paket ini yang dikirim,
+        // supaya jawaban sisa dari paket lain (kalau pilihannya sempat
+        // diganti) tidak ikut terbawa.
+        const jawabanTerpakai = {};
+        pertanyaanBerlaku.forEach((q) => {
+          jawabanTerpakai[q.id] = jawaban[q.id] || "";
+        });
+        formData.append("answers", JSON.stringify(jawabanTerpakai));
       }
       if (portfolioFile) formData.append("portfolio", portfolioFile);
       // Lewat apiRequest (bukan fetch mentah) supaya kalau access token keburu
@@ -499,7 +518,7 @@ function BootcampRegisterPageInner() {
 
             {/* Pertanyaan pendaftaran -- pengganti motivation letter. Cuma
                 tampil kalau admin menyalakannya dan ada pertanyaan aktif. */}
-            {pertanyaan.length > 0 && (
+            {pertanyaanBerlaku.length > 0 && (
               <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-5">
                 <div>
                   <h2 className="font-bold text-[15px]">Pertanyaan Pendaftaran</h2>
@@ -508,7 +527,7 @@ function BootcampRegisterPageInner() {
                   </p>
                 </div>
 
-                {pertanyaan.map((q, i) => {
+                {pertanyaanBerlaku.map((q, i) => {
                   const isi = jawaban[q.id] || "";
                   const jumlahKata = isi.trim() ? isi.trim().split(/\s+/).length : 0;
                   const lewatBatas = q.max_words > 0 && jumlahKata > q.max_words;
@@ -702,7 +721,7 @@ function BootcampRegisterPageInner() {
                   !file ||
                   !cvFile ||
                   (perluCommitmentLetter && !commitmentLetterFile) ||
-                  pertanyaan.some((q) => q.is_required && !(jawaban[q.id] || "").trim()) ||
+                  pertanyaanBerlaku.some((q) => q.is_required && !(jawaban[q.id] || "").trim()) ||
                   submitting
                 }
                 className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[14px] hover:bg-[#117A75] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

@@ -611,6 +611,19 @@ class BootcampRegistrationQuestion(models.Model):
         help_text="Batas kata jawaban. 0 = tanpa batas. Ditegakkan di server, "
                   "bukan cuma ditampilkan di formulir.",
     )
+    # Penanda EKSPLISIT, bukan aturan "daftar kosong berarti semua". Pertanyaan
+    # yang dibatasi tapi paketnya belum dipilih harus TIDAK muncul ke siapa pun,
+    # bukan malah terbuka ke semua -- itu kebalikan dari maksud admin. Pola yang
+    # sama dipakai di BootcampResource & programs.BootcampSession.
+    for_all_packages = models.BooleanField(
+        default=True,
+        help_text="True = ditanyakan ke semua pendaftar bootcamp ini. "
+                  "False = cuma paket yang terdaftar di `packages`.",
+    )
+    packages = models.ManyToManyField(
+        BootcampPackage, blank=True, related_name="registration_questions",
+        help_text="Dipakai cuma kalau for_all_packages=False.",
+    )
     order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(
         default=True,
