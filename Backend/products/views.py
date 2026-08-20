@@ -1980,9 +1980,10 @@ def register_bootcamp(request):
             lanjutan_errors["answers"] = ["Format jawaban tidak valid."]
             jawaban_masuk = {}
 
-    pertanyaan = list(
-        bootcamp.registration_questions.filter(is_active=True).order_by("order", "id")
-    ) if bootcamp.enable_registration_questions else []
+    pertanyaan = (
+        _pertanyaan_untuk_paket(bootcamp, package)
+        if bootcamp.enable_registration_questions else []
+    )
 
     for q in pertanyaan:
         isi = (jawaban_masuk.get(str(q.id)) or "").strip()
@@ -2343,9 +2344,14 @@ def get_bootcamp_requirements(request, product_id):
         # Cuma pertanyaan AKTIF yang dikirim ke formulir publik. Yang sudah
         # dimatikan tetap ada di database supaya jawaban lama tidak yatim.
         if bootcamp.enable_registration_questions:
+            # Semua pertanyaan aktif dikirim BESERTA info paketnya; formulir yang
+            # menyaring sesuai paket yang sedang dipilih pendaftar. Dengan begitu
+            # pertanyaannya langsung berubah saat pilihan paket diganti, tanpa
+            # perlu memuat ulang dari server.
             questions = [
                 _serialize_registration_question(q)
-                for q in bootcamp.registration_questions.filter(is_active=True).order_by("order", "id")
+                for q in bootcamp.registration_questions.filter(is_active=True)
+                .prefetch_related("packages").order_by("order", "id")
             ]
     except BootcampProduct.DoesNotExist:
         pass
@@ -2370,7 +2376,26 @@ def _serialize_registration_question(q):
         "max_words": q.max_words,
         "order": q.order,
         "is_active": q.is_active,
+        "for_all_packages": q.for_all_packages,
+        "package_ids": [str(x.id) for x in q.packages.all()],
     }
+
+
+def _pertanyaan_untuk_paket(bootcamp, package):
+    """Pertanyaan aktif yang berlaku untuk paket tertentu.
+
+    Sengaja TIDAK memakai aturan "daftar paket kosong berarti semua": kalau
+    admin menandai sebuah pertanyaan khusus paket tapi belum memilih paketnya,
+    pertanyaan itu tidak ditanyakan ke siapa pun. Membiarkannya terbuka ke
+    semua orang adalah kebalikan dari yang dimaksud admin.
+    """
+    hasil = []
+    for q in bootcamp.registration_questions.filter(is_active=True).prefetch_related("packages").order_by("order", "id"):
+        if q.for_all_packages:
+            hasil.append(q)
+        elif package is not None and q.packages.filter(pk=package.pk).exists():
+            hasil.append(q)
+    return hasil
 
 
 def hitung_kata(teks):
@@ -4244,8 +4269,28 @@ def add_bootcamp_question(request, product_id):
         is_required=bool(data.get("is_required", True)),
         max_words=max_words,
         order=(terakhir.order + 1) if terakhir else 1,
+        for_all_packages=bool(data.get("for_all_packages", True)),
     )
+    _pasang_paket_pertanyaan(q, bootcamp, data.get("package_ids"))
     return JsonResponse({"question": _serialize_registration_question(q)}, status=201)
+
+
+def _pasang_paket_pertanyaan(q, bootcamp, package_ids):
+    """Set daftar paket sebuah pertanyaan.
+
+    Paket dari bootcamp LAIN diabaikan diam-diam, bukan diterima: menautkan
+    pertanyaan ke paket milik batch lain tidak punya arti dan cuma bikin data
+    yang membingungkan di kemudian hari.
+    """
+    if package_ids is None:
+        return
+    if q.for_all_packages:
+        q.packages.clear()
+        return
+    sah = BootcampPackage.objects.filter(
+        id__in=[str(x) for x in package_ids if x], bootcamp=bootcamp
+    )
+    q.packages.set(list(sah))
 
 
 @csrf_exempt
@@ -4307,6 +4352,14 @@ def bootcamp_question_detail(request, question_id):
         except (TypeError, ValueError):
             return JsonResponse({"errors": {"max_words": ["Harus angka 0 atau lebih."]}}, status=400)
 
+    if "for_all_packages" in data:
+        q.for_all_packages = bool(data["for_all_packages"])
+        diubah.append("for_all_packages")
+
     if diubah:
         q.save(update_fields=diubah)
+
+    if "package_ids" in data or "for_all_packages" in data:
+        _pasang_paket_pertanyaan(q, q.bootcamp, data.get("package_ids", []))
+
     return JsonResponse({"question": _serialize_registration_question(q)}, status=200)

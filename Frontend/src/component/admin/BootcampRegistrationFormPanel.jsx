@@ -33,6 +33,11 @@ export default function BootcampRegistrationFormPanel({ productId }) {
   const [bantuanBaru, setBantuanBaru] = useState("");
   const [wajibBaru, setWajibBaru] = useState(true);
   const [batasKataBaru, setBatasKataBaru] = useState(0);
+  // Pembatasan paket: default ke semua paket. Sengaja penanda eksplisit,
+  // bukan "daftar kosong berarti semua" -- lihat catatan di modelnya.
+  const [untukSemuaPaket, setUntukSemuaPaket] = useState(true);
+  const [paketDipilih, setPaketDipilih] = useState([]);
+  const [daftarPaket, setDaftarPaket] = useState([]);
 
   const [emailDiterimaJudul, setEmailDiterimaJudul] = useState("");
   const [emailDiterimaIsi, setEmailDiterimaIsi] = useState("");
@@ -42,7 +47,11 @@ export default function BootcampRegistrationFormPanel({ productId }) {
   const muat = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiRequest(`/api/products/${productId}/registration-settings/`);
+      const [res, pkgRes] = await Promise.all([
+        apiRequest(`/api/products/${productId}/registration-settings/`),
+        apiRequest(`/api/products/${productId}/packages/`, { auth: false }),
+      ]);
+      setDaftarPaket(pkgRes?.packages || []);
       const s = res?.settings;
       setPengaturan(s);
       setEmailDiterimaJudul(s?.email_accepted_subject || "");
@@ -88,6 +97,8 @@ export default function BootcampRegistrationFormPanel({ productId }) {
           helper_text: bantuanBaru.trim(),
           is_required: wajibBaru,
           max_words: Number(batasKataBaru) || 0,
+          for_all_packages: untukSemuaPaket,
+          package_ids: untukSemuaPaket ? [] : paketDipilih,
         },
       });
       toast.success("Pertanyaan Ditambahkan");
@@ -95,6 +106,8 @@ export default function BootcampRegistrationFormPanel({ productId }) {
       setBantuanBaru("");
       setWajibBaru(true);
       setBatasKataBaru(0);
+      setUntukSemuaPaket(true);
+      setPaketDipilih([]);
       setTambahTampil(false);
       muat();
     } catch (err) {
@@ -134,6 +147,18 @@ export default function BootcampRegistrationFormPanel({ productId }) {
         description: extractErrorMessage(err, "Terjadi kesalahan."),
       });
     }
+  };
+
+  // Ringkasan pembatasan paket untuk ditampilkan di daftar. Paket nonaktif
+  // sengaja dibedakan dari "belum dipilih" -- dua hal itu beda artinya.
+  const jelaskanPaket = (q) => {
+    if (q.for_all_packages) return "semua paket";
+    const ids = q.package_ids || [];
+    if (ids.length === 0) return "belum ada paket dipilih";
+    const nama = ids.map((id) => daftarPaket.find((pk) => pk.id === id)?.name).filter(Boolean);
+    if (nama.length === 0) return `${ids.length} paket nonaktif`;
+    const sisa = ids.length - nama.length;
+    return `khusus ${nama.join(", ")}${sisa > 0 ? ` (+${sisa} nonaktif)` : ""}`;
   };
 
   if (loading || !pengaturan) return null;
@@ -247,6 +272,8 @@ export default function BootcampRegistrationFormPanel({ productId }) {
                     {q.max_words > 0
                       ? ` · maksimal ${q.max_words} kata`
                       : " · tanpa batas kata"}
+                    {" · "}
+                    {jelaskanPaket(q)}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -311,6 +338,60 @@ export default function BootcampRegistrationFormPanel({ productId }) {
                 <span className="text-[12.5px] text-[#1E293B]">Wajib dijawab</span>
               </label>
             </div>
+            <div className="flex flex-col gap-2">
+              <FieldLabel>Ditanyakan Kepada</FieldLabel>
+              <label className="flex items-center gap-2 text-[12.5px] text-[#1E293B] cursor-pointer">
+                <input
+                  type="radio"
+                  checked={untukSemuaPaket}
+                  onChange={() => setUntukSemuaPaket(true)}
+                  className="accent-[#148F89]"
+                />
+                Semua pendaftar bootcamp ini
+              </label>
+              <label className="flex items-center gap-2 text-[12.5px] text-[#1E293B] cursor-pointer">
+                <input
+                  type="radio"
+                  checked={!untukSemuaPaket}
+                  onChange={() => setUntukSemuaPaket(false)}
+                  className="accent-[#148F89]"
+                />
+                Paket tertentu saja
+              </label>
+              {!untukSemuaPaket && (
+                <div className="flex flex-col gap-1 pl-6">
+                  {daftarPaket.length === 0 && (
+                    <span className="text-[#94A3B8] text-[11.5px] italic">
+                      Belum ada paket aktif di bootcamp ini.
+                    </span>
+                  )}
+                  {daftarPaket.map((pk) => (
+                    <label
+                      key={pk.id}
+                      className="flex items-center gap-2 text-[12px] text-[#334155] cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={paketDipilih.includes(pk.id)}
+                        onChange={(e) =>
+                          setPaketDipilih((cur) =>
+                            e.target.checked ? [...cur, pk.id] : cur.filter((x) => x !== pk.id)
+                          )
+                        }
+                        className="accent-[#148F89]"
+                      />
+                      {pk.name}
+                    </label>
+                  ))}
+                  {paketDipilih.length === 0 && (
+                    <span className="text-[#B45309] text-[11px]">
+                      Belum ada paket dipilih. Pertanyaan ini tidak akan ditanyakan kepada siapa pun.
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="flex gap-2">
               <button
                 onClick={() => setTambahTampil(false)}
