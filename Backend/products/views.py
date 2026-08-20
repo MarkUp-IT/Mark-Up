@@ -8,6 +8,7 @@ import random
 
 from django.conf import settings
 from django.core.mail import send_mail
+import json
 from django.db import IntegrityError, models, transaction as db_transaction
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
@@ -20,6 +21,8 @@ from .utils import get_request_data
 from .forms import MentoringProductForm, ModuleProductForm, BootcampProductForm
 from .models import (
     BootcampProduct,
+    BootcampRegistrationQuestion,
+    BootcampRegistrationAnswer,
     BootcampSession,
     BootcampPackage,
     BootcampPackageExtraBenefit,
@@ -1846,6 +1849,16 @@ def _serialize_registration(reg, for_admin=False):
         "commitment_letter": commitment_letter_url,
         "cv": _file_url(reg.cv),
         "portfolio": _file_url(reg.portfolio),
+        # Jawaban pertanyaan pendaftaran. Dikirim ke pendaftar sendiri juga
+        # (bukan info rahasia -- dia yang menulisnya), dan admin memakainya
+        # sebagai bahan pertimbangan menerima/menolak.
+        "answers": [
+            {
+                "question": a.question_text,
+                "answer": a.answer_text,
+            }
+            for a in reg.answers.all().order_by("order", "id")
+        ],
         "package": {
             "id": str(reg.package_id),
             "slug": reg.package.slug,
@@ -1896,9 +1909,10 @@ def register_bootcamp(request):
             errors["requirement_doc"] = ["Dokumen harus berformat PDF (gabungkan semua bukti jadi satu PDF)."]
         elif doc.size > MAX_REGISTRATION_DOC_SIZE:
             errors["requirement_doc"] = ["Ukuran file maksimal 10MB."]
-    if not commitment_letter:
-        errors["commitment_letter"] = ["Commitment letter (PDF) wajib diunggah."]
-    else:
+    # Wajib atau tidaknya commitment letter bergantung saklar di bootcamp-nya,
+    # dan bootcamp baru diketahui setelah paketnya diresolusi di bawah. Di sini
+    # cuma format & ukuran yang dicek; cek "wajib" menyusul setelah itu.
+    if commitment_letter:
         ext = commitment_letter.name.rsplit(".", 1)[-1].lower() if "." in commitment_letter.name else ""
         if ext != "pdf":
             errors["commitment_letter"] = ["Commitment letter harus berformat PDF."]
@@ -1948,10 +1962,59 @@ def register_bootcamp(request):
             {"detail": "Kamu sudah mendaftar untuk paket ini."}, status=400
         )
 
-    reg = BootcampRegistration.objects.create(
-        user=request.user, package=package, requirement_doc=doc,
-        commitment_letter=commitment_letter, cv=cv, portfolio=portfolio,
-    )
+    bootcamp = package.bootcamp
+
+    # --- Isian yang wajib menurut pengaturan bootcamp ini ---------------
+    lanjutan_errors = {}
+    if bootcamp.require_commitment_letter and not commitment_letter:
+        lanjutan_errors["commitment_letter"] = ["Commitment letter (PDF) wajib diunggah."]
+
+    jawaban_masuk = {}
+    if bootcamp.enable_registration_questions:
+        mentah = request.POST.get("answers") or "{}"
+        try:
+            jawaban_masuk = json.loads(mentah)
+            if not isinstance(jawaban_masuk, dict):
+                raise ValueError
+        except (ValueError, TypeError):
+            lanjutan_errors["answers"] = ["Format jawaban tidak valid."]
+            jawaban_masuk = {}
+
+    pertanyaan = list(
+        bootcamp.registration_questions.filter(is_active=True).order_by("order", "id")
+    ) if bootcamp.enable_registration_questions else []
+
+    for q in pertanyaan:
+        isi = (jawaban_masuk.get(str(q.id)) or "").strip()
+        if q.is_required and not isi:
+            lanjutan_errors[f"question_{q.id}"] = ["Pertanyaan ini wajib dijawab."]
+        elif isi and q.max_words and hitung_kata(isi) > q.max_words:
+            lanjutan_errors[f"question_{q.id}"] = [
+                f"Jawaban melebihi batas {q.max_words} kata."
+            ]
+
+    if lanjutan_errors:
+        return JsonResponse({"errors": lanjutan_errors}, status=400)
+
+    # Pendaftaran + jawabannya disimpan sebagai satu kesatuan: jangan sampai
+    # ada pendaftaran yang tercatat tapi jawabannya hilang separuh.
+    with db_transaction.atomic():
+        reg = BootcampRegistration.objects.create(
+            user=request.user, package=package, requirement_doc=doc,
+            commitment_letter=commitment_letter, cv=cv, portfolio=portfolio,
+        )
+        if pertanyaan:
+            BootcampRegistrationAnswer.objects.bulk_create([
+                BootcampRegistrationAnswer(
+                    registration=reg,
+                    question=q,
+                    # Teks pertanyaan DISALIN, lihat catatan di modelnya.
+                    question_text=q.text,
+                    answer_text=(jawaban_masuk.get(str(q.id)) or "").strip(),
+                    order=q.order,
+                )
+                for q in pertanyaan
+            ])
 
     notify_team(
         "Pendaftaran bootcamp baru",
@@ -2055,9 +2118,47 @@ def _send_bootcamp_review_email(reg):
     package = reg.package
     bootcamp_title = package.bootcamp.title
 
+    bootcamp = package.bootcamp
+    total = package.price + package.commitment_fee
+    pay_link = f"{settings.FRONTEND_BASE_URL}/bootcamp/{package.bootcamp_id}/pay/{reg.id}"
+
+    # Nilai yang boleh dipakai admin di templatenya. Semua sudah jadi teks siap
+    # tampil supaya admin tidak perlu memikirkan format angka.
+    nilai = {
+        "nama": reg.user.fullname,
+        "bootcamp": bootcamp_title,
+        "paket": package.name,
+        "total": f"Rp{total:,.0f}",
+        "commitment_fee": f"Rp{package.commitment_fee:,.0f}",
+        "link_bayar": pay_link,
+        "catatan_admin": reg.admin_notes or "",
+    }
+
+    def pakai_template(subjek, badan):
+        """Isi placeholder di template admin.
+
+        Placeholder yang tidak dikenal DIBIARKAN apa adanya, bukan bikin
+        pengiriman gagal -- salah ketik satu kata jangan sampai membuat
+        pendaftar tidak menerima kabar sama sekali.
+        """
+        class Aman(dict):
+            def __missing__(self, key):
+                return "{" + key + "}"
+        try:
+            return subjek.format_map(Aman(nilai)), badan.format_map(Aman(nilai))
+        except Exception:
+            return subjek, badan
+
     if reg.status == BootcampRegistration.Status.ACCEPTED:
-        total = package.price + package.commitment_fee
-        pay_link = f"{settings.FRONTEND_BASE_URL}/bootcamp/{package.bootcamp_id}/pay/{reg.id}"
+        if (bootcamp.email_accepted_body or "").strip():
+            subject, message = pakai_template(
+                (bootcamp.email_accepted_subject or "").strip()
+                or f"Pendaftaran Bootcamp Diterima -- {bootcamp_title}",
+                bootcamp.email_accepted_body,
+            )
+            send_mail_async(subject=subject, message=message, recipient_list=[reg.user.email])
+            return
+
         commitment_line = (
             f" (termasuk commitment fee Rp{package.commitment_fee:,.0f} yang dikembalikan penuh di akhir program)"
             if package.commitment_fee > 0 else ""
@@ -2071,6 +2172,15 @@ def _send_bootcamp_review_email(reg):
             "Sampai jumpa di kelas!"
         )
     else:
+        if (bootcamp.email_rejected_body or "").strip():
+            subject, message = pakai_template(
+                (bootcamp.email_rejected_subject or "").strip()
+                or f"Update Pendaftaran Bootcamp -- {bootcamp_title}",
+                bootcamp.email_rejected_body,
+            )
+            send_mail_async(subject=subject, message=message, recipient_list=[reg.user.email])
+            return
+
         subject = f"Update Pendaftaran Bootcamp -- {bootcamp_title}"
         reason_line = f"\n\nCatatan dari admin: {reg.admin_notes}" if reg.admin_notes else ""
         message = (
@@ -2223,19 +2333,50 @@ def get_bootcamp_requirements(request, product_id):
 
     items = BootcampRequirement.objects.filter(bootcamp_id=product_id).order_by("category", "order")
 
+    max_words = None
+    require_letter = True
+    questions = []
     try:
         bootcamp = BootcampProduct.objects.get(product_id=product_id)
         max_words = bootcamp.commitment_letter_max_words
+        require_letter = bootcamp.require_commitment_letter
+        # Cuma pertanyaan AKTIF yang dikirim ke formulir publik. Yang sudah
+        # dimatikan tetap ada di database supaya jawaban lama tidak yatim.
+        if bootcamp.enable_registration_questions:
+            questions = [
+                _serialize_registration_question(q)
+                for q in bootcamp.registration_questions.filter(is_active=True).order_by("order", "id")
+            ]
     except BootcampProduct.DoesNotExist:
-        max_words = None
+        pass
 
     return JsonResponse(
         {
             "requirements": [_serialize_requirement(i) for i in items],
             "commitment_letter_max_words": max_words,
+            "require_commitment_letter": require_letter,
+            "questions": questions,
         },
         status=200,
     )
+
+
+def _serialize_registration_question(q):
+    return {
+        "id": str(q.id),
+        "text": q.text,
+        "helper_text": q.helper_text,
+        "is_required": q.is_required,
+        "max_words": q.max_words,
+        "order": q.order,
+        "is_active": q.is_active,
+    }
+
+
+def hitung_kata(teks):
+    """Jumlah kata versi server. Dipakai buat menegakkan batas kata jawaban --
+    batas di formulir cuma bantuan tampilan, gampang dilewati."""
+    return len([w for w in (teks or "").split() if w.strip()])
 
 
 @csrf_exempt
@@ -3994,3 +4135,178 @@ def test_zoom_account(request, account_id):
     acc.save(update_fields=["last_check_at", "last_check_ok", "last_check_note"])
 
     return JsonResponse({"result": hasil, "account": _serialize_zoom_account(acc)}, status=200)
+
+
+# ---------- Pertanyaan pendaftaran & pengaturan formulir (admin) ----------
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def bootcamp_registration_settings(request, product_id):
+    """Saklar isian pendaftaran + template email hasil seleksi.
+
+    Digabung dalam satu endpoint karena keduanya diatur di panel yang sama dan
+    selalu dilihat bersamaan: "apa yang harus diisi pendaftar" dan "apa yang
+    dia terima setelah diputuskan".
+    """
+    try:
+        bootcamp = BootcampProduct.objects.get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Bootcamp tidak ditemukan."}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse({"settings": _serialize_registration_settings(bootcamp)}, status=200)
+
+    if request.method not in ("PATCH", "PUT"):
+        return HttpResponseNotAllowed(["GET", "PATCH", "PUT"])
+
+    data = get_request_data(request)
+    if data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    diubah = []
+    for kunci in (
+        "require_commitment_letter",
+        "enable_registration_questions",
+    ):
+        if kunci in data:
+            setattr(bootcamp, kunci, bool(data[kunci]))
+            diubah.append(kunci)
+
+    for kunci in (
+        "email_accepted_subject",
+        "email_accepted_body",
+        "email_rejected_subject",
+        "email_rejected_body",
+    ):
+        if kunci in data:
+            setattr(bootcamp, kunci, (data[kunci] or "").strip())
+            diubah.append(kunci)
+
+    if diubah:
+        bootcamp.save(update_fields=diubah)
+
+    return JsonResponse(
+        {"detail": "Pengaturan pendaftaran diperbarui.",
+         "settings": _serialize_registration_settings(bootcamp)},
+        status=200,
+    )
+
+
+def _serialize_registration_settings(bootcamp):
+    return {
+        "require_commitment_letter": bootcamp.require_commitment_letter,
+        "enable_registration_questions": bootcamp.enable_registration_questions,
+        "commitment_letter_max_words": bootcamp.commitment_letter_max_words,
+        "email_accepted_subject": bootcamp.email_accepted_subject,
+        "email_accepted_body": bootcamp.email_accepted_body,
+        "email_rejected_subject": bootcamp.email_rejected_subject,
+        "email_rejected_body": bootcamp.email_rejected_body,
+        "questions": [
+            _serialize_registration_question(q)
+            for q in bootcamp.registration_questions.all().order_by("order", "id")
+        ],
+    }
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def add_bootcamp_question(request, product_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        bootcamp = BootcampProduct.objects.get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Bootcamp tidak ditemukan."}, status=404)
+
+    data = get_request_data(request)
+    if data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    teks = (data.get("text") or "").strip()
+    if not teks:
+        return JsonResponse({"errors": {"text": ["Pertanyaan tidak boleh kosong."]}}, status=400)
+
+    try:
+        max_words = int(data.get("max_words") or 0)
+        if max_words < 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return JsonResponse({"errors": {"max_words": ["Harus angka 0 atau lebih."]}}, status=400)
+
+    terakhir = bootcamp.registration_questions.order_by("-order").first()
+    q = BootcampRegistrationQuestion.objects.create(
+        bootcamp=bootcamp,
+        text=teks,
+        helper_text=(data.get("helper_text") or "").strip(),
+        is_required=bool(data.get("is_required", True)),
+        max_words=max_words,
+        order=(terakhir.order + 1) if terakhir else 1,
+    )
+    return JsonResponse({"question": _serialize_registration_question(q)}, status=201)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def bootcamp_question_detail(request, question_id):
+    """Ubah / hapus satu pertanyaan.
+
+    Menghapus pertanyaan TIDAK menghapus jawaban yang sudah masuk: relasinya
+    SET_NULL dan teks pertanyaannya sudah disalin ke jawaban, jadi jawaban lama
+    tetap terbaca utuh. Untuk sekadar menyembunyikan dari formulir, cukup
+    matikan is_active.
+    """
+    try:
+        q = BootcampRegistrationQuestion.objects.get(id=question_id)
+    except BootcampRegistrationQuestion.DoesNotExist:
+        return JsonResponse({"detail": "Pertanyaan tidak ditemukan."}, status=404)
+
+    if request.method == "DELETE":
+        q.delete()
+        return JsonResponse({"detail": "Pertanyaan dihapus."}, status=200)
+
+    if request.method not in ("PATCH", "PUT"):
+        return HttpResponseNotAllowed(["PATCH", "PUT", "DELETE"])
+
+    data = get_request_data(request)
+    if data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    diubah = []
+    if "text" in data:
+        teks = (data["text"] or "").strip()
+        if not teks:
+            return JsonResponse({"errors": {"text": ["Pertanyaan tidak boleh kosong."]}}, status=400)
+        q.text = teks
+        diubah.append("text")
+    if "helper_text" in data:
+        q.helper_text = (data["helper_text"] or "").strip()
+        diubah.append("helper_text")
+    if "is_required" in data:
+        q.is_required = bool(data["is_required"])
+        diubah.append("is_required")
+    if "is_active" in data:
+        q.is_active = bool(data["is_active"])
+        diubah.append("is_active")
+    if "order" in data:
+        try:
+            q.order = max(0, int(data["order"]))
+            diubah.append("order")
+        except (TypeError, ValueError):
+            return JsonResponse({"errors": {"order": ["Harus angka."]}}, status=400)
+    if "max_words" in data:
+        try:
+            nilai = int(data["max_words"] or 0)
+            if nilai < 0:
+                raise ValueError
+            q.max_words = nilai
+            diubah.append("max_words")
+        except (TypeError, ValueError):
+            return JsonResponse({"errors": {"max_words": ["Harus angka 0 atau lebih."]}}, status=400)
+
+    if diubah:
+        q.save(update_fields=diubah)
+    return JsonResponse({"question": _serialize_registration_question(q)}, status=200)

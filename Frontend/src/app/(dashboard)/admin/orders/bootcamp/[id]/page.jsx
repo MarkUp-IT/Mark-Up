@@ -20,6 +20,7 @@ import BootcampQuizPanel from "@/component/admin/BootcampQuizPanel";
 import BootcampResourcePanel from "@/component/admin/BootcampResourcePanel";
 import BootcampTeamPanel from "@/component/admin/BootcampTeamPanel";
 import BootcampRequirementsPanel from "@/component/admin/BootcampRequirementsPanel";
+import BootcampRegistrationFormPanel from "@/component/admin/BootcampRegistrationFormPanel";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
@@ -410,6 +411,11 @@ export default function BootcampOrderDetail() {
       {params?.id && <BootcampTeamPanel productId={params.id} />}
 
       {params?.id && <BootcampRequirementsPanel productId={params.id} />}
+
+      {/* Saklar isian pendaftaran, pertanyaan, dan teks email hasil seleksi.
+          Ditaruh setelah panel syarat karena keduanya sama-sama mengatur
+          apa yang dilihat & diisi calon pendaftar. */}
+      {params?.id && <BootcampRegistrationFormPanel productId={params.id} />}
 
       {!loading && sessions.length === 0 ? (
         <EmptyState message="Belum ada sesi untuk bootcamp ini." />
