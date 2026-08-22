@@ -49,6 +49,15 @@ function BootcampRegisterPageInner() {
   // { [id pertanyaan]: teks jawaban }
   const [jawaban, setJawaban] = useState({});
 
+  const [loading, setLoading] = useState(true);
+  const [myRegs, setMyRegs] = useState([]);
+  const [selectedPackageId, setSelectedPackageId] = useState("");
+  const [file, setFile] = useState(null);
+  const [commitmentLetterFile, setCommitmentLetterFile] = useState(null);
+  const [cvFile, setCvFile] = useState(null);
+  const [portfolioFile, setPortfolioFile] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
   // Pertanyaan disaring sesuai paket yang sedang dipilih. Server menyaring
   // ulang saat pendaftaran dikirim, jadi ini murni supaya formulirnya langsung
   // berubah begitu pilihan paket diganti.
@@ -60,14 +69,7 @@ function BootcampRegisterPageInner() {
       q.for_all_packages ||
       (selectedPackageId && (q.package_ids || []).includes(selectedPackageId))
   );
-  const [loading, setLoading] = useState(true);
-  const [myRegs, setMyRegs] = useState([]);
-  const [selectedPackageId, setSelectedPackageId] = useState("");
-  const [file, setFile] = useState(null);
-  const [commitmentLetterFile, setCommitmentLetterFile] = useState(null);
-  const [cvFile, setCvFile] = useState(null);
-  const [portfolioFile, setPortfolioFile] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
+
 
   // Validasi ukuran di browser dulu -- sebelumnya file oversize diloloskan
   // begitu aja lalu ditolak nginx (413 HTML, bukan JSON) pas submit, bikin
