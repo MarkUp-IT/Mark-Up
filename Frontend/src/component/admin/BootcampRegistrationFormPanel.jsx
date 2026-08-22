@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, GripVertical, Mail } from "lucide-react";
+import { Plus, Trash2, GripVertical, Mail, Pencil } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
@@ -38,6 +38,9 @@ export default function BootcampRegistrationFormPanel({ productId }) {
   const [untukSemuaPaket, setUntukSemuaPaket] = useState(true);
   const [paketDipilih, setPaketDipilih] = useState([]);
   const [daftarPaket, setDaftarPaket] = useState([]);
+  // id pertanyaan yang sedang diedit; null = tidak ada
+  const [editId, setEditId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
 
   const [emailDiterimaJudul, setEmailDiterimaJudul] = useState("");
   const [emailDiterimaIsi, setEmailDiterimaIsi] = useState("");
@@ -115,6 +118,33 @@ export default function BootcampRegistrationFormPanel({ productId }) {
         description: extractErrorMessage(err, "Terjadi kesalahan."),
       });
     }
+  };
+
+  const bukaEdit = (q) => {
+    setEditId(q.id);
+    setEditForm({
+      text: q.text,
+      helper_text: q.helper_text || "",
+      is_required: q.is_required,
+      max_words: q.max_words || 0,
+      for_all_packages: q.for_all_packages,
+      package_ids: [...(q.package_ids || [])],
+    });
+  };
+
+  const simpanEdit = async () => {
+    if (!editForm?.text.trim()) return;
+    await ubahPertanyaan(editId, {
+      text: editForm.text.trim(),
+      helper_text: editForm.helper_text.trim(),
+      is_required: editForm.is_required,
+      max_words: Number(editForm.max_words) || 0,
+      for_all_packages: editForm.for_all_packages,
+      package_ids: editForm.for_all_packages ? [] : editForm.package_ids,
+    });
+    setEditId(null);
+    setEditForm(null);
+    toast.success("Pertanyaan Diperbarui");
   };
 
   const ubahPertanyaan = async (id, perubahan) => {
@@ -284,6 +314,13 @@ export default function BootcampRegistrationFormPanel({ productId }) {
                     {q.is_active ? "Nonaktifkan" : "Aktifkan"}
                   </button>
                   <button
+                    onClick={() => bukaEdit(q)}
+                    title="Ubah pertanyaan"
+                    className="p-1.5 rounded-[6px] text-[#64748B] hover:text-[#148F89] hover:bg-[#148F89]/5 transition-colors"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
                     onClick={() => hapusPertanyaan(q.id)}
                     className="p-1.5 rounded-[6px] text-[#DC2626] hover:bg-red-50 transition-colors"
                   >
@@ -292,6 +329,138 @@ export default function BootcampRegistrationFormPanel({ productId }) {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Formulir ubah -- muncul menggantikan tampilan biasa saat tombol
+            pensil ditekan. Isi awalnya diambil dari pertanyaan yang dipilih,
+            jadi admin mengubah, bukan mengetik ulang dari nol. */}
+        {editId && editForm && (
+          <div className="flex flex-col gap-2.5 p-3.5 rounded-[8px] bg-[#FFFBEB] border border-[#FCD34D]">
+            <p className="text-[#92400E] text-[12px] font-semibold">Mengubah pertanyaan</p>
+
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel required>Pertanyaan</FieldLabel>
+              <textarea
+                rows={2}
+                value={editForm.text}
+                onChange={(e) => setEditForm((f) => ({ ...f, text: e.target.value }))}
+                className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 py-2 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89] resize-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <FieldLabel hint="opsional">Keterangan Kecil</FieldLabel>
+              <input
+                type="text"
+                value={editForm.helper_text}
+                onChange={(e) => setEditForm((f) => ({ ...f, helper_text: e.target.value }))}
+                className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+              />
+            </div>
+
+            <div className="flex gap-2 items-end">
+              <div className="flex-1 flex flex-col gap-1.5">
+                <FieldLabel hint="0 = tanpa batas">Batas Kata Jawaban</FieldLabel>
+                <input
+                  type="number"
+                  min={0}
+                  value={editForm.max_words}
+                  onChange={(e) => setEditForm((f) => ({ ...f, max_words: e.target.value }))}
+                  className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                />
+              </div>
+              <label className="flex items-center gap-2 h-9 px-3 rounded-[6px] border border-[#E2E8F0] bg-white cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editForm.is_required}
+                  onChange={(e) => setEditForm((f) => ({ ...f, is_required: e.target.checked }))}
+                  className="accent-[#148F89]"
+                />
+                <span className="text-[12.5px] text-[#1E293B]">Wajib dijawab</span>
+              </label>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <FieldLabel>Ditanyakan Kepada</FieldLabel>
+              <label className="flex items-center gap-2 text-[12.5px] text-[#1E293B] cursor-pointer">
+                <input
+                  type="radio"
+                  checked={editForm.for_all_packages}
+                  onChange={() => setEditForm((f) => ({ ...f, for_all_packages: true }))}
+                  className="accent-[#148F89]"
+                />
+                Semua pendaftar bootcamp ini
+              </label>
+              <label className="flex items-center gap-2 text-[12.5px] text-[#1E293B] cursor-pointer">
+                <input
+                  type="radio"
+                  checked={!editForm.for_all_packages}
+                  onChange={() => setEditForm((f) => ({ ...f, for_all_packages: false }))}
+                  className="accent-[#148F89]"
+                />
+                Paket tertentu saja
+              </label>
+              {!editForm.for_all_packages && (
+                <div className="flex flex-col gap-1 pl-6">
+                  {daftarPaket.length === 0 && (
+                    <span className="text-[#94A3B8] text-[11.5px] italic">
+                      Belum ada paket aktif di bootcamp ini.
+                    </span>
+                  )}
+                  {daftarPaket.map((pk) => (
+                    <label
+                      key={pk.id}
+                      className="flex items-center gap-2 text-[12px] text-[#334155] cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={editForm.package_ids.includes(pk.id)}
+                        onChange={(e) =>
+                          setEditForm((f) => ({
+                            ...f,
+                            package_ids: e.target.checked
+                              ? [...f.package_ids, pk.id]
+                              : f.package_ids.filter((x) => x !== pk.id),
+                          }))
+                        }
+                        className="accent-[#148F89]"
+                      />
+                      {pk.name}
+                    </label>
+                  ))}
+                  {editForm.package_ids.length === 0 && (
+                    <span className="text-[#B45309] text-[11px]">
+                      Belum ada paket dipilih. Pertanyaan ini tidak akan ditanyakan kepada siapa pun.
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <p className="text-[#92400E] text-[11px]">
+              Jawaban yang sudah masuk tidak berubah -- teks pertanyaan lama tetap tersimpan
+              apa adanya di tiap jawaban.
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setEditId(null);
+                  setEditForm(null);
+                }}
+                className="flex-1 h-9 rounded-[6px] border border-[#E2E8F0] bg-white text-[#64748B] text-[12.5px] font-semibold hover:bg-[#F8FAFC] transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={simpanEdit}
+                disabled={!editForm.text.trim()}
+                className="flex-1 h-9 rounded-[6px] bg-[#148F89] text-white text-[12.5px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-50"
+              >
+                Simpan Perubahan
+              </button>
+            </div>
           </div>
         )}
 
