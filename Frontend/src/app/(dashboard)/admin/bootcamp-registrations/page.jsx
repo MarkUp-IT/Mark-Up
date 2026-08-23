@@ -75,11 +75,22 @@ export default function AdminBootcampRegistrations() {
     if (!selected || saving) return;
     setSaving(true);
     try {
-      await apiRequest(`/api/products/bootcamp-registrations/${selected.id}/review/`, {
+      const res = await apiRequest(`/api/products/bootcamp-registrations/${selected.id}/review/`, {
         method: "PATCH",
         body: { decision, admin_notes: adminNotes },
       });
-      toast.success(decision === "accepted" ? "Pendaftaran Diterima" : "Pendaftaran Ditolak");
+      const judul = decision === "accepted" ? "Pendaftaran Diterima" : "Pendaftaran Ditolak";
+      // Kalau statusnya sebenarnya tidak berubah (mis. menekan Terima lagi
+      // pada pendaftar yang sudah Diterima sebelumnya), server sengaja TIDAK
+      // mengirim ulang emailnya -- ini yang membuat itu terlihat, bukan
+      // ditebak. Melindungi peserta lama dari email dobel saat admin
+      // memproses daftar campuran (lama + baru) setelah jendela pendaftaran
+      // diperpanjang.
+      if (res?.email_sent === false) {
+        toast.success(judul, { description: "Status sudah sama seperti sebelumnya -- email tidak dikirim ulang." });
+      } else {
+        toast.success(judul);
+      }
       setSelected(null);
       fetchData();
     } catch (err) {

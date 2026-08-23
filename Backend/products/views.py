@@ -2094,6 +2094,16 @@ def review_bootcamp_registration(request, registration_id):
     if decision not in ("accepted", "rejected"):
         return JsonResponse({"detail": "decision harus 'accepted' atau 'rejected'."}, status=400)
 
+    # Keputusan yang SAMA dengan status sebelumnya dianggap "sentuhan ulang",
+    # bukan keputusan baru -- emailnya tidak dikirim lagi. Ini yang melindungi
+    # peserta lama saat admin memproses daftar campuran (lama + baru) setelah
+    # jendela pendaftaran diperpanjang: pendaftaran lama yang sudah pernah
+    # Diterima tidak akan menerima email "Diterima" kedua kalinya hanya karena
+    # tersentuh lagi di tinjauan berikutnya. Kalau keputusannya benar-benar
+    # berubah (mis. dari Ditolak jadi Diterima), email tetap terkirim seperti
+    # biasa -- itu memang kabar baru buat pendaftar tersebut.
+    keputusan_berubah = reg.status != decision
+
     reg.status = decision
     reg.admin_notes = request_data.get("admin_notes", "")
     reg.reviewed_at = timezone.now()
@@ -2104,10 +2114,18 @@ def review_bootcamp_registration(request, registration_id):
         new_data={"status": reg.status},
     )
 
-    _send_bootcamp_review_email(reg)
+    if keputusan_berubah:
+        _send_bootcamp_review_email(reg)
 
     return JsonResponse(
-        {"detail": "Pendaftaran berhasil diperbarui.", "registration": _serialize_registration(reg)},
+        {
+            "detail": "Pendaftaran berhasil diperbarui.",
+            "registration": _serialize_registration(reg),
+            # Transparan ke admin: apakah email hasil seleksi BENERAN terkirim
+            # kali ini, atau dilewati karena keputusannya sama seperti
+            # sebelumnya (lihat catatan keputusan_berubah di atas).
+            "email_sent": keputusan_berubah,
+        },
         status=200,
     )
 
