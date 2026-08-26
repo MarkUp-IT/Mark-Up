@@ -1,5 +1,6 @@
 "use client";
 
+import ImageLightbox from "@/component/admin/ImageLightbox";
 import { useState, useEffect, useCallback } from "react";
 import { X, FileText, ShieldCheck } from "lucide-react";
 import EmptyState from "@/component/admin/EmptyState";
@@ -255,9 +256,13 @@ export default function AdminBootcampRegistrations() {
                   <div className="flex justify-between"><span className="text-[#64748B]">Status</span><span className="text-[#1E293B] font-medium">{PAYMENT_STATUS_LABEL[selected.payment.status] || selected.payment.status}</span></div>
                   <div className="flex justify-between"><span className="text-[#64748B]">Total</span><span className="text-[#1E293B] font-medium">{formatIDR(selected.payment.grand_total)}</span></div>
                   {selected.payment.proof_of_payment && (
-                    <a href={selected.payment.proof_of_payment} target="_blank" rel="noopener noreferrer" className="text-[#148F89] font-semibold hover:underline mt-1">
-                      Lihat Bukti Transfer
-                    </a>
+                    <div className="mt-1">
+                      <ImageLightbox
+                        src={selected.payment.proof_of_payment}
+                        alt="Bukti transfer"
+                        className="w-full max-h-[160px] rounded-[8px] border border-[#E2E8F0] object-cover"
+                      />
+                    </div>
                   )}
                   <p className="text-[#94A3B8] text-[11px] italic mt-1">Verifikasi pembayaran dilakukan di menu Transaksi.</p>
                 </div>
