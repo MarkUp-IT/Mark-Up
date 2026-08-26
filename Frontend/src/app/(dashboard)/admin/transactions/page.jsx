@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import BankAccountPanel from "@/component/admin/BankAccountPanel";
+import ImageLightbox from "@/component/admin/ImageLightbox";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 
@@ -425,11 +426,11 @@ export default function Transactions() {
                   </span>
                 </div>
                 {selectedTx?.proof_of_payment ? (
-                  <img
+                  <ImageLightbox
                     src={selectedTx.proof_of_payment}
                     alt="Bukti transfer"
-                    style={{ maxHeight: "240px" }}
                     className="w-full rounded-[8px] border border-[#E2E8F0] object-cover"
+                    style={{ maxHeight: "240px" }}
                   />
                 ) : (
                   <p className="text-[#94A3B8] text-[12px] bg-[#F8FAFC] border border-dashed border-[#E2E8F0] rounded-[8px] px-4 py-6 text-center">
