@@ -204,6 +204,31 @@ export default function AdminBootcampRegistrations() {
                 <div className="flex justify-between"><span className="text-[#64748B]">Bootcamp</span><span className="text-[#1E293B] font-medium">{selected.bootcamp_title}</span></div>
                 <div className="flex justify-between"><span className="text-[#64748B]">Paket</span><span className="text-[#1E293B] font-medium">{selected.package.name}</span></div>
                 <div className="flex justify-between"><span className="text-[#64748B]">Jalur</span><span className="text-[#1E293B] font-medium">{selected.package.requires_selection ? "Seleksi (Mentee)" : "Langsung (ACC)"}</span></div>
+                {selected.team?.role === "leader" && (
+                  <div className="flex justify-between">
+                    <span className="text-[#64748B]">Tim</span>
+                    <span className="text-[#1E293B] font-medium text-right">
+                      Ketua tim {selected.team.target_size} orang -- anggota:{" "}
+                      {selected.team.members.map((m) => `${m.name} (${m.email})`).join(", ")}
+                    </span>
+                  </div>
+                )}
+                {selected.team?.role === "member" && (
+                  <div className="flex justify-between">
+                    <span className="text-[#64748B]">Tim</span>
+                    <span className="text-[#1E293B] font-medium">
+                      Anggota tim -- ketua: {selected.team.leader_name} ({selected.team.leader_email})
+                    </span>
+                  </div>
+                )}
+                {(selected.invited || []).length > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-[#64748B]">Berhasil Mengajak</span>
+                    <span className="text-[#1E293B] font-medium text-right">
+                      {selected.invited.map((i) => i.email).join(", ")}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {selected.package.requires_selection && (

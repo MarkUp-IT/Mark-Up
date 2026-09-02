@@ -25,6 +25,7 @@ from .views import (
     toggle_review_visibility,
     upload_product_image,
     get_bootcamp_packages,
+    check_team_invitee,
     bootcamp_registration_settings,
     add_bootcamp_question,
     bootcamp_question_detail,
@@ -123,6 +124,7 @@ urlpatterns = [
     path("my-products/<uuid:product_id>/refund/", refund_my_product, name="api_my_product_refund"),
     path("my-products/sessions/<uuid:session_id>/schedule/", schedule_my_product_session, name="api_my_product_schedule"),
     path("<uuid:product_id>/packages/", get_bootcamp_packages, name="api_bootcamp_packages"),
+    path("<uuid:product_id>/check-team-email/", check_team_invitee, name="api_bootcamp_check_team_email"),
     # Pengaturan formulir pendaftaran (saklar isian + template email hasil seleksi)
     path("<uuid:product_id>/registration-settings/", bootcamp_registration_settings, name="api_bootcamp_registration_settings"),
     path("<uuid:product_id>/registration-questions/add/", add_bootcamp_question, name="api_bootcamp_question_add"),
