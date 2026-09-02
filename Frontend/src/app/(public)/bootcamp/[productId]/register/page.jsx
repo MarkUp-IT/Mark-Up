@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Check, X, Upload, ShieldCheck, Clock, FileText, AlertCircle, Lock, Info } from "lucide-react";
+import { Check, X, Upload, ShieldCheck, Clock, FileText, AlertCircle, Lock, Info, Users } from "lucide-react";
 import Linkify from "@/component/Linkify";
 import BootcampTimeline from "@/component/BootcampTimeline";
 import { apiRequest, apiRequestRaw, getAccessToken } from "@/lib/api";
@@ -57,6 +57,27 @@ function BootcampRegisterPageInner() {
   const [cvFile, setCvFile] = useState(null);
   const [portfolioFile, setPortfolioFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  // Tim pendaftaran -- opsional, cuma kalau paket terpilih punya group_size > 1.
+  // User yang isi ini jadi KETUA tim: dia sebut email (group_size - 1) anggota
+  // lain yang WAJIB sudah punya akun Markup (divalidasi tombol "Cek" per baris,
+  // lihat handleCheckTeamEmail). { [index]: email } & { [index]: hasil cek }.
+  const [teamEmails, setTeamEmails] = useState({});
+  const [teamChecks, setTeamChecks] = useState({});
+
+  const selectedPackage = packages.find((p) => p.id === selectedPackageId) || null;
+  const requiredTeamSlots = selectedPackage?.group_size > 1 ? selectedPackage.group_size - 1 : 0;
+
+  const handleCheckTeamEmail = async (idx) => {
+    const email = (teamEmails[idx] || "").trim();
+    if (!email) return;
+    setTeamChecks((c) => ({ ...c, [idx]: { checking: true } }));
+    try {
+      const res = await apiRequest(`/api/products/${productId}/check-team-email/?email=${encodeURIComponent(email)}`);
+      setTeamChecks((c) => ({ ...c, [idx]: { checking: false, valid: res.valid, name: res.name, reason: res.reason } }));
+    } catch (err) {
+      setTeamChecks((c) => ({ ...c, [idx]: { checking: false, valid: false, reason: err?.message || "Gagal memeriksa email." } }));
+    }
+  };
 
   // Pertanyaan disaring sesuai paket yang sedang dipilih. Server menyaring
   // ulang saat pendaftaran dikirim, jadi ini murni supaya formulirnya langsung
@@ -173,6 +194,13 @@ function BootcampRegisterPageInner() {
         formData.append("answers", JSON.stringify(jawabanTerpakai));
       }
       if (portfolioFile) formData.append("portfolio", portfolioFile);
+      if (requiredTeamSlots > 0) {
+        const emailTim = Array.from({ length: requiredTeamSlots }, (_, i) => (teamEmails[i] || "").trim())
+          .filter(Boolean);
+        if (emailTim.length > 0) {
+          formData.append("team_member_emails", emailTim.join("\n"));
+        }
+      }
       // Lewat apiRequest (bukan fetch mentah) supaya kalau access token keburu
       // kedaluwarsa pas user lama ngisi form, tokennya di-refresh otomatis dan
       // request diulang. Dulu pakai fetch mentah -> langsung 401 "Gagal mendaftar"
@@ -200,6 +228,8 @@ function BootcampRegisterPageInner() {
       setCvFile(null);
       setPortfolioFile(null);
       setSelectedPackageId("");
+      setTeamEmails({});
+      setTeamChecks({});
       fetchAll();
     } catch (err) {
       toast.error("Gagal Mendaftar", { description: err?.message || "Coba lagi." });
@@ -285,6 +315,25 @@ function BootcampRegisterPageInner() {
                           {meta.label}
                         </span>
                       </div>
+                      {r.team?.role === "leader" && (
+                        <div className="flex items-start gap-2 px-3 py-2 rounded-[8px] text-[12px] font-medium border bg-[#148F89]/10 text-[#148F89] border-[#148F89]/30">
+                          <Users size={14} className="shrink-0 mt-0.5" />
+                          <span>
+                            Kamu KETUA tim ({r.team.target_size} orang). Anggota: {r.team.members.map((m) => m.name).join(", ")}.
+                            {r.status === "accepted" && r.payment?.status !== "PAID"
+                              ? " Bayar sekali buat semua di bawah -- begitu di-ACC admin, semua anggota otomatis dapat akses."
+                              : r.payment?.status === "PAID"
+                                ? " Semua anggota sudah dapat akses bootcamp."
+                                : ""}
+                          </span>
+                        </div>
+                      )}
+                      {r.team?.role === "member" && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-[8px] text-[12px] font-medium border bg-[#148F89]/10 text-[#148F89] border-[#148F89]/30">
+                          <Users size={14} />
+                          <span>Bagian dari tim -- didaftarkan &amp; dibayarkan oleh ketua ({r.team.leader_name}).</span>
+                        </div>
+                      )}
                       {canTakeQuiz && (
                         <div className="flex flex-col gap-2">
                           {/* Satu bootcamp bisa punya beberapa tes (mis. tes tahap
@@ -345,7 +394,11 @@ function BootcampRegisterPageInner() {
                             >
                               {r.payment?.status === "FAILED"
                                 ? "Bayar Ulang"
-                                : `Bayar Sekarang (${formatIDR(Number(r.package.price) + Number(r.package.commitment_fee))})`}
+                                : `Bayar Sekarang (${formatIDR(
+                                    r.team?.role === "leader" && r.package.group_price != null
+                                      ? Number(r.package.group_price) * r.team.target_size + Number(r.package.commitment_fee) * r.team.target_size
+                                      : Number(r.package.price) + Number(r.package.commitment_fee)
+                                  )})`}
                             </Link>
                           )}
                           {!r.payment_deadline_passed && r.payment?.status !== "PAID" && r.package.payment_deadline_at && (
@@ -517,6 +570,71 @@ function BootcampRegisterPageInner() {
                 </p>
               </div>
             </div>
+
+            {/* Tim pendaftaran -- cuma tampil kalau paket terpilih mendukungnya
+                (group_size > 1). Yang isi ini jadi KETUA: dia sebut email
+                seluruh anggota lain (harus sudah punya akun), dicek lewat
+                tombol "Cek" per baris sebelum submit. Tim wajib lengkap saat
+                submit -- tidak ada anggota yang bisa menyusul belakangan. */}
+            {requiredTeamSlots > 0 && (
+              <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-3">
+                <div>
+                  <h2 className="font-bold text-[15px]">Daftar Sebagai Tim?</h2>
+                  <p className="text-[#9CA3AF] text-[12px] mt-1">
+                    Kamu jadi KETUA tim. Ajak {requiredTeamSlots} orang lain yang SUDAH punya akun Markup
+                    lewat email di bawah, klik &quot;Cek&quot; buat pastikan emailnya valid. Kalau lengkap,
+                    kalian bayar SEKALI seharga total{" "}
+                    <span className="text-[#148F89] font-semibold">
+                      {selectedPackage.group_price
+                        ? formatIDR(Number(selectedPackage.group_price) * selectedPackage.group_size)
+                        : "harga khusus"}
+                    </span>
+                    {selectedPackage.group_price && ` (${formatIDR(selectedPackage.group_price)}/orang)`}, dan
+                    begitu pembayaran itu di-ACC admin, SEMUA anggota (termasuk kamu) otomatis dapat akses --
+                    mereka tidak perlu upload apa pun lagi.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {Array.from({ length: requiredTeamSlots }).map((_, idx) => {
+                    const check = teamChecks[idx];
+                    return (
+                      <div key={idx} className="flex flex-col gap-1">
+                        <div className="flex gap-2">
+                          <input
+                            type="email"
+                            value={teamEmails[idx] || ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTeamEmails((m) => ({ ...m, [idx]: val }));
+                              setTeamChecks((c) => ({ ...c, [idx]: undefined }));
+                            }}
+                            placeholder={`Email anggota ${idx + 1}`}
+                            className="flex-1 bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 h-11 text-[13.5px] text-white outline-none focus:border-[#148F89]/60 transition-colors"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleCheckTeamEmail(idx)}
+                            disabled={!(teamEmails[idx] || "").trim() || check?.checking}
+                            className="px-4 h-11 rounded-[8px] border border-[#2D2342] text-[12.5px] font-semibold text-[#E2E8F0] hover:bg-[#2D1B4E] transition-colors disabled:opacity-50 whitespace-nowrap"
+                          >
+                            {check?.checking ? "..." : "Cek"}
+                          </button>
+                        </div>
+                        {check && !check.checking && (
+                          <span className={`text-[11px] flex items-center gap-1 ${check.valid ? "text-[#148F89]" : "text-[#EF4444]"}`}>
+                            {check.valid ? <Check size={12} /> : <X size={12} />}
+                            {check.valid ? `Valid -- akun atas nama ${check.name}` : check.reason}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[#6B7280] text-[11px]">
+                  Belum punya tim lengkap? Kosongkan semua kolom -- kamu tetap bisa mendaftar sendiri dengan harga normal.
+                </p>
+              </div>
+            )}
 
             {/* Pertanyaan pendaftaran -- pengganti motivation letter. Cuma
                 tampil kalau admin menyalakannya dan ada pertanyaan aktif. */}

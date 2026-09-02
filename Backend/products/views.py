@@ -23,6 +23,9 @@ from .models import (
     BootcampProduct,
     BootcampRegistrationQuestion,
     BootcampRegistrationAnswer,
+    BootcampRegistrationGroup,
+    BootcampTeamInvite,
+    BootcampReferredInvitee,
     BootcampSession,
     BootcampPackage,
     BootcampPackageExtraBenefit,
@@ -1725,6 +1728,13 @@ def _serialize_package(pkg):
             {"id": str(b.id), "label": b.label, "order": b.order}
             for b in pkg.extra_benefits.all()
         ],
+        # Dua fitur harga dinamis -- dipakai formulir publik buat menentukan
+        # apakah section "Sudah Punya Tim?" / "Ajak Teman?" perlu ditampilkan
+        # sama sekali. group_size=0 / referral_invite_enabled=False = mati.
+        "group_size": pkg.group_size,
+        "group_price": str(pkg.group_price) if pkg.group_price is not None else None,
+        "referral_invite_enabled": pkg.referral_invite_enabled,
+        "referral_invite_discount_percent": pkg.referral_invite_discount_percent,
     }
 
 
@@ -1749,6 +1759,32 @@ def get_bootcamp_packages(request, product_id):
     return JsonResponse(
         {"packages": [_serialize_package(p) for p in packages]}, status=200
     )
+
+
+def _serialize_team_info(reg):
+    """None kalau `reg` tidak terkait tim mana pun. Kalau `reg` adalah
+    KETUA (dia yang mendaftar & mengundang), tampilkan daftar anggota yang
+    diundangnya. Kalau `reg` adalah ANGGOTA (dibuat otomatis pas
+    pembayaran ketuanya di-ACC), tampilkan siapa ketuanya."""
+    grup = getattr(reg, "led_team_group", None)
+    if grup is not None:
+        return {
+            "role": "leader",
+            "target_size": reg.package.group_size,
+            "members": [
+                {"name": inv.invitee.fullname, "email": inv.invitee.email}
+                for inv in reg.team_invites.select_related("invitee").all()
+            ],
+        }
+    if reg.registration_group_id:
+        leader_user = reg.registration_group.leader_registration.user
+        return {
+            "role": "member",
+            "target_size": reg.package.group_size,
+            "leader_name": leader_user.fullname,
+            "leader_email": leader_user.email,
+        }
+    return None
 
 
 def _serialize_registration(reg, for_admin=False):
@@ -1859,6 +1895,17 @@ def _serialize_registration(reg, for_admin=False):
             }
             for a in reg.answers.all().order_by("order", "id")
         ],
+        # Status tim -- None kalau pendaftaran ini bukan bagian tim mana pun.
+        # Bentuknya beda tergantung reg ini KETUA (lihat siapa saja yang dia
+        # undang) atau ANGGOTA (lihat siapa ketuanya) -- lihat catatan di
+        # BootcampRegistrationGroup soal alur "ketua ngundang, anggota
+        # diprovisikan otomatis pas pembayaran ketua di-ACC".
+        "team": _serialize_team_info(reg),
+        # Orang yang berhasil diklaim pendaftar ini sebagai "yang diajak".
+        "invited": [
+            {"email": inv.invitee_email}
+            for inv in reg.referred_invitees.all()
+        ],
         "package": {
             "id": str(reg.package_id),
             "slug": reg.package.slug,
@@ -1872,6 +1919,10 @@ def _serialize_registration(reg, for_admin=False):
             "price": str(reg.package.price),
             "commitment_fee": str(reg.package.commitment_fee),
             "payment_deadline_at": reg.package.payment_deadline_at.isoformat() if reg.package.payment_deadline_at else None,
+            "group_size": reg.package.group_size,
+            "group_price": str(reg.package.group_price) if reg.package.group_price is not None else None,
+            "referral_invite_enabled": reg.package.referral_invite_enabled,
+            "referral_invite_discount_percent": reg.package.referral_invite_discount_percent,
         },
         "payment_deadline_passed": payment_deadline_passed,
         "bootcamp_id": str(reg.package.bootcamp_id),
@@ -1879,6 +1930,56 @@ def _serialize_registration(reg, for_admin=False):
         "quizzes": quizzes,
         "payment": payment,
     }
+
+
+def _validasi_calon_anggota_tim(email, bootcamp, ketua):
+    """Cek apakah `email` boleh diundang `ketua` jadi anggota tim di
+    `bootcamp` ini. Dipakai DUA tempat: tombol "Cek" di form (feedback
+    instan, tanpa lock) dan register_bootcamp saat submit beneran (re-cek
+    dengan lock di dalam transaksi). Return (ok, pesan_kalau_gagal, User|None).
+    """
+    if email.lower() == ketua.email.lower():
+        return False, "tidak bisa mengundang diri sendiri.", None
+    try:
+        user_obj = User.objects.get(email__iexact=email, role=UserRole.STUDENT)
+    except User.DoesNotExist:
+        return False, "belum punya akun Markup (atau bukan akun peserta).", None
+    if BootcampRegistration.objects.filter(user=user_obj, package__bootcamp=bootcamp).exists():
+        return False, "sudah terdaftar sendiri di bootcamp ini.", None
+    if BootcampTeamInvite.objects.filter(
+        invitee=user_obj, leader_registration__package__bootcamp=bootcamp,
+    ).exclude(leader_registration__status=BootcampRegistration.Status.REJECTED).exists():
+        return False, "sudah diundang tim lain untuk bootcamp ini.", None
+    return True, "", user_obj
+
+
+@jwt_required
+def check_team_invitee(request, product_id):
+    """Dipakai tombol "Cek" di form pendaftaran tim -- validasi RINGAN
+    (tanpa row lock) buat kasih feedback instan ke ketua sambil ngetik.
+    Validasi SUNGGUHAN (dengan lock) tetap diulang lagi di register_bootcamp
+    pas submit beneran -- ini cuma bantuan UX, bukan satu-satunya penjaga."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    email = (request.GET.get("email") or "").strip()
+    if not email:
+        return JsonResponse({"detail": "Parameter email wajib diisi."}, status=400)
+
+    try:
+        bootcamp = BootcampProduct.objects.get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Bootcamp tidak ditemukan."}, status=404)
+
+    ok, pesan, user_obj = _validasi_calon_anggota_tim(email, bootcamp, request.user)
+    return JsonResponse(
+        {
+            "valid": ok,
+            "reason": None if ok else pesan,
+            "name": user_obj.fullname if user_obj else None,
+        },
+        status=200,
+    )
 
 
 @csrf_exempt
@@ -1969,6 +2070,39 @@ def register_bootcamp(request):
     if bootcamp.require_commitment_letter and not commitment_letter:
         lanjutan_errors["commitment_letter"] = ["Commitment letter (PDF) wajib diunggah."]
 
+    # --- Tim pendaftaran (opsional, cuma kalau paketnya mengizinkan) ----
+    # Ketua mendaftar SEKALI sambil langsung menyebut SELURUH anggota lain
+    # lewat email -- harus akun yang sudah ada (dicek _validasi_calon_anggota_tim,
+    # sama persis yang dipakai tombol "Cek" di form). Tim wajib LENGKAP saat
+    # submit ini juga -- tidak ada anggota yang menyusul belakangan.
+    mentah_anggota = request.POST.get("team_member_emails") or ""
+    email_anggota = [
+        e.strip().lower() for e in mentah_anggota.replace(",", "\n").splitlines() if e.strip()
+    ]
+    anggota_valid = []
+    if email_anggota:
+        if package.group_size <= 1:
+            lanjutan_errors["team_member_emails"] = ["Paket ini tidak mendukung pendaftaran tim."]
+        elif package.group_price is None:
+            lanjutan_errors["team_member_emails"] = ["Admin belum mengatur harga tim untuk paket ini."]
+        elif len(email_anggota) != len(set(email_anggota)):
+            lanjutan_errors["team_member_emails"] = ["Ada email yang ditulis berulang."]
+        elif len(email_anggota) != package.group_size - 1:
+            lanjutan_errors["team_member_emails"] = [
+                f"Tim paket ini harus {package.group_size} orang -- sebutkan tepat "
+                f"{package.group_size - 1} email anggota lain (di luar kamu sendiri)."
+            ]
+        else:
+            error_list = []
+            for email in email_anggota:
+                ok, pesan, user_obj = _validasi_calon_anggota_tim(email, bootcamp, request.user)
+                if ok:
+                    anggota_valid.append(user_obj)
+                else:
+                    error_list.append(f"{email}: {pesan}")
+            if error_list:
+                lanjutan_errors["team_member_emails"] = error_list
+
     jawaban_masuk = {}
     if bootcamp.enable_registration_questions:
         mentah = request.POST.get("answers") or "{}"
@@ -2000,10 +2134,45 @@ def register_bootcamp(request):
     # Pendaftaran + jawabannya disimpan sebagai satu kesatuan: jangan sampai
     # ada pendaftaran yang tercatat tapi jawabannya hilang separuh.
     with db_transaction.atomic():
+        if anggota_valid:
+            # Dikunci & dicek ULANG di sini (bukan cuma di atas, yang tanpa
+            # lock) supaya dua ketua yang kebetulan mengundang orang yang
+            # sama nyaris berbarengan tidak bisa dua-duanya lolos. Belum ada
+            # tulisan apa pun sebelum titik ini, jadi early-return di bawah
+            # aman (tidak menyisakan baris setengah jadi).
+            for user_obj in anggota_valid:
+                sudah_daftar = BootcampRegistration.objects.select_for_update().filter(
+                    user=user_obj, package__bootcamp=bootcamp,
+                ).exists()
+                if sudah_daftar:
+                    return JsonResponse(
+                        {"errors": {"team_member_emails": [
+                            f"{user_obj.email}: baru saja terdaftar sendiri di bootcamp ini."
+                        ]}},
+                        status=400,
+                    )
+                sudah_diundang = BootcampTeamInvite.objects.select_for_update().filter(
+                    invitee=user_obj, leader_registration__package__bootcamp=bootcamp,
+                ).exclude(leader_registration__status=BootcampRegistration.Status.REJECTED).exists()
+                if sudah_diundang:
+                    return JsonResponse(
+                        {"errors": {"team_member_emails": [
+                            f"{user_obj.email}: baru saja diundang tim lain untuk bootcamp ini."
+                        ]}},
+                        status=400,
+                    )
+
         reg = BootcampRegistration.objects.create(
             user=request.user, package=package, requirement_doc=doc,
             commitment_letter=commitment_letter, cv=cv, portfolio=portfolio,
         )
+        if anggota_valid:
+            grup = BootcampRegistrationGroup.objects.create(package=package, leader_registration=reg)
+            reg.registration_group = grup
+            reg.save(update_fields=["registration_group"])
+            BootcampTeamInvite.objects.bulk_create([
+                BootcampTeamInvite(leader_registration=reg, invitee=u) for u in anggota_valid
+            ])
         if pertanyaan:
             BootcampRegistrationAnswer.objects.bulk_create([
                 BootcampRegistrationAnswer(
@@ -2621,6 +2790,41 @@ def update_bootcamp_package(request, package_id):
             package.min_attendance_sessions = min_sessions
         except (TypeError, ValueError):
             errors["min_attendance_sessions"] = ["Syarat kehadiran harus angka >= 0."]
+
+    # --- Harga tim -------------------------------------------------------
+    if "group_size" in request_data:
+        try:
+            ukuran = int(request_data["group_size"])
+            if ukuran < 0:
+                raise ValueError
+            package.group_size = ukuran
+        except (TypeError, ValueError):
+            errors["group_size"] = ["Ukuran tim harus angka >= 0 (0 = mati)."]
+    if "group_price" in request_data:
+        raw = request_data["group_price"]
+        if raw in (None, ""):
+            package.group_price = None
+        else:
+            try:
+                harga_tim = Decimal(str(raw)).quantize(Decimal("0.01"))
+                if harga_tim < 0:
+                    raise ValueError
+                package.group_price = harga_tim
+            except (TypeError, ValueError, InvalidOperation):
+                errors["group_price"] = ["Harga tim harus angka >= 0, atau dikosongkan."]
+
+    # --- Ajak teman --------------------------------------------------------
+    if "referral_invite_enabled" in request_data:
+        package.referral_invite_enabled = bool(request_data["referral_invite_enabled"])
+    if "referral_invite_discount_percent" in request_data:
+        try:
+            persen = int(request_data["referral_invite_discount_percent"])
+            if not (0 <= persen <= 100):
+                raise ValueError
+            package.referral_invite_discount_percent = persen
+        except (TypeError, ValueError):
+            errors["referral_invite_discount_percent"] = ["Persen potongan harus angka 0-100."]
+
     if errors:
         return JsonResponse({"errors": errors}, status=400)
 
@@ -3332,8 +3536,20 @@ def create_bootcamp_payment(request, registration_id):
 
     package = registration.package
     bootcamp_product = package.bootcamp
-    sub_total = package.price
     commitment_fee_amount = package.commitment_fee
+
+    # Harga tim: cuma berlaku kalau pendaftaran ini KETUA tim (`led_team_group`
+    # ada). Tim wajib lengkap sejak daftar (tidak ada status "menyusul" --
+    # lihat register_bootcamp), jadi begitu ketuanya ada berarti timnya SUDAH
+    # PASTI lengkap. Dibayar SEKALI buat SELURUH anggota (harga & commitment
+    # fee per orang dikali jumlah anggota), bukan per orang seperti biasa --
+    # anggota lain gak pernah lewat endpoint ini sama sekali, mereka
+    # diprovisikan otomatis begitu pembayaran ketua ini di-ACC admin (lihat
+    # _provision_team_members di transactions/views.py).
+    sub_total = package.price
+    if getattr(registration, "led_team_group", None) is not None and package.group_price is not None:
+        sub_total = package.group_price * package.group_size
+        commitment_fee_amount = commitment_fee_amount * package.group_size
 
     # Kode referral -- dipotong CUMA dari harga paket, commitment fee gak ikut
     # didiskon karena duit itu bukan pendapatan (dikembalikan penuh ke peserta
@@ -3354,7 +3570,54 @@ def create_bootcamp_payment(request, registration_id):
             )
         discount_amount = referral_code.compute_discount(sub_total)
 
-    grand_total = (sub_total - discount_amount) + commitment_fee_amount
+    # Ajak teman -- BEDA dari kode referral di atas (itu satu kode buat siapa
+    # saja; ini menyebut ORANG SPESIFIK). Divalidasi terhadap pendaftar
+    # SUNGGUHAN di bootcamp yang sama, dan flat -- tidak menumpuk sebanyak
+    # apa pun nama yang disebut, cukup 1 yang valid.
+    invited_valid = []
+    invite_errors = []
+    if package.referral_invite_enabled:
+        mentah = request.POST.get("invited_emails") or ""
+        emails_diajukan = [
+            e.strip().lower() for e in mentah.replace(",", "\n").splitlines() if e.strip()
+        ]
+        for email in dict.fromkeys(emails_diajukan):  # urutan dijaga, duplikat dalam 1 submit dibuang
+            if email == request.user.email.lower():
+                invite_errors.append(f"{email}: tidak bisa mengajak dirimu sendiri.")
+                continue
+            kandidat = (
+                BootcampRegistration.objects.filter(
+                    user__email__iexact=email, package__bootcamp=bootcamp_product,
+                )
+                .exclude(pk=registration.pk)
+                .select_related("user")
+                .first()
+            )
+            if kandidat is None:
+                invite_errors.append(f"{email}: belum terdaftar di bootcamp ini.")
+                continue
+            if BootcampReferredInvitee.objects.filter(
+                bootcamp=bootcamp_product, invitee_email__iexact=email
+            ).exists():
+                invite_errors.append(f"{email}: sudah diklaim pendaftar lain.")
+                continue
+            invited_valid.append((email, kandidat))
+
+        if emails_diajukan and not invited_valid:
+            # Semua yang disebut gagal tervalidasi -- ini SATU-SATUNYA kasus
+            # yang menolak submit. Kalau sebagian valid sebagian tidak,
+            # lanjutkan pakai yang valid saja (jangan gagalkan pembayaran
+            # cuma gara-gara satu nama salah ketik).
+            return JsonResponse({"errors": {"invited_emails": invite_errors}}, status=400)
+
+    invite_discount_amount = Decimal("0")
+    if invited_valid:
+        sisa_setelah_kode = sub_total - discount_amount
+        invite_discount_amount = (
+            sisa_setelah_kode * Decimal(package.referral_invite_discount_percent) / Decimal("100")
+        ).quantize(Decimal("0.01"))
+
+    grand_total = (sub_total - discount_amount - invite_discount_amount) + commitment_fee_amount
 
     try:
         with db_transaction.atomic():
@@ -3385,7 +3648,11 @@ def create_bootcamp_payment(request, registration_id):
                 buyer_phone=request.user.phone or "",
                 sub_total=sub_total,
                 promo_code=voucher_code or None,
-                discount_amount=discount_amount,
+                # Total gabungan kode referral + ajak-teman -- Transaction cuma
+                # punya satu field discount_amount. Rincian per sumbernya tetap
+                # bisa ditelusuri lewat ReferralCodeUsage & BootcampReferredInvitee
+                # yang masing-masing dibuat di bawah.
+                discount_amount=discount_amount + invite_discount_amount,
                 tax=0,
                 grand_total=grand_total,
                 payment_status=PaymentStatus.PENDING,
@@ -3407,6 +3674,22 @@ def create_bootcamp_payment(request, registration_id):
                     user=request.user,
                     discount_amount=discount_amount,
                 )
+
+            if invited_valid:
+                # Unique constraint (bootcamp, invitee_email) adalah penjaga
+                # terakhir kalau dua orang kebetulan menyebut email yang sama
+                # nyaris berbarengan -- kalau itu terjadi, IntegrityError di
+                # sini membatalkan SELURUH pembayaran (bukan cuma diam-diam
+                # melewatkan satu nama), ditangkap except Exception di bawah.
+                BootcampReferredInvitee.objects.bulk_create([
+                    BootcampReferredInvitee(
+                        bootcamp=bootcamp_product,
+                        referrer_registration=registration,
+                        invitee_email=email,
+                        invitee_registration=kandidat,
+                    )
+                    for email, kandidat in invited_valid
+                ])
     except Exception:
         # Sama alasannya kayak di transactions.views.checkout_product: pesan
         # exception mentah bocorin struktur DB / konfigurasi storage ke klien.
@@ -3433,6 +3716,11 @@ def create_bootcamp_payment(request, registration_id):
         {
             "detail": "Pembayaran berhasil dikirim, menunggu verifikasi admin.",
             "registration": _serialize_registration(registration),
+            # Email yang GAGAL diklaim meski ada juga yang berhasil (kalau semua
+            # gagal, sudah ditolak duluan di atas dengan status 400) -- dikirim
+            # supaya pendaftar tahu persisnya email mana yang salah ketik/sudah
+            # diklaim, bukan cuma diam-diam dilewatkan.
+            "invite_warnings": invite_errors,
         },
         status=201,
     )

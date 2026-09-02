@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Landmark, Copy, CheckCircle2, AlertCircle, Upload, FileText, Trash2, Clock, AlertTriangle } from "lucide-react";
+import { Landmark, Copy, CheckCircle2, AlertCircle, Upload, FileText, Trash2, Clock, AlertTriangle, Users } from "lucide-react";
 import { apiRequest, apiRequestRaw, getAccessToken } from "@/lib/api";
 import { useBankInfo } from "@/lib/bankInfo";
 import { toast } from "sonner";
@@ -34,6 +34,7 @@ export default function BootcampPaymentPage() {
   const [file, setFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [referralCode, setReferralCode] = useState("");
+  const [invitedEmails, setInvitedEmails] = useState("");
   const { bankInfo } = useBankInfo();
 
   const fetchRegistration = async () => {
@@ -73,6 +74,9 @@ export default function BootcampPaymentPage() {
       if (referralCode.trim()) {
         formData.append("referral_code", referralCode.trim());
       }
+      if (invitedEmails.trim()) {
+        formData.append("invited_emails", invitedEmails.trim());
+      }
       const res = await apiRequestRaw(`/api/products/bootcamp-registrations/${registrationId}/pay/`, formData);
       const data = res.data;
       if (!res.ok) {
@@ -86,7 +90,13 @@ export default function BootcampPaymentPage() {
         throw new Error(msg);
       }
       toast.success("Pembayaran Terkirim", { description: "Menunggu diverifikasi admin." });
+      if (data?.invite_warnings?.length > 0) {
+        toast.warning("Sebagian Email Ajakan Tidak Berlaku", {
+          description: data.invite_warnings.join(" "),
+        });
+      }
       setFile(null);
+      setInvitedEmails("");
       fetchRegistration();
     } catch (err) {
       toast.error("Gagal Mengirim Pembayaran", { description: err?.message || "Coba lagi." });
@@ -96,14 +106,28 @@ export default function BootcampPaymentPage() {
   };
 
   const payment = registration?.payment;
-  // Diskon dihitung server (aturan persen/nominal + batas maksimum ada di sana),
-  // jadi baru kelihatan setelah pembayaran terkirim -- sama kayak checkout produk
-  // lain yang juga gak pratinjau diskon di browser.
+  // Diskon KODE referral dihitung server (aturan persen/nominal + batas
+  // maksimum ada di sana), jadi baru kelihatan setelah pembayaran terkirim --
+  // sama kayak checkout produk lain yang juga gak pratinjau diskon di browser.
   const appliedDiscount = Number(payment?.discount_amount || 0);
+  // Harga TIM cuma berlaku kalau registrasi ini adalah KETUA tim -- tim wajib
+  // lengkap sejak daftar (lihat halaman pendaftaran), jadi begitu peran ini
+  // "leader" berarti timnya SUDAH PASTI lengkap. Dibayar SEKALI buat SELURUH
+  // anggota (harga & commitment fee dikali jumlah anggota).
+  const teamPriceActive = registration?.team?.role === "leader" && registration.package.group_price != null;
+  const jumlahAnggotaTim = registration?.team?.target_size || 1;
+  const subTotal = payment
+    ? Number(payment.sub_total)
+    : teamPriceActive
+      ? Number(registration.package.group_price) * jumlahAnggotaTim
+      : Number(registration?.package?.price || 0);
+  const commitmentFeeTampil = teamPriceActive
+    ? Number(registration.package.commitment_fee) * jumlahAnggotaTim
+    : Number(registration?.package?.commitment_fee || 0);
   const total = registration
     ? (payment
       ? Number(payment.grand_total)
-      : Number(registration.package.price) + Number(registration.package.commitment_fee))
+      : subTotal + commitmentFeeTampil)
     : 0;
   const showForm =
     registration
@@ -152,25 +176,60 @@ export default function BootcampPaymentPage() {
 
             <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-2">
               <div className="flex justify-between text-[13px]">
-                <span className="text-[#9CA3AF]">Harga paket</span>
-                <span className="text-white font-medium">{formatIDR(registration.package.price)}</span>
+                <span className="text-[#9CA3AF]">
+                  {teamPriceActive ? `Harga tim (${jumlahAnggotaTim} orang)` : "Harga paket"}
+                </span>
+                <div className="flex items-center gap-2">
+                  {teamPriceActive && (
+                    <span className="text-[#6B7280] line-through text-[12px]">
+                      {formatIDR(Number(registration.package.price) * jumlahAnggotaTim)}
+                    </span>
+                  )}
+                  <span className="text-white font-medium">{formatIDR(subTotal)}</span>
+                </div>
               </div>
+              {teamPriceActive && (
+                <div className="flex items-center gap-1.5 text-[#148F89] text-[11px]">
+                  <Users size={12} /> Total buat kamu + {jumlahAnggotaTim - 1} anggota tim
+                  ({registration.team.members.map((m) => m.name).join(", ")}).
+                </div>
+              )}
               {appliedDiscount > 0 && (
                 <div className="flex justify-between text-[13px]">
                   <span className="text-[#9CA3AF]">Diskon kode referral</span>
                   <span className="text-[#148F89] font-medium">-{formatIDR(appliedDiscount)}</span>
                 </div>
               )}
-              {Number(registration.package.commitment_fee) > 0 && (
+              {!payment && registration.package.referral_invite_enabled && invitedEmails.trim() && (
                 <div className="flex justify-between text-[13px]">
-                  <span className="text-[#9CA3AF]">Commitment fee (refundable)</span>
-                  <span className="text-white font-medium">{formatIDR(registration.package.commitment_fee)}</span>
+                  <span className="text-[#9CA3AF]">
+                    Estimasi diskon ajak teman (~{registration.package.referral_invite_discount_percent}%)
+                  </span>
+                  <span className="text-[#F59E0B] font-medium">
+                    -{formatIDR(
+                      (subTotal * registration.package.referral_invite_discount_percent) / 100
+                    )}
+                  </span>
+                </div>
+              )}
+              {commitmentFeeTampil > 0 && (
+                <div className="flex justify-between text-[13px]">
+                  <span className="text-[#9CA3AF]">
+                    Commitment fee (refundable){teamPriceActive ? ` -- ${jumlahAnggotaTim} orang` : ""}
+                  </span>
+                  <span className="text-white font-medium">{formatIDR(commitmentFeeTampil)}</span>
                 </div>
               )}
               <div className="flex justify-between text-[15px] border-t border-[#2D2342] pt-2 mt-1">
                 <span className="font-semibold">Total Bayar</span>
                 <span className="text-[#148F89] font-bold">{formatIDR(total)}</span>
               </div>
+              {!payment && registration.package.referral_invite_enabled && invitedEmails.trim() && (
+                <p className="text-[#6B7280] text-[11px] -mt-1">
+                  Belum termasuk di Total Bayar di atas -- baru dipastikan & dipotongkan sistem
+                  kalau email yang kamu tulis valid, saat bukti transfer kamu kirim.
+                </p>
+              )}
             </div>
 
             {payment && (
@@ -282,6 +341,31 @@ export default function BootcampPaymentPage() {
                       {Number(registration.package.commitment_fee) > 0 ? ", commitment fee tidak ikut didiskon." : "."}
                     </span>
                   </div>
+
+                  {registration.package.referral_invite_enabled && (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[#9CA3AF] text-[12px] font-semibold flex items-center gap-1.5">
+                        <Users size={13} /> Udah Ajak Orang? (opsional)
+                      </label>
+                      <textarea
+                        value={invitedEmails}
+                        onChange={(e) => setInvitedEmails(e.target.value)}
+                        placeholder="Tulis email orang yang kamu ajak, satu per baris"
+                        rows={2}
+                        className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-2.5 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors resize-none"
+                      />
+                      <span className="text-[#6B7280] text-[11px]">
+                        Cukup satu email yang sudah terdaftar di bootcamp ini dan belum diklaim
+                        orang lain untuk dapat potongan {registration.package.referral_invite_discount_percent}%
+                        -- gak numpuk walau kamu tulis beberapa email.
+                      </span>
+                      {registration.invited?.length > 0 && (
+                        <span className="text-[#148F89] text-[11px]">
+                          Sudah berhasil diklaim sebelumnya: {registration.invited.map((i) => i.email).join(", ")}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <button
                     onClick={handleSubmit}

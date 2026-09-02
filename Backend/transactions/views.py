@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 
 from django.db.models import Case, DecimalField, ExpressionWrapper, F, Sum, When
 from django.http import JsonResponse, HttpResponseNotAllowed, HttpResponseBadRequest
@@ -18,6 +19,7 @@ from products.models import (
     UserLibrary,
     MentoringSession,
     BootcampSession,
+    BootcampRegistration,
 )
 from programs.models import BootcampSession as BootcampSessionTemplate
 from django.utils.dateparse import parse_date
@@ -153,6 +155,67 @@ def get_transactions(request):
     )
 
 
+def _provision_team_members(leader_txn):
+    """Dipanggil SEKALI saat pembayaran KETUA tim di-ACC admin (lihat
+    verify_transaction). Bikinkan BootcampRegistration + Transaction
+    (nominal 0, langsung PAID -- duitnya sudah masuk lewat transaksi
+    ketua) + UserLibrary + sesi buat SETIAP anggota yang diundang.
+    No-op kalau transaksi ini bukan milik ketua tim (registrasi solo
+    biasa tidak punya `led_team_group`)."""
+    reg = leader_txn.bootcamp_registration
+    grup = getattr(reg, "led_team_group", None)
+    if grup is None:
+        return
+
+    bootcamp = reg.package.bootcamp
+    product = bootcamp.product
+
+    for invite in reg.team_invites.select_related("invitee").all():
+        anggota = invite.invitee
+        # Jaga-jaga -- kalau anggota ini SUDAH punya pendaftaran sendiri ke
+        # bootcamp yang sama (mis. sempat daftar sendiri di tempat lain
+        # SETELAH diundang tapi SEBELUM ketua dibayar-ACC, celah yang sudah
+        # ditutup di register_bootcamp tapi tetap dicek ulang di sini),
+        # lewati saja dia -- jangan bikin dobel atau batalkan seluruh
+        # provisioning tim gara-gara satu orang.
+        if BootcampRegistration.objects.filter(user=anggota, package__bootcamp=bootcamp).exists():
+            logger.warning(
+                "Provisioning tim: %s sudah py pendaftaran sendiri di bootcamp %s, dilewati.",
+                anggota.email, bootcamp.title,
+            )
+            continue
+
+        anggota_reg = BootcampRegistration.objects.create(
+            user=anggota, package=reg.package,
+            status=BootcampRegistration.Status.ACCEPTED,
+            registration_group=grup,
+        )
+        BootcampRegistration.objects.filter(pk=anggota_reg.pk).update(reviewed_at=timezone.now())
+
+        anggota_txn = Transaction.objects.create(
+            user=anggota, bootcamp_registration=anggota_reg,
+            sub_total=Decimal("0"), commitment_fee_amount=Decimal("0"), grand_total=Decimal("0"),
+            payment_method=leader_txn.payment_method, payment_status=PaymentStatus.PAID,
+            paid_at=leader_txn.paid_at,
+            notes=f"Bagian dari tim -- sudah dibayar ketua ({leader_txn.user.email}).",
+        )
+        TransactionItem.objects.create(
+            transaction=anggota_txn, product=product, price_at_checkout=Decimal("0"), quantity=1,
+        )
+
+        anggota_library, _ = UserLibrary.objects.get_or_create(user=anggota, product=product)
+        if anggota_library.package_id != reg.package_id:
+            anggota_library.package = reg.package
+            anggota_library.save(update_fields=["package"])
+        _create_bootcamp_sessions(anggota_library, product)
+
+        # Headcount produk nambah per anggota (bukan cuma per transaksi) --
+        # supaya sold_count tetap mencerminkan jumlah orang yang beneran
+        # dapat akses, walau cuma 1 transaksi asli (punya ketua) yang bawa uang.
+        bootcamp.sold_count = (bootcamp.sold_count or 0) + 1
+        bootcamp.save(update_fields=["sold_count"])
+
+
 @csrf_exempt
 @jwt_required
 @role_required(UserRole.ADMIN)
@@ -225,6 +288,13 @@ def verify_transaction(request, transaction_id):
                 if detail is not None:
                     detail.sold_count = (detail.sold_count or 0) + item.quantity
                     detail.save(update_fields=["sold_count"])
+
+            # Kalau transaksi ini punya bootcamp_registration yang berstatus
+            # KETUA tim, begitu pembayarannya di-ACC di sinilah SEMUA anggota
+            # yang diundang otomatis dapat pendaftaran + akses sekaligus --
+            # mereka sendiri tidak pernah lewat alur bayar apa pun.
+            if txn.bootcamp_registration_id:
+                _provision_team_members(txn)
         else:
             # Ditolak -- lepas lagi semua yang di-reserve pas checkout (slot
             # mentor, stok, kuota kode referral) supaya bisa dipakai/dibeli

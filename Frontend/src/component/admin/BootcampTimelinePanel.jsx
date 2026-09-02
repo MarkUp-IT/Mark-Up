@@ -53,6 +53,8 @@ export default function BootcampTimelinePanel({ productId }) {
     requires_selection: false, selection_quota: "",
     quiz_duration_minutes: "", quiz_passing_score_percent: "",
     name: "", price: "", commitment_fee: "", min_attendance_sessions: "",
+    group_size: "", group_price: "",
+    referral_invite_enabled: false, referral_invite_discount_percent: "",
     benefits: {},
   });
   const [savingPackage, setSavingPackage] = useState(false);
@@ -147,6 +149,10 @@ export default function BootcampTimelinePanel({ productId }) {
       price: pkg.price ?? "",
       commitment_fee: pkg.commitment_fee ?? "",
       min_attendance_sessions: pkg.min_attendance_sessions ?? 0,
+      group_size: pkg.group_size ?? 0,
+      group_price: pkg.group_price ?? "",
+      referral_invite_enabled: Boolean(pkg.referral_invite_enabled),
+      referral_invite_discount_percent: pkg.referral_invite_discount_percent ?? 5,
       benefits,
     });
   };
@@ -240,6 +246,10 @@ export default function BootcampTimelinePanel({ productId }) {
       if (Number(packageForm.commitment_fee) > 0) {
         body.min_attendance_sessions = Number(packageForm.min_attendance_sessions) || 0;
       }
+      body.group_size = Number(packageForm.group_size) || 0;
+      body.group_price = packageForm.group_price === "" ? null : Number(packageForm.group_price);
+      body.referral_invite_enabled = packageForm.referral_invite_enabled;
+      body.referral_invite_discount_percent = Number(packageForm.referral_invite_discount_percent) || 0;
       await apiRequest(`/api/products/bootcamp-packages/${editingPackageId}/`, {
         method: "PATCH",
         body,
@@ -476,6 +486,16 @@ export default function BootcampTimelinePanel({ productId }) {
                           Batas bayar: {formatDateTimeWIB(pkg.payment_deadline_at)}
                         </p>
                       )}
+                      {pkg.group_size > 0 && (
+                        <p className="text-[#64748B] text-[11.5px]">
+                          Tim {pkg.group_size} orang -- {pkg.group_price ? `Rp${Number(pkg.group_price).toLocaleString("id-ID")}/orang` : "harga tim belum diatur"}
+                        </p>
+                      )}
+                      {pkg.referral_invite_enabled && (
+                        <p className="text-[#64748B] text-[11.5px]">
+                          Ajak teman aktif -- potongan {pkg.referral_invite_discount_percent}%
+                        </p>
+                      )}
                     </>
                   ) : (
                     <div className="flex flex-col gap-2">
@@ -607,6 +627,66 @@ export default function BootcampTimelinePanel({ productId }) {
                           <span className="text-[#94A3B8] text-[10.5px]">Isi 0 apabila tidak ada syarat kehadiran.</span>
                         </div>
                       )}
+                      <div className="flex flex-col gap-1.5 border border-[#E2E8F0] rounded-[8px] p-3">
+                        <FieldLabel>Harga Tim</FieldLabel>
+                        <span className="text-[#94A3B8] text-[10.5px] -mt-1">
+                          Pendaftar menulis nama tim yang sama saat mendaftar. Begitu jumlah anggota
+                          mencapai Ukuran Tim, harga per orang otomatis jadi Harga Tim saat mereka bayar.
+                        </span>
+                        <div className="flex gap-2">
+                          <div className="flex-1 flex flex-col gap-1">
+                            <FieldLabel>Ukuran Tim (orang)</FieldLabel>
+                            <input
+                              type="number"
+                              min={0}
+                              placeholder="0 = mati"
+                              value={packageForm.group_size}
+                              onChange={(e) => setPackageForm((f) => ({ ...f, group_size: e.target.value }))}
+                              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                            />
+                          </div>
+                          <div className="flex-1 flex flex-col gap-1">
+                            <FieldLabel>Harga Tim per Orang (Rp)</FieldLabel>
+                            <input
+                              type="number"
+                              min={0}
+                              placeholder="Kosongkan bila belum diatur"
+                              value={packageForm.group_price}
+                              onChange={(e) => setPackageForm((f) => ({ ...f, group_price: e.target.value }))}
+                              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5 border border-[#E2E8F0] rounded-[8px] p-3">
+                        <label className="flex items-center gap-2 cursor-pointer w-fit">
+                          <input
+                            type="checkbox"
+                            checked={packageForm.referral_invite_enabled}
+                            onChange={(e) => setPackageForm((f) => ({ ...f, referral_invite_enabled: e.target.checked }))}
+                            className="accent-[#148F89]"
+                          />
+                          <span className="text-[12.5px] text-[#1E293B] font-medium">Aktifkan Diskon Ajak Teman</span>
+                        </label>
+                        <span className="text-[#94A3B8] text-[10.5px]">
+                          Pendaftar menulis email orang yang diajak. Cukup 1 email yang sudah terdaftar &
+                          belum diklaim pendaftar lain untuk dapat potongan -- tidak menumpuk walau
+                          menyebut banyak email.
+                        </span>
+                        {packageForm.referral_invite_enabled && (
+                          <div className="flex flex-col gap-1 max-w-50">
+                            <FieldLabel>Persen Potongan (%)</FieldLabel>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={packageForm.referral_invite_discount_percent}
+                              onChange={(e) => setPackageForm((f) => ({ ...f, referral_invite_discount_percent: e.target.value }))}
+                              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
+                            />
+                          </div>
+                        )}
+                      </div>
                       <div className="flex flex-col gap-1.5">
                         <FieldLabel>Benefit</FieldLabel>
                         <span className="text-[#94A3B8] text-[10.5px] -mt-1">

@@ -270,6 +270,39 @@ class BootcampPackage(models.Model):
                    "kehadiran. Cuma relevan buat paket yang punya commitment_fee > 0.",
     )
 
+    # --- Pendaftaran tim (BEDA dari BootcampTeam/Team Pairing di bawah) ---
+    # Ini dibuat PENDAFTAR SENDIRI saat mendaftar, buat dapat harga kelompok.
+    # BootcampTeam itu dibuat ADMIN setelah diterima, buat benefit mentoring
+    # Team Pairing -- dua konsep yang sama sekali tidak berhubungan, sengaja
+    # dipisah biar tidak tercampur di kode maupun di kepala admin yang baca.
+    group_size = models.PositiveIntegerField(
+        default=0,
+        help_text="Jumlah orang per tim buat dapat harga kelompok. 0 = fitur tim "
+                   "dimatikan untuk paket ini.",
+    )
+    group_price = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Harga per orang kalau timnya sudah lengkap (group_size tercapai). "
+                   "Cuma dipakai kalau group_size > 0.",
+    )
+
+    # --- Ajak teman (diskon flat, BEDA dari ReferralCode/kode promo) ---
+    # ReferralCode itu satu kode yang sama dipakai siapa saja. Ini menyebut
+    # ORANG SPESIFIK yang diajak (dicek emailnya harus benar-benar terdaftar
+    # di bootcamp ini) -- lihat BootcampReferredInvitee.
+    referral_invite_enabled = models.BooleanField(
+        default=False,
+        help_text="Nyalakan diskon 'ajak teman' -- pendaftar menyebut email orang "
+                   "yang diajak, dapat potongan flat kalau minimal 1 email valid "
+                   "(sudah terdaftar di bootcamp ini & belum diklaim orang lain).",
+    )
+    referral_invite_discount_percent = models.PositiveIntegerField(
+        default=5,
+        validators=[MaxValueValidator(100)],
+        help_text="Persen potongan flat -- tidak menumpuk walau menyebut banyak "
+                   "email, cukup 1 yang valid untuk dapat potongan ini.",
+    )
+
     # Benefit per paket (sesuai tabel "Class Scheme and Benefits" di PDF).
     benefit_session_material = models.BooleanField(default=True)
     benefit_record_incubation = models.BooleanField(default=False)
@@ -564,6 +597,14 @@ class BootcampRegistration(models.Model):
         max_length=20, choices=Status.choices, default=Status.REGISTERED,
     )
     admin_notes = models.TextField(blank=True, default="")
+    # Tim pendaftaran mandiri (buat harga kelompok) -- lihat BootcampRegistrationGroup.
+    # SET_NULL: kalau tim dihapus, pendaftarannya sendiri tetap utuh, cuma
+    # kembali ke harga normal (dihitung ulang di endpoint bayar, bukan disimpan).
+    registration_group = models.ForeignKey(
+        "products.BootcampRegistrationGroup",
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="registrations",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     reviewed_at = models.DateTimeField(blank=True, null=True)
 
@@ -672,6 +713,107 @@ class BootcampRegistrationAnswer(models.Model):
 
     def __str__(self) -> str:
         return f"{self.question_text[:40]} -> {self.answer_text[:30]}"
+
+
+class BootcampRegistrationGroup(models.Model):
+    """Tim pendaftaran berbasis KETUA -- satu orang mendaftar sebagai ketua
+    sambil mengundang (group_size - 1) email anggota yang WAJIB sudah
+    punya akun Markup (lihat BootcampTeamInvite). Tim harus LENGKAP di
+    muka, tidak ada anggota yang menyusul belakangan. Ketua bayar SEKALI
+    untuk seluruh tim; begitu pembayarannya di-ACC admin, seluruh anggota
+    otomatis dibuatkan BootcampRegistration + akses produk sekaligus
+    (lihat _provision_team_members di transactions/views.py).
+
+    BEDA TOTAL dari BootcampTeam: itu dibuat ADMIN setelah pendaftar
+    diterima, buat benefit mentoring Team Pairing. Yang ini murni soal
+    HARGA & alur pendaftaran, tidak berhubungan sama sekali dengan
+    mentoring.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    package = models.ForeignKey(
+        BootcampPackage, on_delete=models.CASCADE, related_name="registration_groups",
+    )
+    leader_registration = models.OneToOneField(
+        "products.BootcampRegistration", on_delete=models.CASCADE, related_name="led_team_group",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Registration Group"
+        verbose_name_plural = "Bootcamp Registration Groups"
+
+    def __str__(self) -> str:
+        return f"Tim {self.leader_registration.user.fullname} ({self.package.name})"
+
+
+class BootcampTeamInvite(models.Model):
+    """Anggota yang diundang KETUA lewat email saat mendaftar tim. Cuma
+    catatan "niat" sampai pembayaran ketua di-ACC admin -- belum punya
+    BootcampRegistration sendiri sebelum itu. Emailnya harus cocok akun
+    yang SUDAH ADA (dicek pas submit, lewat tombol "Cek" di form, dan
+    dicek ULANG saat provisioning), bukan sekadar teks bebas.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    leader_registration = models.ForeignKey(
+        "products.BootcampRegistration", on_delete=models.CASCADE, related_name="team_invites",
+    )
+    invitee = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="+",
+        help_text="Akun yang diundang -- disimpan sebagai FK (bukan teks email) karena "
+                  "sudah tervalidasi ada akunnya pas ketua submit.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Team Invite"
+        verbose_name_plural = "Bootcamp Team Invites"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["leader_registration", "invitee"], name="unique_invitee_per_leader_registration",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.invitee} diundang oleh {self.leader_registration.user}"
+
+
+class BootcampReferredInvitee(models.Model):
+    """Satu email yang disebut pendaftar sebagai orang yang dia ajak --
+    BEDA dari ReferralCode (kode promo umum yang sama dipakai siapa saja).
+    Divalidasi terhadap pendaftar SUNGGUHAN di bootcamp yang sama, dan tiap
+    email cuma bisa diklaim SATU KALI (unique constraint di bawah) -- siapa
+    yang lebih dulu berhasil mencatatnya, dia yang dapat potongan; yang
+    menyusul akan ditolak saat submit, bukan diam-diam menimpa punya orang
+    lain.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct, on_delete=models.CASCADE, related_name="referred_invitees",
+    )
+    referrer_registration = models.ForeignKey(
+        BootcampRegistration, on_delete=models.CASCADE, related_name="referred_invitees",
+    )
+    invitee_email = models.EmailField()
+    invitee_registration = models.ForeignKey(
+        BootcampRegistration, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="referred_by",
+        help_text="Pendaftaran milik orang yang diajak -- dicatat buat ditelusuri admin, "
+                  "bukan cuma email mentahnya.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Referred Invitee"
+        verbose_name_plural = "Bootcamp Referred Invitees"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bootcamp", "invitee_email"], name="unique_invitee_per_bootcamp",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.invitee_email} diajak oleh {self.referrer_registration_id}"
 
 
 class QuizChoiceKey(models.TextChoices):
