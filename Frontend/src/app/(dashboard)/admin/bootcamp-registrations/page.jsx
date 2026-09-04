@@ -190,14 +190,19 @@ export default function AdminBootcampRegistrations() {
 
       {selected && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setSelected(null)}>
-          <div onClick={(e) => e.stopPropagation()} className="bg-white w-full max-w-[460px] rounded-[16px] shadow-2xl flex flex-col">
-            <div className="px-6 py-5 border-b border-[#E2E8F0] flex items-center justify-between">
+          <div onClick={(e) => e.stopPropagation()} className="bg-white w-full max-w-[460px] max-h-[85vh] rounded-[16px] shadow-2xl flex flex-col overflow-hidden">
+            <div className="shrink-0 px-6 py-5 border-b border-[#E2E8F0] flex items-center justify-between">
               <h3 className="text-[#0F172A] font-bold text-[17px]">Tinjau Pendaftaran</h3>
               <button onClick={() => setSelected(null)} className="p-1.5 rounded-[8px] text-[#64748B] hover:bg-[#F1F5F9] transition-colors">
                 <X size={18} />
               </button>
             </div>
-            <div className="p-6 flex flex-col gap-4">
+            {/* Isi bisa panjang banget (anggota tim, hasil tes, beberapa
+                dokumen) -- dibuat scroll sendiri di sini, sementara header
+                & tombol Tolak/Terima di bawah tetap kelihatan (shrink-0),
+                jadi admin gak pernah kehilangan akses ke tombol aksi
+                walau isinya kepanjangan dari layar. */}
+            <div className="overflow-y-auto px-6 pt-6 pb-4 flex flex-col gap-4">
               <div className="flex flex-col gap-1 text-[13px]">
                 <div className="flex justify-between"><span className="text-[#64748B]">Pendaftar</span><span className="text-[#1E293B] font-medium">{selected.user_name}</span></div>
                 <div className="flex justify-between"><span className="text-[#64748B]">Email</span><span className="text-[#1E293B] font-medium">{selected.user_email}</span></div>
@@ -335,23 +340,25 @@ export default function AdminBootcampRegistrations() {
                   className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-3.5 py-2.5 text-[13px] text-[#1E293B] outline-none focus:border-[#148F89] transition-colors resize-none"
                 />
               </div>
+            </div>
 
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => handleDecision("rejected")}
-                  disabled={saving}
-                  className="flex-1 py-2.5 rounded-[8px] border border-red-300 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition-colors disabled:opacity-50"
-                >
-                  Tolak
-                </button>
-                <button
-                  onClick={() => handleDecision("accepted")}
-                  disabled={saving}
-                  className="flex-1 py-2.5 rounded-[8px] bg-[#148F89] text-white text-[13px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-50"
-                >
-                  {saving ? "Memproses..." : "Terima"}
-                </button>
-              </div>
+            {/* Di luar area scroll (shrink-0) supaya tombol aksi selalu
+                kepencet tanpa perlu gulir dulu, berapa pun panjang isinya. */}
+            <div className="shrink-0 px-6 py-4 border-t border-[#E2E8F0] flex items-center gap-3">
+              <button
+                onClick={() => handleDecision("rejected")}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-[8px] border border-red-300 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                Tolak
+              </button>
+              <button
+                onClick={() => handleDecision("accepted")}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-[8px] bg-[#148F89] text-white text-[13px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-50"
+              >
+                {saving ? "Memproses..." : "Terima"}
+              </button>
             </div>
           </div>
         </div>
