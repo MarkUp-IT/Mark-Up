@@ -317,7 +317,7 @@ export default function InfoLombaPage() {
             <motion.div
               {...modalMotion}
               onClick={(e) => e.stopPropagation()} // Mencegah modal ketutup pas isi modal diklik
-              className="bg-[#1A1625] w-full max-w-[800px] rounded-md md:rounded-lg border border-white/10 overflow-hidden flex flex-col md:flex-row shadow-2xl relative"
+              className="bg-[#1A1625] w-full max-w-[800px] max-h-[90vh] rounded-md md:rounded-lg border border-white/10 overflow-hidden flex flex-col md:flex-row shadow-2xl relative"
             >
               {/* Tombol Close */}
               <button
@@ -329,7 +329,7 @@ export default function InfoLombaPage() {
               </button>
 
               {/* Kiri: Gambar Modal */}
-              <div className="w-full md:w-[45%] h-[200px] md:h-auto bg-gray-900 relative">
+              <div className="w-full md:w-[45%] h-[200px] md:h-auto bg-gray-900 relative shrink-0">
                 {selectedLomba.image ? (
                   <img
                     src={selectedLomba.image}
@@ -341,60 +341,65 @@ export default function InfoLombaPage() {
                 )}
               </div>
 
-              {/* Kanan: Detail Info */}
-              <div className="w-full md:w-[55%] p-6 md:p-8 flex flex-col">
-                <div className="bg-[#530D8E] px-3 py-1 rounded-md self-start mb-4">
-                  <p className="text-[10px] font-bold text-white tracking-wider">
-                    {selectedLomba.category}
+              {/* Kanan: Detail Info -- dibatasi tinggi & judul/organizer/grid
+                  info digulir sendiri, supaya judul lomba yang panjang atau
+                  layar pendek gak bikin tombol "Daftar Sekarang" kedorong
+                  keluar layar. */}
+              <div className="w-full md:w-[55%] p-6 md:p-8 flex flex-col max-h-[60vh] md:max-h-[90vh]">
+                <div className="flex-1 overflow-y-auto pr-1">
+                  <div className="bg-[#530D8E] px-3 py-1 rounded-md self-start mb-4">
+                    <p className="text-[10px] font-bold text-white tracking-wider">
+                      {selectedLomba.category}
+                    </p>
+                  </div>
+
+                  <h2 className="font-poppins font-bold text-2xl text-white leading-tight mb-2">
+                    {selectedLomba.title}
+                  </h2>
+                  <p className="text-[#A19DAB] text-xs mb-6">
+                    Penyelenggara: {selectedLomba.organizer}
                   </p>
-                </div>
 
-                <h2 className="font-poppins font-bold text-2xl text-white leading-tight mb-2">
-                  {selectedLomba.title}
-                </h2>
-                <p className="text-[#A19DAB] text-xs mb-6">
-                  Penyelenggara: {selectedLomba.organizer}
-                </p>
-
-                {/* Grid 6 Box Info */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
-                  <InfoBox
-                    title="Pelaksanaan"
-                    value={selectedLomba.date}
-                    icon={<CalendarIcon />}
-                  />
-                  <InfoBox
-                    title="Tenggat Pendaftaran"
-                    value={selectedLomba.deadline}
-                    icon={<CalendarIcon />}
-                  />
-                  <InfoBox
-                    title="Biaya"
-                    value={formatRupiah(selectedLomba.fee)}
-                    icon={<WalletIcon />}
-                  />
-                  <InfoBox
-                    title="Hadiah"
-                    value={selectedLomba.prize}
-                    icon={<TrophyIcon />}
-                  />
-                  <InfoBox
-                    title="Tingkat"
-                    value={selectedLomba.level}
-                    icon={<GlobeIcon />}
-                  />
-                  <InfoBox
-                    title="Peserta"
-                    value={selectedLomba.target}
-                    icon={<UserIcon />}
-                  />
+                  {/* Grid 6 Box Info */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <InfoBox
+                      title="Pelaksanaan"
+                      value={selectedLomba.date}
+                      icon={<CalendarIcon />}
+                    />
+                    <InfoBox
+                      title="Tenggat Pendaftaran"
+                      value={selectedLomba.deadline}
+                      icon={<CalendarIcon />}
+                    />
+                    <InfoBox
+                      title="Biaya"
+                      value={formatRupiah(selectedLomba.fee)}
+                      icon={<WalletIcon />}
+                    />
+                    <InfoBox
+                      title="Hadiah"
+                      value={selectedLomba.prize}
+                      icon={<TrophyIcon />}
+                    />
+                    <InfoBox
+                      title="Tingkat"
+                      value={selectedLomba.level}
+                      icon={<GlobeIcon />}
+                    />
+                    <InfoBox
+                      title="Peserta"
+                      value={selectedLomba.target}
+                      icon={<UserIcon />}
+                    />
+                  </div>
                 </div>
 
                 <Link
                   href={selectedLomba.link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`w-full bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold py-3 rounded-full transition-colors mt-auto text-center ${focusRing}`}
+                  className={`w-full bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold py-3 rounded-full transition-colors mt-6 shrink-0 text-center ${focusRing}`}
                 >
                   Daftar Sekarang
                 </Link>
