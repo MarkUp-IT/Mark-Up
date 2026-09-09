@@ -259,6 +259,14 @@ function CheckoutDetailPageInner() {
       setProductError("");
       try {
         const data = await api.get(`/api/products/${params.productId}/`, { auth: false });
+        // Bootcamp punya jalur sendiri (daftar -> diseleksi/di-ACC -> baru
+        // bayar) -- checkout langsung di sini melewati semua itu. Dulu masih
+        // bisa diakses manual lewat URL (linknya sudah tidak ada di mana pun
+        // di UI), jadi dialihkan paksa ke jalur yang benar.
+        if (data?.type === "BOOTCAMP") {
+          router.replace(`/bootcamp/${params.productId}/register`);
+          return;
+        }
         setProduct(data);
       } catch (err) {
         if (err instanceof ApiError) {

@@ -58,19 +58,6 @@ class Transaction(models.Model):
         default="",
         help_text="Catatan dari pembeli, misal nama-nama anggota tim buat pesanan grup.",
     )
-    # Syarat pendaftaran khusus BOOTCAMP -- diupload pembeli pas checkout.
-    follow_proof = models.FileField(
-        upload_to="bootcamp_docs/%Y/%m/", blank=True, null=True,
-        help_text="Bukti follow (foto).",
-    )
-    wa_share_proof = models.FileField(
-        upload_to="bootcamp_docs/%Y/%m/", blank=True, null=True,
-        help_text="Bukti share WhatsApp (foto).",
-    )
-    commitment_letter = models.FileField(
-        upload_to="bootcamp_docs/%Y/%m/", blank=True, null=True,
-        help_text="Commitment letter (foto atau PDF).",
-    )
     # Dipakai buat alur bayar-setelah-diterima paket Bootcamp (beda dari
     # checkout_product biasa) -- link balik ke pendaftaran yang dibayar, dan
     # snapshot commitment fee-nya sendiri (constant di titik ini) supaya

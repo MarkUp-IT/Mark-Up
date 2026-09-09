@@ -24,10 +24,7 @@ import { useIsLoggedIn } from "@/lib/useIsLoggedIn";
 
 const NAVBAR_CLEARANCE = 150;
 const CONTENT_WIDTH = 640;
-// Bootcamp dikasih waktu bayar lebih lama (30 menit) karena masih perlu
-// upload beberapa dokumen syarat; produk lain cukup 5 menit.
 const RESERVATION_SECONDS = 5 * 60;
-const RESERVATION_SECONDS_BOOTCAMP = 30 * 60;
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#148F89] focus-visible:ring-offset-2 focus-visible:ring-offset-[#060010]";
@@ -70,42 +67,6 @@ function StepPill({ current }) {
   );
 }
 
-function DocUploadField({ label, hint, accept, file, setFile }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-[12px] font-semibold text-[#E2E8F0]">
-        {label} <span className="text-red-400">*</span>
-      </p>
-      {file ? (
-        <div className="flex items-center justify-between gap-3 bg-[#0F081C] border border-[#148F89]/50 rounded-[8px] px-3.5 py-2.5">
-          <span className="text-white text-[12px] font-medium truncate">{file.name}</span>
-          <button
-            type="button"
-            onClick={() => setFile(null)}
-            className="p-1 text-[#9CA3AF] hover:text-red-400 rounded-full transition-colors shrink-0"
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
-      ) : (
-        <label className="flex items-center gap-2 border border-dashed border-[#2D2342] rounded-[8px] px-3.5 py-2.5 text-[#9CA3AF] hover:border-[#148F89]/50 transition-colors cursor-pointer text-[12px]">
-          <input
-            type="file"
-            accept={accept}
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) setFile(f);
-            }}
-          />
-          <Upload size={14} className="text-[#148F89]" />
-          {hint}
-        </label>
-      )}
-    </div>
-  );
-}
-
 function CheckoutPaymentPageInner() {
   // null = belum ketahuan (masih SSR). Gerbang baru ditampilkan setelah
   // statusnya pasti, biar user yang sudah login gak kena popup sekilas.
@@ -125,12 +86,12 @@ function CheckoutPaymentPageInner() {
   const reset = useCheckoutFormStore((s) => s.reset);
 
   const isMentoring = Boolean(selectedMentor && selectedSlot);
-  const isBootcamp = checkoutSummary.productType === "BOOTCAMP";
   const total = checkoutSummary.total;
 
-  const reservationSeconds = isBootcamp
-    ? RESERVATION_SECONDS_BOOTCAMP
-    : RESERVATION_SECONDS;
+  // Bootcamp gak pernah sampai ke checkout ini lagi (dialihkan paksa ke
+  // halaman pendaftaran bootcamp sejak halaman detail checkout), jadi jendela
+  // reservasi di sini cukup satu durasi standar untuk semua tipe produk.
+  const reservationSeconds = RESERVATION_SECONDS;
   const reservationMinutes = Math.round(reservationSeconds / 60);
 
   const [isCopied, setIsCopied] = useState(false);
@@ -139,11 +100,6 @@ function CheckoutPaymentPageInner() {
   const [submitError, setSubmitError] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(reservationSeconds);
   const [isExpired, setIsExpired] = useState(false);
-
-  // Syarat khusus bootcamp (diupload di step pembayaran ini).
-  const [followProof, setFollowProof] = useState(null);
-  const [waShareProof, setWaShareProof] = useState(null);
-  const [commitmentLetter, setCommitmentLetter] = useState(null);
 
   const [isLeavingAfterSuccess, setIsLeavingAfterSuccess] = useState(false);
 
@@ -176,11 +132,6 @@ function CheckoutPaymentPageInner() {
   const handleConfirmPayment = async () => {
       if (!proofFile || isExpired) return;
 
-      if (isBootcamp && (!followProof || !waShareProof || !commitmentLetter)) {
-        setSubmitError("Mohon lengkapi bukti follow, bukti bagikan WhatsApp, dan commitment letter.");
-        return;
-      }
-
       setIsSubmitting(true);
       setSubmitError("");
 
@@ -199,12 +150,6 @@ function CheckoutPaymentPageInner() {
 
         if (notes) {
           formData.append("notes", notes);
-        }
-
-        if (isBootcamp) {
-          formData.append("follow_proof", followProof);
-          formData.append("wa_share_proof", waShareProof);
-          formData.append("commitment_letter", commitmentLetter);
         }
 
         formData.append("proof_of_payment", proofFile);
@@ -444,43 +389,6 @@ function CheckoutPaymentPageInner() {
                   </div>
                 </motion.div>
 
-                {isBootcamp && (
-                  <motion.div
-                    {...fadeIn}
-                    className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-3"
-                  >
-                    <div>
-                      <h2 className="font-bold text-[14px] text-white">
-                        Syarat Pendaftaran Bootcamp
-                      </h2>
-                      <p className="text-[#9CA3AF] text-[11px] mt-0.5">
-                        Wajib dilampirkan untuk mendaftar bootcamp ini.
-                      </p>
-                    </div>
-                    <DocUploadField
-                      label="Bukti Follow"
-                      hint="Unggah foto bukti follow (JPG/PNG)"
-                      accept=".jpg,.jpeg,.png"
-                      file={followProof}
-                      setFile={setFollowProof}
-                    />
-                    <DocUploadField
-                      label="Bukti Share WhatsApp"
-                      hint="Unggah foto bukti share WA (JPG/PNG)"
-                      accept=".jpg,.jpeg,.png"
-                      file={waShareProof}
-                      setFile={setWaShareProof}
-                    />
-                    <DocUploadField
-                      label="Commitment Letter"
-                      hint="Unggah foto atau PDF (JPG/PNG/PDF)"
-                      accept=".jpg,.jpeg,.png,.pdf"
-                      file={commitmentLetter}
-                      setFile={setCommitmentLetter}
-                    />
-                  </motion.div>
-                )}
-
                 <motion.div
                   {...fadeIn}
                   className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-3"
@@ -545,14 +453,9 @@ function CheckoutPaymentPageInner() {
 
                   <button
                     onClick={handleConfirmPayment}
-                    disabled={
-                      !proofFile ||
-                      isSubmitting ||
-                      (isBootcamp && (!followProof || !waShareProof || !commitmentLetter))
-                    }
+                    disabled={!proofFile || isSubmitting}
                     className={`w-full py-3.5 rounded-[8px] font-bold text-[13px] transition-all ${focusRing} ${
-                      !proofFile ||
-                      (isBootcamp && (!followProof || !waShareProof || !commitmentLetter))
+                      !proofFile
                         ? "bg-[#2D2342] text-[#64748B] cursor-not-allowed"
                         : isSubmitting
                           ? "bg-[#148F89]/70 text-white cursor-wait"
