@@ -2,7 +2,7 @@
 
 import ImageLightbox from "@/component/admin/ImageLightbox";
 import { useState, useEffect, useCallback } from "react";
-import { X, FileText, ShieldCheck } from "lucide-react";
+import { X, FileText, ShieldCheck, MessageSquare } from "lucide-react";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
@@ -235,6 +235,20 @@ export default function AdminBootcampRegistrations() {
                   </div>
                 )}
               </div>
+
+              {(selected.answers || []).length > 0 && (
+                <div className="flex flex-col gap-2 text-[13px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-3.5 py-3">
+                  <div className="flex items-center gap-1.5 text-[#0F172A] font-semibold text-[12.5px]">
+                    <MessageSquare size={13} className="text-[#148F89]" /> Jawaban Pertanyaan Pendaftaran
+                  </div>
+                  {selected.answers.map((a, idx) => (
+                    <div key={idx} className="flex flex-col gap-0.5 border-t border-[#E2E8F0] pt-2 first:border-t-0 first:pt-0">
+                      <span className="text-[#64748B] text-[12px]">{a.question}</span>
+                      <span className="text-[#1E293B] font-medium whitespace-pre-line">{a.answer || "-"}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {selected.package.requires_selection && (
                 <div className="flex flex-col gap-2 text-[13px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-3.5 py-3">
