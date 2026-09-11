@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, CheckCheck } from "lucide-react";
 import { apiRequest } from "@/lib/api";
+import GlassShine from "@/component/GlassShine";
 
 const POLL_MS = 45000;
 
@@ -117,53 +118,56 @@ export default function NotificationBell() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-[120%] mt-2 w-[320px] max-w-[90vw] rounded-[14px] border border-white/15 bg-[#170F26] shadow-2xl z-[100] overflow-hidden"
+            className="absolute right-0 top-[120%] mt-2 w-[320px] max-w-[90vw] rounded-[14px] border border-white/20 bg-white/10 backdrop-blur-md shadow-2xl z-[100] overflow-hidden"
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-              <p className="text-white font-bold text-[13.5px]">Notifikasi</p>
-              {unreadCount > 0 && (
-                <button
-                  onClick={handleMarkAllRead}
-                  disabled={loading}
-                  className="flex items-center gap-1 text-[11px] text-[#9CA3AF] hover:text-white transition-colors disabled:opacity-50"
-                >
-                  <CheckCheck size={13} />
-                  Tandai semua dibaca
-                </button>
-              )}
-            </div>
-
-            <div className="max-h-[360px] overflow-y-auto">
-              {items.length === 0 ? (
-                <p className="px-4 py-8 text-center text-[#9CA3AF] text-[12.5px]">
-                  Belum ada notifikasi.
-                </p>
-              ) : (
-                items.map((n) => (
+            <GlassShine borderRadius={14} />
+            <div className="relative z-10">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                <p className="text-white font-bold text-[13.5px]">Notifikasi</p>
+                {unreadCount > 0 && (
                   <button
-                    key={n.id}
-                    onClick={() => handleClickItem(n)}
-                    className={`w-full text-left px-4 py-3 border-b border-white/5 last:border-b-0 hover:bg-white/5 transition-colors flex gap-2.5 ${
-                      n.is_read ? "opacity-60" : ""
-                    }`}
+                    onClick={handleMarkAllRead}
+                    disabled={loading}
+                    className="flex items-center gap-1 text-[11px] text-[#9CA3AF] hover:text-white transition-colors disabled:opacity-50"
                   >
-                    <span
-                      className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
-                        n.is_read ? "bg-transparent" : "bg-[#148F89]"
-                      }`}
-                    />
-                    <div className="flex flex-col gap-0.5 min-w-0">
-                      <p className="text-white text-[12.5px] font-semibold truncate">{n.title}</p>
-                      <p className="text-[#9CA3AF] text-[11.5px] leading-relaxed line-clamp-2">
-                        {n.message}
-                      </p>
-                      <p className="text-[#6B7280] text-[10.5px] mt-0.5">
-                        {formatRelatif(n.created_at)}
-                      </p>
-                    </div>
+                    <CheckCheck size={13} />
+                    Tandai semua dibaca
                   </button>
-                ))
-              )}
+                )}
+              </div>
+
+              <div className="max-h-[360px] overflow-y-auto p-2">
+                {items.length === 0 ? (
+                  <p className="px-2 py-8 text-center text-[#9CA3AF] text-[12.5px]">
+                    Belum ada notifikasi.
+                  </p>
+                ) : (
+                  items.map((n) => (
+                    <button
+                      key={n.id}
+                      onClick={() => handleClickItem(n)}
+                      className={`w-full text-left px-4 py-3 rounded-[10px] hover:bg-white/10 transition-colors flex gap-2.5 ${
+                        n.is_read ? "opacity-60" : ""
+                      }`}
+                    >
+                      <span
+                        className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
+                          n.is_read ? "bg-transparent" : "bg-[#148F89]"
+                        }`}
+                      />
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <p className="text-white text-[12.5px] font-semibold truncate">{n.title}</p>
+                        <p className="text-[#9CA3AF] text-[11.5px] leading-relaxed line-clamp-2">
+                          {n.message}
+                        </p>
+                        <p className="text-[#6B7280] text-[10.5px] mt-0.5">
+                          {formatRelatif(n.created_at)}
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
           </motion.div>
         )}
