@@ -124,8 +124,14 @@ export default function NotificationBell() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-[120%] mt-2 w-[320px] max-w-[90vw] rounded-[14px] border border-white/20 bg-white/10 backdrop-blur-md shadow-2xl z-[100] overflow-hidden"
+            className="absolute right-0 top-[120%] mt-2 w-[320px] max-w-[90vw] rounded-[14px] border border-white/20 shadow-2xl z-[100] overflow-hidden"
           >
+            {/* Lapisan blur DIPISAH dari elemen yang overflow-hidden -- taruh
+                backdrop-blur bareng overflow-hidden di elemen yang SAMA bikin
+                sejumlah browser (terutama Chromium) diam-diam gagal ngeblur
+                sama sekali, walau class-nya kepasang. Bungkus luar cuma
+                nanganin bentuk bulat+kliping, lapisan ini yang beneran ngeblur. */}
+            <div className="absolute inset-0 bg-white/10 backdrop-blur-md" />
             <GlassShine borderRadius={14} />
             <div className="relative z-10">
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
