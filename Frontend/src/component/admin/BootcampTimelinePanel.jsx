@@ -393,6 +393,7 @@ export default function BootcampTimelinePanel({ productId }) {
                   min={0}
                   value={newPackageForm.price}
                   onChange={(e) => setNewPackageForm((f) => ({ ...f, price: e.target.value }))}
+                  onWheel={(e) => e.currentTarget.blur()}
                   className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                 />
               </div>
@@ -403,6 +404,7 @@ export default function BootcampTimelinePanel({ productId }) {
                   min={0}
                   value={newPackageForm.commitment_fee}
                   onChange={(e) => setNewPackageForm((f) => ({ ...f, commitment_fee: e.target.value }))}
+                  onWheel={(e) => e.currentTarget.blur()}
                   className="w-full bg-white border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                 />
               </div>
@@ -516,6 +518,7 @@ export default function BootcampTimelinePanel({ productId }) {
                             min={0}
                             value={packageForm.price}
                             onChange={(e) => setPackageForm((f) => ({ ...f, price: e.target.value }))}
+                            onWheel={(e) => e.currentTarget.blur()}
                             className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                           />
                         </div>
@@ -526,6 +529,7 @@ export default function BootcampTimelinePanel({ productId }) {
                             min={0}
                             value={packageForm.commitment_fee}
                             onChange={(e) => setPackageForm((f) => ({ ...f, commitment_fee: e.target.value }))}
+                            onWheel={(e) => e.currentTarget.blur()}
                             className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                           />
                         </div>
@@ -581,6 +585,7 @@ export default function BootcampTimelinePanel({ productId }) {
                                 max={180}
                                 value={packageForm.quiz_duration_minutes}
                                 onChange={(e) => setPackageForm((f) => ({ ...f, quiz_duration_minutes: e.target.value }))}
+                                onWheel={(e) => e.currentTarget.blur()}
                                 className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                               />
                             </div>
@@ -592,6 +597,7 @@ export default function BootcampTimelinePanel({ productId }) {
                                 max={100}
                                 value={packageForm.quiz_passing_score_percent}
                                 onChange={(e) => setPackageForm((f) => ({ ...f, quiz_passing_score_percent: e.target.value }))}
+                                onWheel={(e) => e.currentTarget.blur()}
                                 className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                               />
                             </div>
@@ -604,6 +610,7 @@ export default function BootcampTimelinePanel({ productId }) {
                               placeholder="Kosongkan apabila tanpa batas"
                               value={packageForm.selection_quota}
                               onChange={(e) => setPackageForm((f) => ({ ...f, selection_quota: e.target.value }))}
+                              onWheel={(e) => e.currentTarget.blur()}
                               className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                             />
                             <span className="text-[#94A3B8] text-[10.5px]">
@@ -622,6 +629,7 @@ export default function BootcampTimelinePanel({ productId }) {
                             min={0}
                             value={packageForm.min_attendance_sessions}
                             onChange={(e) => setPackageForm((f) => ({ ...f, min_attendance_sessions: e.target.value }))}
+                            onWheel={(e) => e.currentTarget.blur()}
                             className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                           />
                           <span className="text-[#94A3B8] text-[10.5px]">Isi 0 apabila tidak ada syarat kehadiran.</span>
@@ -642,6 +650,7 @@ export default function BootcampTimelinePanel({ productId }) {
                               placeholder="0 = mati"
                               value={packageForm.group_size}
                               onChange={(e) => setPackageForm((f) => ({ ...f, group_size: e.target.value }))}
+                              onWheel={(e) => e.currentTarget.blur()}
                               className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                             />
                           </div>
@@ -653,6 +662,7 @@ export default function BootcampTimelinePanel({ productId }) {
                               placeholder="Kosongkan bila belum diatur"
                               value={packageForm.group_price}
                               onChange={(e) => setPackageForm((f) => ({ ...f, group_price: e.target.value }))}
+                              onWheel={(e) => e.currentTarget.blur()}
                               className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                             />
                           </div>
@@ -682,6 +692,7 @@ export default function BootcampTimelinePanel({ productId }) {
                               max={100}
                               value={packageForm.referral_invite_discount_percent}
                               onChange={(e) => setPackageForm((f) => ({ ...f, referral_invite_discount_percent: e.target.value }))}
+                              onWheel={(e) => e.currentTarget.blur()}
                               className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 h-9 text-[12.5px] text-[#1E293B] outline-none focus:border-[#148F89]"
                             />
                           </div>
