@@ -441,11 +441,13 @@ function CheckoutDetailPageInner() {
             className="rounded-[12px] overflow-hidden border border-[#2D2342] bg-[#170F26]"
           >
             <div className="h-[160px] bg-[#120822]">
-              <img
-                src={product.image}
-                alt={product.title}
-                className="w-full h-full object-cover"
-              />
+              {product.image_url && (
+                <img
+                  src={product.image_url}
+                  alt={product.title}
+                  className="w-full h-full object-cover"
+                />
+              )}
             </div>
             <div className="px-5 py-4 flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-3">
