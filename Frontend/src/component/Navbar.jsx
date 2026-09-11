@@ -160,8 +160,11 @@ export default function Navbar({ variant = "glass" }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-[120%] mt-2 w-56 rounded-[14px] border border-white/20 bg-white/10 backdrop-blur-md shadow-2xl z-[100] overflow-hidden"
+            className="absolute right-0 top-[120%] mt-2 w-56 rounded-[14px] border border-white/20 shadow-2xl z-[100] overflow-hidden"
           >
+            {/* Lapisan blur DIPISAH dari elemen yang overflow-hidden -- lihat
+                catatan sama di NotificationBell.jsx. */}
+            <div className="absolute inset-0 bg-white/10 backdrop-blur-md" />
             <GlassShine borderRadius={14} />
             <div className="relative z-10 p-2">
               <Link
@@ -244,8 +247,11 @@ export default function Navbar({ variant = "glass" }) {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.2 }}
-          className="absolute top-full left-0 mt-3 w-full rounded-[24px] border border-white/20 bg-white/10 backdrop-blur-md shadow-2xl lg:hidden z-[90] overflow-hidden pointer-events-auto"
+          className="absolute top-full left-0 mt-3 w-full rounded-[24px] border border-white/20 shadow-2xl lg:hidden z-[90] overflow-hidden pointer-events-auto"
         >
+          {/* Lapisan blur DIPISAH dari elemen yang overflow-hidden -- lihat
+              catatan sama di NotificationBell.jsx. */}
+          <div className="absolute inset-0 bg-white/10 backdrop-blur-md" />
           <GlassShine borderRadius={24} />
           <div className="relative z-10 p-6 flex flex-col gap-4">
             {menuItems.map((menu, index) => {
