@@ -127,6 +127,18 @@ export default function TransactionDetail() {
             <span className="text-[#9CA3AF]">Dibuat Pada</span>
             <span className="text-white">{formatDate(tx.created_at)}</span>
           </div>
+          {tx.mentor_name && (
+            <div className="flex flex-col gap-1">
+              <span className="text-[#9CA3AF]">Mentor</span>
+              <span className="text-white">{tx.mentor_name}</span>
+            </div>
+          )}
+          {tx.session_time && (
+            <div className="flex flex-col gap-1">
+              <span className="text-[#9CA3AF]">Jadwal Sesi</span>
+              <span className="text-white">{formatDate(tx.session_time)}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 pt-2">
