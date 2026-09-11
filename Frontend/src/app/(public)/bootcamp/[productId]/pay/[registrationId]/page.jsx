@@ -38,11 +38,12 @@ export default function BootcampPaymentPage() {
   const [invitedEmails, setInvitedEmails] = useState("");
   const { bankInfo } = useBankInfo();
 
-  // "MANUAL" (transfer + upload bukti) atau "IPAYMU" (redirect, otomatis).
-  // Pemilihnya cuma muncul kalau ipaymuEnabled -- persis pola yang sama
-  // di halaman checkout produk lain.
-  const [gateway, setGateway] = useState("MANUAL");
+  // Gak ada lagi pemilih manual/QRIS -- QRIS SATU-SATUNYA opsi selama iPaymu
+  // aktif, transfer manual otomatis jadi cadangan begitu iPaymu mati. Persis
+  // pola yang sama di halaman checkout produk lain.
   const [ipaymuEnabled, setIpaymuEnabled] = useState(false);
+  const [ipaymuChecked, setIpaymuChecked] = useState(false);
+  const gateway = ipaymuEnabled ? "IPAYMU" : "MANUAL";
 
   const fetchRegistration = async () => {
     setLoading(true);
@@ -74,6 +75,8 @@ export default function BootcampPaymentPage() {
         if (!cancelled && res?.enabled) setIpaymuEnabled(true);
       } catch {
         // Diam saja -- fallback ke transfer manual.
+      } finally {
+        if (!cancelled) setIpaymuChecked(true);
       }
     })();
     return () => { cancelled = true; };
@@ -177,7 +180,10 @@ export default function BootcampPaymentPage() {
     registration
     && registration.status === "accepted"
     && !registration.payment_deadline_passed
-    && (!payment || payment.status === "FAILED");
+    && (!payment || payment.status === "FAILED")
+    // Tunggu status QRIS kecek dulu -- biar gak sempat kelihatan "Transfer
+    // Manual" sekilas lalu tiba-tiba ganti jadi QRIS begitu selesai dicek.
+    && ipaymuChecked;
 
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white">
@@ -300,24 +306,16 @@ export default function BootcampPaymentPage() {
 
             {showForm && (
               <>
-                {ipaymuEnabled && (
-                  <div className="flex items-center gap-2 bg-[#170F26] border border-[#2D2342] rounded-[12px] p-1.5">
-                    <button
-                      onClick={() => setGateway("IPAYMU")}
-                      className={`flex-1 py-2 rounded-[8px] text-[12.5px] font-semibold transition-colors ${
-                        gateway === "IPAYMU" ? "bg-[#148F89] text-white" : "text-[#9CA3AF] hover:text-white"
-                      }`}
-                    >
-                      Bayar QRIS
-                    </button>
-                    <button
-                      onClick={() => setGateway("MANUAL")}
-                      className={`flex-1 py-2 rounded-[8px] text-[12.5px] font-semibold transition-colors ${
-                        gateway === "MANUAL" ? "bg-[#148F89] text-white" : "text-[#9CA3AF] hover:text-white"
-                      }`}
-                    >
-                      Transfer Manual
-                    </button>
+                {/* Manual cuma tampil kalau QRIS lagi MATI -- bukan pilihan
+                    pembeli lagi, otomatis nentuin sendiri (lihat const
+                    gateway di atas). */}
+                {!ipaymuEnabled && (
+                  <div className="flex items-start gap-2 bg-[#F59E0B]/10 border border-[#F59E0B]/30 rounded-[10px] px-4 py-3">
+                    <AlertCircle size={15} className="text-[#F59E0B] shrink-0 mt-0.5" />
+                    <p className="text-[#FBBF24] text-[11.5px] leading-relaxed">
+                      Pembayaran QRIS lagi gak tersedia sementara -- silakan bayar lewat transfer
+                      manual di bawah ini dulu.
+                    </p>
                   </div>
                 )}
 
