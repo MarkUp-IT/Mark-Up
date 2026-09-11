@@ -110,7 +110,14 @@ export default function Navbar({ variant = "glass" }) {
   );
 
   const desktopLinks = (
-    <div className="hidden lg:flex font-light items-center gap-6 relative z-20">
+    // absolute + left-1/2 -translate-x-1/2 -- SENGAJA gak ikut flex row biasa
+    // (yang justify-between) di parent. Logo (kiri) dan rightSection (kanan)
+    // lebarnya beda jauh (rightSection lebih lebar karena ada nama+email+
+    // avatar+lonceng), jadi kalau menu ini masih ikut jadi anak flex ke-2 di
+    // antara keduanya, dia bakal kegeser ke sisi yang lebih sempit (kiri),
+    // bukan bener-bener di tengah navbar. Dengan absolute+translate, posisinya
+    // dihitung dari TENGAH KONTAINER PENUH, gak peduli lebar dua sisi lainnya.
+    <div className="hidden lg:flex font-light items-center gap-6 absolute left-1/2 -translate-x-1/2 z-20">
       {menuItems.map((menu, i) => {
         const isCurrentActive = pathname === menu.url;
         return (
