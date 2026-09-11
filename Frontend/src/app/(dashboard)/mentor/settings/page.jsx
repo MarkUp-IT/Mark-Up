@@ -450,6 +450,7 @@ export default function MentorSettings() {
             label: f.label,
             anchor: `mentor-${f.key}`,
           }))}
+          dismissKey="mentor-settings-lengkapi"
         />
       </motion.div>
 

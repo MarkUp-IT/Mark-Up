@@ -221,6 +221,7 @@ export default function Transactions() {
             label: t.product_title || t.transaction_id,
             anchor: `transaksi-${t.transaction_id}`,
           }))}
+          dismissKey="user-transactions-ditolak"
         />
       </motion.div>
 

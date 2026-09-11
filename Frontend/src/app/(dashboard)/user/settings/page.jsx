@@ -401,6 +401,7 @@ const handleDeleteAccount = async () => {
             label: f.label,
             anchor: `profil-${f.key}`,
           }))}
+          dismissKey="user-settings-lengkapi"
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

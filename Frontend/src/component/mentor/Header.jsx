@@ -1,6 +1,7 @@
 "use client";
 
 import { Menu } from "lucide-react";
+import NotificationBell from "@/component/NotificationBell";
 
 export default function Header({
   title,
@@ -26,7 +27,8 @@ export default function Header({
       </div>
 
       {/* User Profile -- struktur & ukuran sama persis kayak Header user */}
-      <div className="flex flex-row gap-3 sm:gap-4 items-center shrink-0 pl-3">
+      <div className="flex flex-row gap-2 sm:gap-4 items-center shrink-0 pl-3">
+        <NotificationBell />
         <div className="hidden sm:flex flex-col text-right">
           <p className="font-semibold text-white text-[13px]">{profileName}</p>
           <p className="text-[11px] text-[#9CA3AF]">{email}</p>

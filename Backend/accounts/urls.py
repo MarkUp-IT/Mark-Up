@@ -29,6 +29,8 @@ from .views import (
     get_audit_logs,
     get_admin_sidebar_badges,
     get_student_sidebar_badges,
+    get_notifications,
+    mark_notifications_read,
 )
 
 urlpatterns = [
@@ -59,6 +61,8 @@ urlpatterns = [
     path("audit-logs/", get_audit_logs, name="api_audit_logs_list"),
     path("admin/sidebar-badges/", get_admin_sidebar_badges, name="api_admin_sidebar_badges"),
     path("me/sidebar-badges/", get_student_sidebar_badges, name="api_student_sidebar_badges"),
+    path("me/notifications/", get_notifications, name="api_notifications_list"),
+    path("me/notifications/mark-read/", mark_notifications_read, name="api_notifications_mark_read"),
     # Laporan error yang terjadi di browser pengguna -- tanpa login, lihat
     # report_client_error di views.py untuk alasan & pembatasnya.
     path("client-error/", report_client_error, name="api_report_client_error"),
