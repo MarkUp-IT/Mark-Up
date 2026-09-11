@@ -400,6 +400,26 @@ export default function Transactions() {
                     {selectedTx?.method || "-"}
                   </span>
                 </div>
+                {selectedTx?.mentor_name && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                      Mentor
+                    </span>
+                    <span className="text-[#1E293B] font-medium">
+                      {selectedTx.mentor_name}
+                    </span>
+                  </div>
+                )}
+                {selectedTx?.session_time && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                      Jadwal Sesi
+                    </span>
+                    <span className="text-[#1E293B] font-medium">
+                      {formatDateTime(selectedTx.session_time)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="bg-[#F8FAFC] border border-[#E2E8F0] p-4 rounded-[8px] flex justify-between items-center">

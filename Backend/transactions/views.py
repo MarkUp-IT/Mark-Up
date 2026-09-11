@@ -128,6 +128,7 @@ def get_transactions(request):
             "transaction",
             "transaction__user",
             "product",
+            "mentor_availability__mentor_profile__user",
         )
         .order_by("-transaction__created_at")
     )
@@ -136,6 +137,7 @@ def get_transactions(request):
 
     for item in items:
         product_detail = _serialize_product_detail(item.product)
+        slot = item.mentor_availability
         data.append({
             "transaction_id": item.transaction.id,
             "user_id": str(item.transaction.user.id),
@@ -145,10 +147,13 @@ def get_transactions(request):
             "date_time": item.transaction.created_at.isoformat(),
             "amount": str(item.transaction.grand_total),
             "method": item.transaction.payment_method,
+            "gateway": item.transaction.gateway,
             "status": item.transaction.payment_status,
             "proof_of_payment": item.transaction.proof_of_payment.url if item.transaction.proof_of_payment else None,
             "notes": item.transaction.notes,
             "product_type": item.product.type,
+            "mentor_name": slot.mentor_profile.user.fullname if slot else None,
+            "session_time": timezone.localtime(slot.start_time).isoformat() if slot else None,
         })
 
     return JsonResponse(
@@ -507,13 +512,27 @@ def get_my_transactions(request):
 
     items = (
         TransactionItem.objects.filter(transaction__user=request.user)
-        .select_related("transaction", "product")
+        .select_related(
+            "transaction", "product",
+            "mentor_availability__mentor_profile__user",
+        )
         .order_by("-transaction__created_at")
     )
 
     data = []
     for item in items:
         product_detail = _serialize_product_detail(item.product)
+        # Cuma keisi buat item MENTORING yang jadwalnya masih nyambung --
+        # transaksi yang dilepas (gagal/kedaluwarsa) sengaja MEMUTUS FK ini
+        # (lihat _release_transaction), jadi None di sini itu wajar buat
+        # transaksi yang gak pernah kepakai jadwalnya.
+        mentor_name = None
+        session_time = None
+        slot = item.mentor_availability
+        if slot is not None:
+            mentor_name = slot.mentor_profile.user.fullname
+            session_time = timezone.localtime(slot.start_time).isoformat()
+
         data.append(
             {
                 "transaction_id": item.transaction.id,
@@ -523,9 +542,12 @@ def get_my_transactions(request):
                 "created_at": item.transaction.created_at.isoformat(),
                 "amount": str(item.transaction.grand_total),
                 "method": item.transaction.payment_method,
+                "gateway": item.transaction.gateway,
                 "status": item.transaction.payment_status,
                 "proof_of_payment": item.transaction.proof_of_payment.url if item.transaction.proof_of_payment else None,
                 "notes": item.transaction.notes,
+                "mentor_name": mentor_name,
+                "session_time": session_time,
             }
         )
 

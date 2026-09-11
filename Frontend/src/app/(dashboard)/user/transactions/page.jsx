@@ -294,6 +294,18 @@ export default function Transactions() {
                   <span className="text-[#9CA3AF]">Metode Pembayaran</span>
                   <span className="text-white font-medium">{selectedTx.method}</span>
                 </div>
+                {selectedTx.mentor_name && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#9CA3AF]">Mentor</span>
+                    <span className="text-white font-medium">{selectedTx.mentor_name}</span>
+                  </div>
+                )}
+                {selectedTx.session_time && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#9CA3AF]">Jadwal Sesi</span>
+                    <span className="text-white font-medium">{formatDate(selectedTx.session_time)}</span>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col gap-2 pt-4 border-t border-[#2D2342] text-[13px]">
