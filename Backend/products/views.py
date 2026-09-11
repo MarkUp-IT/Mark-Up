@@ -1975,6 +1975,62 @@ def _validasi_calon_anggota_tim(email, bootcamp, ketua):
     return True, "", user_obj
 
 
+def _validasi_ajak_teman(email, bootcamp, pengajak):
+    """Cek apakah `email` boleh disebut `pengajak` sebagai orang yang dia ajak
+    di `bootcamp` ini. KEBALIKAN dari _validasi_calon_anggota_tim: anggota tim
+    justru HARUS BELUM terdaftar, sedangkan orang yang diajak HARUS SUDAH
+    terdaftar (promonya memang buat ngajak orang yang udah gabung duluan).
+
+    Dipakai DUA tempat, persis pola tim: tombol "Cek" di form (feedback
+    instan, tanpa lock) dan register_bootcamp saat submit beneran (re-cek
+    dengan lock). Return (ok, pesan_kalau_gagal, BootcampRegistration|None).
+    """
+    if email.lower() == pengajak.email.lower():
+        return False, "tidak bisa mengajak dirimu sendiri.", None
+    kandidat = (
+        BootcampRegistration.objects.filter(
+            user__email__iexact=email, package__bootcamp=bootcamp,
+        )
+        .select_related("user")
+        .first()
+    )
+    if kandidat is None:
+        return False, "belum terdaftar di bootcamp ini.", None
+    if BootcampReferredInvitee.objects.filter(
+        bootcamp=bootcamp, invitee_email__iexact=email,
+    ).exists():
+        return False, "sudah diklaim pendaftar lain.", None
+    return True, "", kandidat
+
+
+@jwt_required
+def check_referral_invitee(request, product_id):
+    """Kembaran check_team_invitee, tapi buat promo AJAK TEMAN. Dipisah
+    endpoint-nya (bukan satu endpoint pakai parameter mode) karena aturan
+    validasinya memang berkebalikan -- lihat catatan di _validasi_ajak_teman."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    email = (request.GET.get("email") or "").strip()
+    if not email:
+        return JsonResponse({"detail": "Parameter email wajib diisi."}, status=400)
+
+    try:
+        bootcamp = BootcampProduct.objects.get(product_id=product_id)
+    except BootcampProduct.DoesNotExist:
+        return JsonResponse({"detail": "Bootcamp tidak ditemukan."}, status=404)
+
+    ok, pesan, reg_obj = _validasi_ajak_teman(email, bootcamp, request.user)
+    return JsonResponse(
+        {
+            "valid": ok,
+            "reason": None if ok else pesan,
+            "name": reg_obj.user.fullname if reg_obj else None,
+        },
+        status=200,
+    )
+
+
 @jwt_required
 def check_team_invitee(request, product_id):
     """Dipakai tombol "Cek" di form pendaftaran tim -- validasi RINGAN
@@ -2101,6 +2157,31 @@ def register_bootcamp(request):
     email_anggota = [
         e.strip().lower() for e in mentah_anggota.replace(",", "\n").splitlines() if e.strip()
     ]
+
+    # --- Ajak teman (opsional) -------------------------------------------
+    # SATU email saja: potongannya flat (persen tetap, lihat
+    # referral_invite_discount_percent), jadi menyebut banyak nama gak nambah
+    # apa-apa -- mending sekalian dibatasi satu biar gak menyesatkan.
+    #
+    # Dua promo ini SENGAJA saling meniadakan: pendaftar memilih SALAH SATU,
+    # gak bisa dobel. Dicek di sini (bukan cuma di UI) supaya tetap ditegakkan
+    # walau ada yang nembak endpoint-nya langsung.
+    email_ajak = (request.POST.get("invited_email") or "").strip().lower()
+    invitee_valid = None
+    if email_ajak and email_anggota:
+        lanjutan_errors["invited_email"] = [
+            "Pilih salah satu saja: daftar sebagai tim ATAU ajak teman, tidak bisa dua-duanya."
+        ]
+    elif email_ajak:
+        if not package.referral_invite_enabled:
+            lanjutan_errors["invited_email"] = ["Paket ini tidak punya promo ajak teman."]
+        else:
+            ok, pesan, reg_obj = _validasi_ajak_teman(email_ajak, bootcamp, request.user)
+            if ok:
+                invitee_valid = reg_obj
+            else:
+                lanjutan_errors["invited_email"] = [f"{email_ajak}: {pesan}"]
+
     anggota_valid = []
     if email_anggota:
         if package.group_size <= 1:
@@ -2184,10 +2265,35 @@ def register_bootcamp(request):
                         status=400,
                     )
 
+        if invitee_valid is not None:
+            # Dikunci & dicek ULANG, alasannya sama persis seperti blok tim di
+            # atas: dua pendaftar yang menyebut orang yang sama nyaris
+            # berbarengan gak boleh dua-duanya lolos. Klaimnya dicatat SEKARANG
+            # (saat daftar, bukan saat bayar) karena promonya memang dipilih di
+            # form pendaftaran -- kalau baru diklaim saat bayar, orang yang
+            # sudah menyebut nama duluan bisa keduluan orang lain.
+            sudah_diklaim = BootcampReferredInvitee.objects.select_for_update().filter(
+                bootcamp=bootcamp, invitee_email__iexact=email_ajak,
+            ).exists()
+            if sudah_diklaim:
+                return JsonResponse(
+                    {"errors": {"invited_email": [
+                        f"{email_ajak}: baru saja diklaim pendaftar lain."
+                    ]}},
+                    status=400,
+                )
+
         reg = BootcampRegistration.objects.create(
             user=request.user, package=package, requirement_doc=doc,
             commitment_letter=commitment_letter, cv=cv, portfolio=portfolio,
         )
+        if invitee_valid is not None:
+            BootcampReferredInvitee.objects.create(
+                bootcamp=bootcamp,
+                referrer_registration=reg,
+                invitee_email=email_ajak,
+                invitee_registration=invitee_valid,
+            )
         if anggota_valid:
             grup = BootcampRegistrationGroup.objects.create(package=package, leader_registration=reg)
             reg.registration_group = grup
@@ -3614,47 +3720,19 @@ def create_bootcamp_payment(request, registration_id):
         discount_amount = referral_code.compute_discount(sub_total)
 
     # Ajak teman -- BEDA dari kode referral di atas (itu satu kode buat siapa
-    # saja; ini menyebut ORANG SPESIFIK). Divalidasi terhadap pendaftar
-    # SUNGGUHAN di bootcamp yang sama, dan flat -- tidak menumpuk sebanyak
-    # apa pun nama yang disebut, cukup 1 yang valid.
-    invited_valid = []
-    invite_errors = []
-    if package.referral_invite_enabled:
-        mentah = request_data.get("invited_emails") or ""
-        emails_diajukan = [
-            e.strip().lower() for e in mentah.replace(",", "\n").splitlines() if e.strip()
-        ]
-        for email in dict.fromkeys(emails_diajukan):  # urutan dijaga, duplikat dalam 1 submit dibuang
-            if email == request.user.email.lower():
-                invite_errors.append(f"{email}: tidak bisa mengajak dirimu sendiri.")
-                continue
-            kandidat = (
-                BootcampRegistration.objects.filter(
-                    user__email__iexact=email, package__bootcamp=bootcamp_product,
-                )
-                .exclude(pk=registration.pk)
-                .select_related("user")
-                .first()
-            )
-            if kandidat is None:
-                invite_errors.append(f"{email}: belum terdaftar di bootcamp ini.")
-                continue
-            if BootcampReferredInvitee.objects.filter(
-                bootcamp=bootcamp_product, invitee_email__iexact=email
-            ).exists():
-                invite_errors.append(f"{email}: sudah diklaim pendaftar lain.")
-                continue
-            invited_valid.append((email, kandidat))
-
-        if emails_diajukan and not invited_valid:
-            # Semua yang disebut gagal tervalidasi -- ini SATU-SATUNYA kasus
-            # yang menolak submit. Kalau sebagian valid sebagian tidak,
-            # lanjutkan pakai yang valid saja (jangan gagalkan pembayaran
-            # cuma gara-gara satu nama salah ketik).
-            return JsonResponse({"errors": {"invited_emails": invite_errors}}, status=400)
+    # saja; ini menyebut ORANG SPESIFIK). Sejak promonya dipindah ke form
+    # PENDAFTARAN, halaman bayar TIDAK lagi menerima input email: yang dipakai
+    # adalah klaim yang sudah tercatat waktu daftar (BootcampReferredInvitee),
+    # jadi potongannya gak bisa lagi ditambahkan diam-diam di tahap bayar, dan
+    # pendaftar gak bisa kehilangan klaimnya gara-gara keduluan orang lain di
+    # antara daftar dan bayar.
+    sudah_ajak = (
+        BootcampReferredInvitee.objects.filter(referrer_registration=registration).exists()
+        if package.referral_invite_enabled else False
+    )
 
     invite_discount_amount = Decimal("0")
-    if invited_valid:
+    if sudah_ajak:
         sisa_setelah_kode = sub_total - discount_amount
         invite_discount_amount = (
             sisa_setelah_kode * Decimal(package.referral_invite_discount_percent) / Decimal("100")
@@ -3735,21 +3813,9 @@ def create_bootcamp_payment(request, registration_id):
                     discount_amount=discount_amount,
                 )
 
-            if invited_valid:
-                # Unique constraint (bootcamp, invitee_email) adalah penjaga
-                # terakhir kalau dua orang kebetulan menyebut email yang sama
-                # nyaris berbarengan -- kalau itu terjadi, IntegrityError di
-                # sini membatalkan SELURUH pembayaran (bukan cuma diam-diam
-                # melewatkan satu nama), ditangkap except Exception di bawah.
-                BootcampReferredInvitee.objects.bulk_create([
-                    BootcampReferredInvitee(
-                        bootcamp=bootcamp_product,
-                        referrer_registration=registration,
-                        invitee_email=email,
-                        invitee_registration=kandidat,
-                    )
-                    for email, kandidat in invited_valid
-                ])
+            # Baris BootcampReferredInvitee TIDAK dibuat di sini lagi -- sudah
+            # dicatat waktu pendaftaran (lihat register_bootcamp). Di tahap
+            # bayar tinggal dipakai buat menghitung potongannya saja.
     except Exception:
         # Sama alasannya kayak di transactions.views.checkout_product: pesan
         # exception mentah bocorin struktur DB / konfigurasi storage ke klien.
@@ -3780,11 +3846,6 @@ def create_bootcamp_payment(request, registration_id):
         {
             "detail": "Pembayaran berhasil dikirim, menunggu verifikasi admin.",
             "registration": _serialize_registration(registration),
-            # Email yang GAGAL diklaim meski ada juga yang berhasil (kalau semua
-            # gagal, sudah ditolak duluan di atas dengan status 400) -- dikirim
-            # supaya pendaftar tahu persisnya email mana yang salah ketik/sudah
-            # diklaim, bukan cuma diam-diam dilewatkan.
-            "invite_warnings": invite_errors,
         },
         status=201,
     )

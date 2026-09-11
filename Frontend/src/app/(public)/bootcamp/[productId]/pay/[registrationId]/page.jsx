@@ -35,7 +35,6 @@ export default function BootcampPaymentPage() {
   const [file, setFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [referralCode, setReferralCode] = useState("");
-  const [invitedEmails, setInvitedEmails] = useState("");
   const { bankInfo } = useBankInfo();
 
   // Gak ada lagi pemilih manual/QRIS -- QRIS SATU-SATUNYA opsi selama iPaymu
@@ -97,9 +96,6 @@ export default function BootcampPaymentPage() {
       if (referralCode.trim()) {
         formData.append("referral_code", referralCode.trim());
       }
-      if (invitedEmails.trim()) {
-        formData.append("invited_emails", invitedEmails.trim());
-      }
       const res = await apiRequestRaw(`/api/products/bootcamp-registrations/${registrationId}/pay/`, formData);
       const data = res.data;
       if (!res.ok) {
@@ -113,13 +109,7 @@ export default function BootcampPaymentPage() {
         throw new Error(msg);
       }
       toast.success("Pembayaran Terkirim", { description: "Menunggu diverifikasi admin." });
-      if (data?.invite_warnings?.length > 0) {
-        toast.warning("Sebagian Email Ajakan Tidak Berlaku", {
-          description: data.invite_warnings.join(" "),
-        });
-      }
       setFile(null);
-      setInvitedEmails("");
       fetchRegistration();
     } catch (err) {
       toast.error("Gagal Mengirim Pembayaran", { description: err?.message || "Coba lagi." });
@@ -137,7 +127,6 @@ export default function BootcampPaymentPage() {
       body: {
         payment_gateway: "IPAYMU",
         ...(referralCode.trim() ? { referral_code: referralCode.trim() } : {}),
-        ...(invitedEmails.trim() ? { invited_emails: invitedEmails.trim() } : {}),
       },
     });
     const txnId = payRes?.registration?.payment?.transaction_id;
@@ -148,7 +137,6 @@ export default function BootcampPaymentPage() {
   const handleQrisPaid = () => {
     toast.success("Pembayaran Berhasil", { description: "Sampai jumpa di kelas!" });
     setReferralCode("");
-    setInvitedEmails("");
     fetchRegistration();
   };
 
@@ -171,10 +159,20 @@ export default function BootcampPaymentPage() {
   const commitmentFeeTampil = teamPriceActive
     ? Number(registration.package.commitment_fee) * jumlahAnggotaTim
     : Number(registration?.package?.commitment_fee || 0);
+  // Promo ajak teman dipilih & dikunci SAAT DAFTAR (bukan di halaman ini
+  // lagi), jadi di sini tinggal ditampilkan -- angkanya sudah pasti, bukan
+  // "estimasi kalau emailnya valid" seperti dulu.
+  const sudahAjakTeman =
+    Boolean(registration?.package?.referral_invite_enabled)
+    && (registration?.invited || []).length > 0;
+  const inviteDiscount =
+    !payment && sudahAjakTeman
+      ? (subTotal * Number(registration.package.referral_invite_discount_percent || 0)) / 100
+      : 0;
   const total = registration
     ? (payment
       ? Number(payment.grand_total)
-      : subTotal + commitmentFeeTampil)
+      : subTotal - inviteDiscount + commitmentFeeTampil)
     : 0;
   const showForm =
     registration
@@ -250,16 +248,12 @@ export default function BootcampPaymentPage() {
                   <span className="text-[#148F89] font-medium">-{formatIDR(appliedDiscount)}</span>
                 </div>
               )}
-              {!payment && registration.package.referral_invite_enabled && invitedEmails.trim() && (
+              {inviteDiscount > 0 && (
                 <div className="flex justify-between text-[13px]">
                   <span className="text-[#9CA3AF]">
-                    Estimasi diskon ajak teman (~{registration.package.referral_invite_discount_percent}%)
+                    Diskon ajak teman ({registration.package.referral_invite_discount_percent}%)
                   </span>
-                  <span className="text-[#F59E0B] font-medium">
-                    -{formatIDR(
-                      (subTotal * registration.package.referral_invite_discount_percent) / 100
-                    )}
-                  </span>
+                  <span className="text-[#148F89] font-medium">-{formatIDR(inviteDiscount)}</span>
                 </div>
               )}
               {commitmentFeeTampil > 0 && (
@@ -274,10 +268,10 @@ export default function BootcampPaymentPage() {
                 <span className="font-semibold">Total Bayar</span>
                 <span className="text-[#148F89] font-bold">{formatIDR(total)}</span>
               </div>
-              {!payment && registration.package.referral_invite_enabled && invitedEmails.trim() && (
+              {inviteDiscount > 0 && (
                 <p className="text-[#6B7280] text-[11px] -mt-1">
-                  Belum termasuk di Total Bayar di atas -- baru dipastikan & dipotongkan sistem
-                  kalau email yang kamu tulis valid, saat bukti transfer kamu kirim.
+                  Promo ajak teman ({registration.invited.map((i) => i.email).join(", ")}) sudah
+                  dipakai sejak kamu mendaftar, jadi potongannya sudah termasuk di Total Bayar.
                 </p>
               )}
             </div>
@@ -338,28 +332,17 @@ export default function BootcampPaymentPage() {
                     </span>
                   </div>
 
-                  {registration.package.referral_invite_enabled && (
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[#9CA3AF] text-[12px] font-semibold flex items-center gap-1.5">
-                        <Users size={13} /> Udah Ajak Orang? (opsional)
-                      </label>
-                      <textarea
-                        value={invitedEmails}
-                        onChange={(e) => setInvitedEmails(e.target.value)}
-                        placeholder="Tulis email orang yang kamu ajak, satu per baris"
-                        rows={2}
-                        className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-2.5 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors resize-none"
-                      />
-                      <span className="text-[#6B7280] text-[11px]">
-                        Cukup satu email yang sudah terdaftar di bootcamp ini dan belum diklaim
-                        orang lain untuk dapat potongan {registration.package.referral_invite_discount_percent}%
-                        -- gak numpuk walau kamu tulis beberapa email.
+                  {/* Ajak teman TIDAK diisi di sini lagi -- promonya dipilih &
+                      dikunci waktu mendaftar (pilih salah satu: tim ATAU ajak
+                      teman). Di halaman ini cuma ditampilkan hasilnya. */}
+                  {sudahAjakTeman && (
+                    <div className="flex items-start gap-2 rounded-[8px] bg-[#148F89]/10 border border-[#148F89]/30 px-3.5 py-2.5">
+                      <Users size={14} className="text-[#148F89] shrink-0 mt-0.5" />
+                      <span className="text-[#148F89] text-[11.5px] leading-relaxed">
+                        Promo ajak teman aktif ({registration.invited.map((i) => i.email).join(", ")})
+                        -- potongan {registration.package.referral_invite_discount_percent}% sudah
+                        dihitung di Total Bayar.
                       </span>
-                      {registration.invited?.length > 0 && (
-                        <span className="text-[#148F89] text-[11px]">
-                          Sudah berhasil diklaim sebelumnya: {registration.invited.map((i) => i.email).join(", ")}
-                        </span>
-                      )}
                     </div>
                   )}
                 </div>
