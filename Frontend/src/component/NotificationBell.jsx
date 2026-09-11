@@ -126,12 +126,13 @@ export default function NotificationBell() {
             transition={{ duration: 0.15 }}
             className="absolute right-0 top-[120%] mt-2 w-[320px] max-w-[90vw] rounded-[14px] border border-white/20 shadow-2xl z-[100] overflow-hidden"
           >
-            {/* Lapisan blur DIPISAH dari elemen yang overflow-hidden -- taruh
-                backdrop-blur bareng overflow-hidden di elemen yang SAMA bikin
-                sejumlah browser (terutama Chromium) diam-diam gagal ngeblur
-                sama sekali, walau class-nya kepasang. Bungkus luar cuma
-                nanganin bentuk bulat+kliping, lapisan ini yang beneran ngeblur. */}
-            <div className="absolute inset-0 bg-white/10 backdrop-blur-md" />
+            {/* backdrop-blur-md TETAP dipasang buat browser yang dukung (efek
+                progresif), TAPI latarnya sengaja dibikin pekat (bg-[#170F26]/95,
+                bukan bg-white/10) -- gak boleh gantungin keterbacaan SEMATA ke
+                blur yang kerjanya gak konsisten di semua browser/device. Kalau
+                blur-nya nyala, hasilnya kaca gelap; kalau device-nya gak dukung,
+                tetap keliatan rapi & kebaca (cuma gak nge-blur konten di belakang). */}
+            <div className="absolute inset-0 bg-[#170F26]/95 backdrop-blur-md" />
             <GlassShine borderRadius={14} />
             <div className="relative z-10">
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
