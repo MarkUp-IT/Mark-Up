@@ -1371,6 +1371,75 @@ def create_ipaymu_session(request, transaction_id):
     return JsonResponse({"redirect_url": url, "session_id": session_id}, status=200)
 
 
+@csrf_exempt
+@jwt_required
+def create_ipaymu_qris(request, transaction_id):
+    """QRIS Direct Payment -- BEDA dari create_ipaymu_session di atas: gak
+    ada redirect_url, QR-nya (qr_string) digambar langsung di halaman
+    MarkUp. Dipanggil dengan pola yang sama (SETELAH transaksinya dibuat
+    lewat checkout_product/create_bootcamp_payment), dan idempotent-ish --
+    kalau dipanggil ulang selagi qr_string yang lama masih berlaku
+    (expires_at belum lewat), balikin yang LAMA apa adanya, gak minta QR
+    baru ke iPaymu tiap kali pembeli reload halaman bayarnya."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    if is_rate_limited(f"rl:ipaymu-qris:user:{request.user.id}", limit=10, window_seconds=3600):
+        return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
+
+    try:
+        txn = Transaction.objects.get(id=transaction_id, user=request.user)
+    except Transaction.DoesNotExist:
+        return JsonResponse({"detail": "Transaksi tidak ditemukan."}, status=404)
+
+    if txn.gateway != PaymentGateway.IPAYMU:
+        return JsonResponse({"detail": "Transaksi ini bukan transaksi iPaymu."}, status=400)
+    if txn.payment_status != PaymentStatus.PENDING:
+        return JsonResponse({"detail": "Transaksi ini sudah tidak menunggu pembayaran."}, status=400)
+
+    setting = IpaymuSetting.get_solo()
+    if not setting.is_enabled:
+        return JsonResponse({"detail": "Pembayaran iPaymu belum aktif."}, status=400)
+
+    # Reservasinya (expires_at) masih berlaku & QR lama masih ada -> gak
+    # perlu minta yang baru, biar pembeli yang reload halaman bayar tetap
+    # lihat QR yang SAMA (nominal & kode QR yang sama persis) selama masih
+    # dalam jendela 5 menitnya.
+    if txn.ipaymu_qr_string and txn.expires_at and txn.expires_at > timezone.now():
+        return JsonResponse(
+            {"qr_string": txn.ipaymu_qr_string, "total": int(txn.grand_total), "expires_at": txn.expires_at.isoformat()},
+            status=200,
+        )
+
+    from mark_up.ipaymu import create_qris_payment
+
+    notify_url = request.build_absolute_uri(reverse("api_ipaymu_webhook"))
+
+    data, err = create_qris_payment(
+        setting,
+        transaction=txn,
+        buyer_name=request.user.fullname,
+        buyer_phone=txn.buyer_phone or getattr(request.user, "phone", "") or "",
+        buyer_email=request.user.email,
+        notify_url=notify_url,
+        expired_minutes=RESERVATION_MINUTES,
+    )
+    if err:
+        logger.error("iPaymu: gagal bikin QRIS buat transaksi %s: %s", txn.id, err)
+        return JsonResponse(
+            {"detail": "Gagal menghubungi iPaymu, coba lagi sebentar lagi."}, status=502
+        )
+
+    txn.ipaymu_qr_string = data["qr_string"]
+    txn.save(update_fields=["ipaymu_qr_string"])
+
+    return JsonResponse(
+        {"qr_string": data["qr_string"], "total": data.get("total") or int(txn.grand_total),
+         "expires_at": txn.expires_at.isoformat() if txn.expires_at else None},
+        status=200,
+    )
+
+
 def is_ipaymu_available(request):
     """PUBLIK, tanpa login -- dipakai halaman checkout buat tau apakah
     pemilih metode iPaymu perlu ditampilkan sama sekali. Sengaja gak

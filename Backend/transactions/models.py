@@ -97,6 +97,13 @@ class Transaction(models.Model):
         blank=True, null=True,
         help_text="Payload webhook terakhir dari iPaymu apa adanya -- buat audit kalau ada sengketa pembayaran.",
     )
+    ipaymu_qr_string = models.TextField(
+        blank=True, default="",
+        help_text="Payload teks QRIS (format EMVCo standar) dari QRIS Direct Payment -- disimpan biar "
+                  "pembeli yang reload/kembali ke halaman bayar lihat QR yang SAMA (bukan bikin sesi "
+                  "baru tiap reload), selama masih dalam jendela expires_at. Digambar ulang jadi QR "
+                  "code di frontend, BUKAN gambar/URL dari iPaymu -- lihat catatan di mark_up/ipaymu.py.",
+    )
     # Cuma keisi buat transaksi gateway=IPAYMU (lihat _create_transaction_with_reservation
     # di views.py) -- MANUAL sengaja TIDAK punya batas waktu di sini karena bukti
     # pembayarannya sudah dilampirkan SAAT transaksi dibuat, tinggal nunggu admin

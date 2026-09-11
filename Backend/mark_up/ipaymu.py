@@ -1,11 +1,17 @@
-"""Klien iPaymu REST API v2 (Redirect Payment).
+"""Klien iPaymu REST API v2 (Redirect Payment & QRIS Direct Payment).
 
-Dipakai buat tiga hal:
+Dipakai buat empat hal:
   1. Bikin sesi pembayaran & redirect URL (create_payment_session) -- pembeli
      diarahkan ke halaman iPaymu sendiri, jadi MarkUp gak perlu bangun UI per
      metode (VA/QRIS/e-wallet/kartu), iPaymu yang tampilkan semua pilihan.
+     TIDAK dipakai di frontend sekarang (lihat #4), tapi sengaja DIBIARKAN
+     hidup -- gampang dinyalain lagi kalau suatu saat perlu metode selain
+     QRIS tanpa perlu bangun ulang dari nol.
   2. Verifikasi signature webhook yang MASUK dari iPaymu (verify_webhook_signature).
   3. Uji kredensial dari panel admin (test_connection).
+  4. Minta QRIS langsung TANPA redirect (create_qris_payment) -- QR-nya
+     digambar di halaman MarkUp sendiri. Ini yang dipakai frontend sekarang,
+     dipilih karena pembeli maunya cuma QRIS & gak mau diarahkan keluar.
 
 Kredensialnya disimpan di DATABASE (model transactions.IpaymuSetting), bukan
 .env, karena bisa dirotasi (sandbox -> production) dari panel admin tanpa
@@ -229,6 +235,93 @@ def create_payment_session(setting, *, transaction, buyer_name, buyer_phone, buy
         return_url=return_url, notify_url=notify_url, cancel_url=cancel_url,
         expired_hours=expired_hours,
     )
+
+
+# --------------------------------------------------------------------------
+# QRIS Direct Payment -- QR-nya nempel langsung di halaman MarkUp, TANPA
+# redirect ke halaman iPaymu (beda dari create_payment_session di atas).
+#
+# Field response di bawah ini (QrString, TransactionId, Expired, dst) sudah
+# DIKONFIRMASI dari panggilan sungguhan ke API PRODUCTION (bukan tebakan dari
+# dokumentasi publik, yang gak nyebutin field-nya sama sekali) -- lihat
+# transkrip sesi waktu fitur ini dibangun. QrImage/QrTemplate yang dibalikin
+# iPaymu SENGAJA tidak dipakai (isinya halaman HTML, bukan gambar mentah,
+# jadi gak bisa langsung ditaruh di <img src=...>) -- QR-nya digambar ulang
+# sendiri di frontend dari QrString (payload teks QRIS standar EMVCo) pakai
+# library QR code, bukan nge-iframe halaman iPaymu.
+# --------------------------------------------------------------------------
+
+def create_qris_payment(setting, *, transaction, buyer_name, buyer_phone, buyer_email,
+                         notify_url, expired_minutes):
+    """Minta QRIS langsung (bukan bikin sesi redirect) buat satu Transaction
+    sungguhan. Expired-nya SENGAJA disamakan ke RESERVATION_MINUTES (menit,
+    bukan jam kayak create_payment_session) -- biar QR yang keliatan di layar
+    pembeli kedaluwarsa PERSIS bareng reservasi slot/stok kita sendiri,
+    bukan dua jangka waktu beda yang bikin bingung ("QR-nya masih keliatan
+    valid tapi jadwalnya udah kelepas").
+
+    Return (data, None) kalau berhasil -- data = {
+        "qr_string": str, "ipaymu_transaction_id": int|None,
+        "total": int, "expired_at": str (format iPaymu "YYYY-MM-DD HH:MM:SS"),
+    } -- atau (None, pesan_error) kalau gagal. Gak pernah raise ke pemanggil."""
+    import requests
+
+    try:
+        api_key = decrypt_secret(setting.api_key_encrypted)
+    except IpaymuCredentialError as exc:
+        return None, str(exc)
+    if not setting.va_number or not api_key:
+        return None, "VA Number / API Key iPaymu belum diisi di panel pengaturan."
+
+    body = {
+        "name": buyer_name or "",
+        "phone": buyer_phone or "",
+        "email": buyer_email or "",
+        "amount": int(transaction.grand_total),
+        "referenceId": transaction.id,
+        "notifyUrl": notify_url,
+        "expired": expired_minutes,
+        "expiredType": "minutes",
+        "paymentMethod": "qris",
+    }
+    body_str = json.dumps(body, separators=(",", ":"))
+    signature = _signature("POST", setting.va_number, body_str, api_key)
+
+    try:
+        resp = requests.post(
+            f"{_base_url(setting)}/payment/direct",
+            data=body_str,
+            headers={
+                "Content-Type": "application/json",
+                "va": setting.va_number,
+                "signature": signature,
+                "timestamp": str(int(time.time())),
+            },
+            timeout=TIMEOUT,
+        )
+    except Exception as exc:
+        return None, f"Tidak bisa menghubungi iPaymu: {exc}"
+
+    if resp.status_code != 200:
+        return None, _pesan_error(resp, "Gagal membuat QRIS")
+
+    try:
+        payload = resp.json()
+    except Exception:
+        return None, "Respons iPaymu tidak bisa dibaca (bukan JSON)."
+
+    data = payload.get("Data") or {}
+    qr_string = data.get("QrString")
+    if not qr_string:
+        pesan = payload.get("Message") or "iPaymu tidak mengembalikan QrString."
+        return None, pesan
+
+    return {
+        "qr_string": qr_string,
+        "ipaymu_transaction_id": data.get("TransactionId"),
+        "total": data.get("Total"),
+        "expired_at": data.get("Expired"),
+    }, None
 
 
 # --------------------------------------------------------------------------
