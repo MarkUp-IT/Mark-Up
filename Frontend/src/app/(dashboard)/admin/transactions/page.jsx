@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import BankAccountPanel from "@/component/admin/BankAccountPanel";
+import IpaymuSettingPanel from "@/component/admin/IpaymuSettingPanel";
 import ImageLightbox from "@/component/admin/ImageLightbox";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
@@ -192,7 +193,10 @@ export default function Transactions() {
         />
       </div>
 
-      <BankAccountPanel />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <BankAccountPanel />
+        <IpaymuSettingPanel />
+      </div>
 
       <div className="flex flex-col gap-4">
         <div className="flex items-end justify-between gap-4 flex-wrap">

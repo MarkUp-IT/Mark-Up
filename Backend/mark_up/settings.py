@@ -252,6 +252,12 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 # gagal berisik, jangan diam-diam nyimpen plaintext.
 ZOOM_CRED_KEY = os.getenv("ZOOM_CRED_KEY", "")
 
+# Kunci Fernet KHUSUS buat api_key iPaymu (lihat transactions.models.IpaymuSetting
+# & mark_up/ipaymu.py) -- SENGAJA kunci terpisah dari ZOOM_CRED_KEY, biar kalau
+# salah satu bocor/dirotasi, yang lain gak ikut kebuka. Bikin sekali:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+IPAYMU_CRED_KEY = os.getenv("IPAYMU_CRED_KEY", "")
+
 # Link Zoom dibuat H-berapa jam sebelum sesi. Sengaja mepet, bukan pas sesi
 # dijadwalkan: akun Zoom-nya dirotasi ~2 minggu sekali, jadi meeting yang dibuat
 # jauh-jauh hari bisa mati hostnya pas hari-H.
