@@ -97,7 +97,13 @@ export default function NotificationBell() {
   };
 
   return (
-    <div className="relative z-50" ref={wrapRef}>
+    // h-11 + flex items-center -- SENGAJA disamakan tingginya sama bungkus
+    // tombol profil (avatar 36px + py-1 = 44px total), walau tombol lonceng
+    // sendiri cuma 36px. Bungkus ini yang jadi acuan "top-[120%]" di bawah,
+    // jadi dropdown-nya jatuh di jarak yang PERSIS sama dari navbar kayak
+    // dropdown Dashboard/Logout, bukan lebih mepet gara-gara bungkusnya
+    // lebih pendek.
+    <div className="relative z-50 h-11 flex items-center" ref={wrapRef}>
       <button
         onClick={handleToggle}
         aria-label="Notifikasi"
