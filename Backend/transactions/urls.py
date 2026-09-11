@@ -23,6 +23,7 @@ from .views import (
     toggle_commitment_fee_refund,
     create_ipaymu_session,
     get_transaction_status,
+    cancel_transaction,
     ipaymu_webhook,
     is_ipaymu_available,
     get_ipaymu_setting,
@@ -58,5 +59,6 @@ urlpatterns = [
     path("<str:transaction_id>/verify/", verify_transaction, name="api_transaction_verify"),
     path("<str:transaction_id>/commitment-fee-refund/", toggle_commitment_fee_refund, name="api_commitment_fee_refund_toggle"),
     path("<str:transaction_id>/status/", get_transaction_status, name="api_transaction_status"),
+    path("<str:transaction_id>/cancel/", cancel_transaction, name="api_transaction_cancel"),
     path("<str:transaction_id>/ipaymu/create-session/", create_ipaymu_session, name="api_ipaymu_create_session"),
 ]

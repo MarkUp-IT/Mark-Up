@@ -908,7 +908,7 @@ def _validate_checkout_upload(f, label):
 # Berapa lama transaksi IPAYMU (belum dibayar, tanpa bukti apa pun) boleh
 # menahan reservasi slot mentor / stok sebelum otomatis dilepas lagi.
 # MANUAL sengaja TIDAK pakai ini -- lihat catatan di Transaction.expires_at.
-RESERVATION_MINUTES = 15
+RESERVATION_MINUTES = 5
 
 
 def _release_expired_transactions(queryset=None):
@@ -1076,7 +1076,7 @@ def checkout_product(request):
 
                 # Cek ulang PERSIS di sini, di dalam kuncinya -- kalau slot ini
                 # kelihatan "dibooking" tapi ternyata itu reservasi IPAYMU yang
-                # udah lewat 15 menit tanpa dibayar, lepas dulu sebelum ditolak.
+                # udah lewat 5 menit tanpa dibayar, lepas dulu sebelum ditolak.
                 # Ini yang bikin "klik Bayar" beneran ngecek ulang ketersediaan,
                 # bukan cuma percaya status is_booked yang mungkin sudah basi.
                 if mentor_availability.is_booked:
@@ -1229,6 +1229,54 @@ def get_transaction_status(request, transaction_id):
 
 @csrf_exempt
 @jwt_required
+def cancel_transaction(request, transaction_id):
+    """Pembeli membatalkan sendiri transaksi PENDING miliknya -- dipakai
+    tombol "Batalkan Pembayaran" di halaman Transaksi Saya, terutama buat
+    transaksi IPAYMU yang link bayarnya sudah ditutup/gak jadi dibayar,
+    biar slot/stoknya langsung lepas lagi tanpa perlu nunggu kedaluwarsa
+    otomatis. Dipakai lewat _release_transaction yang sama persis dengan
+    yang dipakai webhook & ACC admin -- idempotent & row-locked, jadi aman
+    kalau pembeli klik dobel atau bentrok dengan webhook yang kebetulan
+    masuk di saat bersamaan (siapa pun yang dapat lock duluan yang menang,
+    yang belakangan cuma no-op)."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        # Punya sendiri saja -- 404 (bukan 403) biar gak bocorin eksistensi
+        # transaksi orang lain, sama seperti create_ipaymu_session.
+        txn = Transaction.objects.get(id=transaction_id, user=request.user)
+    except Transaction.DoesNotExist:
+        return JsonResponse({"detail": "Transaksi tidak ditemukan."}, status=404)
+
+    if txn.payment_status != PaymentStatus.PENDING:
+        return JsonResponse(
+            {"detail": "Transaksi ini sudah tidak bisa dibatalkan."}, status=400
+        )
+
+    txn, sudah = _release_transaction(transaction_id, PaymentStatus.FAILED)
+    if sudah:
+        return JsonResponse(
+            {"detail": "Transaksi ini sudah tidak bisa dibatalkan."}, status=400
+        )
+
+    if not txn.notes:
+        txn.notes = "Dibatalkan oleh pembeli."
+        txn.save(update_fields=["notes"])
+
+    log_audit(
+        request, AuditAction.UPDATE, "transactions", object_id=txn.id,
+        old_data={"status": "PENDING"}, new_data={"status": txn.payment_status, "cancelled_by": "buyer"},
+    )
+
+    return JsonResponse(
+        {"detail": "Transaksi dibatalkan.", "transaction_id": txn.id, "status": txn.payment_status},
+        status=200,
+    )
+
+
+@csrf_exempt
+@jwt_required
 def create_ipaymu_session(request, transaction_id):
     """Bikin sesi pembayaran iPaymu buat satu Transaction yang SUDAH ada
     (dibuat lewat checkout_product atau create_bootcamp_payment dengan
@@ -1370,7 +1418,7 @@ def ipaymu_webhook(request):
             elif txn.payment_status == PaymentStatus.EXPIRED:
                 # Kasus langka tapi serius: pembeli BENERAN bayar di iPaymu,
                 # tapi baru sampai SETELAH reservasinya kami lepas duluan
-                # (lewat 15 menit) -- uangnya sudah masuk, tapi slot/stoknya
+                # (lewat 5 menit) -- uangnya sudah masuk, tapi slot/stoknya
                 # mungkin sudah diambil orang lain. Sengaja TIDAK otomatis
                 # dipaksa PAID lagi di sini (bisa nabrak reservasi baru punya
                 # orang lain) -- butuh admin cek manual & putuskan sendiri.
