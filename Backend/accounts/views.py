@@ -1363,9 +1363,13 @@ def get_student_sidebar_badges(request):
 
 	data = {
 		"my_products": needs_rating,
+		# Yang dibatalkan SENDIRI oleh pembeli (tombol Batalkan Pembayaran di
+		# transaksi IPAYMU) sengaja gak dihitung -- badge ini nandain "perlu
+		# ditindaklanjuti pembeli", bukan riwayat batal yang pembeli sendiri
+		# yang minta.
 		"transactions": Transaction.objects.filter(
 			user=request.user, payment_status=PaymentStatus.FAILED
-		).count(),
+		).exclude(notes="Dibatalkan oleh pembeli.").count(),
 		"settings": 0 if request.user.is_profile_complete() else 1,
 	}
 

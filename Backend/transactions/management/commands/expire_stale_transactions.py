@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 class Command(BaseCommand):
     help = (
         "Lepas reservasi slot mentor / stok produk milik transaksi iPaymu yang "
-        "sudah lewat 15 menit tanpa dibayar (Transaction.expires_at). MANUAL "
+        "sudah lewat 5 menit tanpa dibayar (Transaction.expires_at). MANUAL "
         "tidak pernah kena ini -- lihat catatan di transactions/models.py. "
         "Jaring pengaman umum di luar pengecekan lazy yang sudah jalan tiap "
         "kali ada yang mau checkout slot/produk yang sama. Dijadwalkan jalan "

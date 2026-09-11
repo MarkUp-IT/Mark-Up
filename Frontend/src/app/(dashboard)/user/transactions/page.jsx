@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { Search, X } from "lucide-react";
+import { toast } from "sonner";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { extractErrorMessage } from "@/lib/formErrors";
 import AttentionBanner from "@/component/AttentionBanner";
 
 const FILTERS = ["Semua", "Lunas", "Diproses", "Ditolak"];
@@ -44,6 +46,35 @@ const typeMeta = {
   MODULE: { label: "Modul", className: "bg-[#3B0E76] text-[#B19EEF]" },
 };
 
+const methodLabels = {
+  BANK_TRANSFER: "Transfer Bank",
+  QRIS: "QRIS",
+  E_WALLET: "E-Wallet",
+  CREDIT_CARD: "Kartu Kredit/Debit",
+  MANUAL: "Transfer Bank",
+};
+
+// method di baris Transaction cuma keisi definitif SETELAH lunas (webhook
+// iPaymu yang ngisi) -- sebelum itu nilainya cuma placeholder default
+// BANK_TRANSFER, gak peduli gateway aslinya apa. Makanya buat transaksi
+// IPAYMU yang masih PENDING, tampilkan "iPaymu" apa adanya, jangan percaya
+// field method-nya dulu.
+function formatMethod(tx) {
+  if (tx.gateway === "IPAYMU") {
+    return tx.status === "PAID" ? `${methodLabels[tx.method] || tx.method} (iPaymu)` : "iPaymu";
+  }
+  return methodLabels[tx.method] || tx.method;
+}
+
+// FAILED dipakai buat dua hal yang beda: ditolak admin, atau dibatalkan
+// sendiri oleh pembeli lewat tombol "Batalkan Pembayaran" (lihat
+// cancel_transaction di backend, yang nandain notes-nya). Bedain labelnya
+// di sini aja -- gak perlu status baru di database buat ini.
+function statusLabel(tx) {
+  if (tx.status === "FAILED" && tx.notes === "Dibatalkan oleh pembeli.") return "Dibatalkan";
+  return statusMeta[tx.status]?.label;
+}
+
 const formatCurrency = (value) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
 
@@ -60,6 +91,7 @@ export default function Transactions() {
   const [selectedTx, setSelectedTx] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const shouldReduceMotion = useReducedMotion() ?? false;
 
   const fetchTransactions = useCallback(async () => {
@@ -73,6 +105,42 @@ export default function Transactions() {
       setLoading(false);
     }
   }, []);
+
+  const handleContinuePayment = async (transactionId) => {
+    if (actionLoading) return;
+    setActionLoading(true);
+    try {
+      const res = await apiRequest(`/api/transactions/${transactionId}/ipaymu/create-session/`, {
+        method: "POST",
+      });
+      // Redirect penuh (bukan router.push) -- tujuannya domain iPaymu, di
+      // luar aplikasi Next.js ini.
+      window.location.href = res.redirect_url;
+    } catch (err) {
+      toast.error("Gagal Melanjutkan Pembayaran", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
+      setActionLoading(false);
+    }
+  };
+
+  const handleCancelPayment = async (transactionId) => {
+    if (actionLoading) return;
+    if (!window.confirm("Yakin batalkan pembayaran ini? Jadwal/stok yang direservasi akan dilepas lagi.")) return;
+    setActionLoading(true);
+    try {
+      await apiRequest(`/api/transactions/${transactionId}/cancel/`, { method: "POST" });
+      toast.success("Pembayaran Dibatalkan");
+      setSelectedTx(null);
+      await fetchTransactions();
+    } catch (err) {
+      toast.error("Gagal Membatalkan Pembayaran", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchTransactions();
@@ -114,8 +182,12 @@ export default function Transactions() {
   const hasAny = transactions.length > 0;
 
   // Pembayaran ditolak inilah yang dihitung badge angka di sidebar
-  // (get_student_sidebar_badges -> payment_status=FAILED).
-  const ditolak = transactions.filter((t) => t.status === "FAILED");
+  // (get_student_sidebar_badges -> payment_status=FAILED). Yang dibatalkan
+  // SENDIRI oleh pembeli (tombol Batalkan Pembayaran) sengaja gak masuk
+  // sini -- itu bukan sesuatu yang perlu "ditindaklanjuti" pembeli lagi.
+  const ditolak = transactions.filter(
+    (t) => t.status === "FAILED" && t.notes !== "Dibatalkan oleh pembeli."
+  );
 
   const filtered = transactions.filter((t) => {
     const matchesFilter = activeFilter === "Semua" || statusMeta[t.status]?.bucket === activeFilter;
@@ -235,7 +307,7 @@ export default function Transactions() {
               </div>
               <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 sm:gap-1.5 shrink-0">
                 <span className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${statusMeta[tx.status]?.className}`}>
-                  {statusMeta[tx.status]?.label}
+                  {statusLabel(tx)}
                 </span>
                 <p className="text-white font-bold text-[16px]">{formatCurrency(tx.amount)}</p>
               </div>
@@ -277,7 +349,7 @@ export default function Transactions() {
                   <h4 className="font-bold text-[17px] text-white leading-snug">{selectedTx.product_title}</h4>
                 </div>
                 <span className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0 ${statusMeta[selectedTx.status]?.className}`}>
-                  {statusMeta[selectedTx.status]?.label}
+                  {statusLabel(selectedTx)}
                 </span>
               </div>
 
@@ -292,7 +364,7 @@ export default function Transactions() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[#9CA3AF]">Metode Pembayaran</span>
-                  <span className="text-white font-medium">{selectedTx.method}</span>
+                  <span className="text-white font-medium">{formatMethod(selectedTx)}</span>
                 </div>
                 {selectedTx.mentor_name && (
                   <div className="flex items-center justify-between">
@@ -315,10 +387,33 @@ export default function Transactions() {
                 </div>
               </div>
 
-              {selectedTx.status === "PENDING" && (
+              {selectedTx.status === "PENDING" && selectedTx.gateway === "MANUAL" && (
                 <p className="text-center text-[#F59E0B] text-[12px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3">
                   Bukti transfer sudah kami terima dan sedang diverifikasi oleh tim kami (maksimal 1x24 jam).
                 </p>
+              )}
+              {selectedTx.status === "PENDING" && selectedTx.gateway === "IPAYMU" && (
+                <div className="flex flex-col gap-3">
+                  <p className="text-center text-[#F59E0B] text-[12px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3">
+                    Belum dibayar. Jadwal/stok kamu direservasi sementara -- selesaikan pembayaran sebelum waktu reservasi habis, atau batalkan kalau tidak jadi.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      onClick={() => handleContinuePayment(selectedTx.transaction_id)}
+                      disabled={actionLoading}
+                      className="flex-1 text-center py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors disabled:opacity-50"
+                    >
+                      Lanjutkan Bayar
+                    </button>
+                    <button
+                      onClick={() => handleCancelPayment(selectedTx.transaction_id)}
+                      disabled={actionLoading}
+                      className="flex-1 text-center py-3 rounded-[8px] border border-[#EF4444]/40 text-[#EF4444] font-semibold text-[13px] hover:bg-[#EF4444]/10 transition-colors disabled:opacity-50"
+                    >
+                      Batalkan Pembayaran
+                    </button>
+                  </div>
+                </div>
               )}
               {selectedTx.proof_of_payment && (
                 <a

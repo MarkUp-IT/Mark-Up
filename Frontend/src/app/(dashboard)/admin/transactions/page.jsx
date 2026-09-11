@@ -32,6 +32,25 @@ const STATUS_META = {
 
 const STATUS_FILTERS = ["Semua", "PENDING", "PAID", "FAILED", "EXPIRED", "REFUNDED"];
 
+const METHOD_LABELS = {
+  BANK_TRANSFER: "Transfer Bank",
+  QRIS: "QRIS",
+  E_WALLET: "E-Wallet",
+  CREDIT_CARD: "Kartu Kredit/Debit",
+  MANUAL: "Transfer Bank",
+};
+
+// method di baris Transaction cuma keisi definitif SETELAH lunas (webhook
+// iPaymu yang ngisi) -- sebelum itu nilainya cuma placeholder default
+// BANK_TRANSFER, gak peduli gateway aslinya apa.
+function formatMethod(tx) {
+  if (!tx) return "-";
+  if (tx.gateway === "IPAYMU") {
+    return tx.status === "PAID" ? `${METHOD_LABELS[tx.method] || tx.method} (iPaymu)` : "iPaymu";
+  }
+  return METHOD_LABELS[tx.method] || tx.method || "-";
+}
+
 function formatIDR(val) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -397,7 +416,7 @@ export default function Transactions() {
                     Metode Pembayaran
                   </span>
                   <span className="text-[#1E293B] font-medium">
-                    {selectedTx?.method || "-"}
+                    {formatMethod(selectedTx)}
                   </span>
                 </div>
                 {selectedTx?.mentor_name && (
@@ -456,6 +475,10 @@ export default function Transactions() {
                     className="w-full rounded-[8px] border border-[#E2E8F0] object-cover"
                     style={{ maxHeight: "240px" }}
                   />
+                ) : selectedTx?.gateway === "IPAYMU" ? (
+                  <p className="text-[#94A3B8] text-[12px] bg-[#F8FAFC] border border-dashed border-[#E2E8F0] rounded-[8px] px-4 py-6 text-center">
+                    Transaksi iPaymu -- gak ada bukti transfer yang diunggah, pembayaran dikonfirmasi otomatis lewat webhook iPaymu begitu lunas. Tombol di bawah tetap bisa dipakai buat override manual kalau webhook-nya gagal.
+                  </p>
                 ) : (
                   <p className="text-[#94A3B8] text-[12px] bg-[#F8FAFC] border border-dashed border-[#E2E8F0] rounded-[8px] px-4 py-6 text-center">
                     User belum mengunggah bukti transfer.
