@@ -14,7 +14,6 @@ import {
   Image as ImageIcon,
   Trash2,
   Timer,
-  Zap,
 } from "lucide-react";
 import { getAccessToken, API_BASE, apiRequest } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
@@ -22,7 +21,7 @@ import { useBankInfo } from "@/lib/bankInfo";
 import { toast } from "sonner";
 import LoginRequiredDialog from "@/component/LoginRequiredDialog";
 import { useIsLoggedIn } from "@/lib/useIsLoggedIn";
-import { extractErrorMessage } from "@/lib/formErrors";
+import QrisPaymentPanel from "@/component/QrisPaymentPanel";
 
 const NAVBAR_CLEARANCE = 150;
 const CONTENT_WIDTH = 640;
@@ -217,43 +216,34 @@ function CheckoutPaymentPageInner() {
       }
     };
 
-  const handleConfirmIpaymu = async () => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    setSubmitError("");
-    try {
-      // Dua langkah: (1) bikin Transaction-nya dulu lewat endpoint checkout
-      // yang sama seperti jalur manual, cuma dengan payment_gateway=IPAYMU
-      // & tanpa file, (2) minta sesi bayar buat Transaction itu. Dipisah
-      // gitu (bukan digabung 1 endpoint) karena create-session dipakai juga
-      // sama halaman bayar pendaftaran bootcamp yang beda endpoint checkout-nya.
-      const checkoutRes = await apiRequest("/api/transactions/checkout/", {
-        method: "POST",
-        body: {
-          product_id: checkoutSummary.productId,
-          buyer_phone: buyerInfo.phone,
-          ...(voucherCode ? { voucher_code: voucherCode } : {}),
-          ...(selectedSlot?.id ? { availability_slot_id: selectedSlot.id } : {}),
-          ...(notes ? { notes } : {}),
-          payment_gateway: "IPAYMU",
-        },
-      });
+  // Dipanggil QrisPaymentPanel -- cuma tugas bikin Transaction-nya (endpoint
+  // checkout yang sama seperti jalur manual, cuma payment_gateway=IPAYMU &
+  // tanpa file), sisanya (minta QR, gambar QR, countdown, polling) ditangani
+  // panel itu sendiri.
+  const handleCreateIpaymuTransaction = async () => {
+    const checkoutRes = await apiRequest("/api/transactions/checkout/", {
+      method: "POST",
+      body: {
+        product_id: checkoutSummary.productId,
+        buyer_phone: buyerInfo.phone,
+        ...(voucherCode ? { voucher_code: voucherCode } : {}),
+        ...(selectedSlot?.id ? { availability_slot_id: selectedSlot.id } : {}),
+        ...(notes ? { notes } : {}),
+        payment_gateway: "IPAYMU",
+      },
+    });
+    return checkoutRes.transaction_id;
+  };
 
-      const sessionRes = await apiRequest(
-        `/api/transactions/${checkoutRes.transaction_id}/ipaymu/create-session/`,
-        { method: "POST" }
-      );
-
+  const handleQrisPaid = () => {
+    toast.success("Pembayaran Berhasil", {
+      description: "Pembayaran berhasil dikonfirmasi. Mengalihkan ke halaman transaksi...",
+    });
+    setIsLeavingAfterSuccess(true);
+    setTimeout(() => {
       reset();
-      // Redirect penuh (bukan router.push) -- tujuannya domain iPaymu, di
-      // luar aplikasi Next.js ini.
-      window.location.href = sessionRes.redirect_url;
-    } catch (err) {
-      const pesan = extractErrorMessage(err, "Gagal memulai pembayaran iPaymu.");
-      setSubmitError(pesan);
-      toast.error("Gagal Memulai Pembayaran", { description: pesan });
-      setIsSubmitting(false);
-    }
+      router.push("/user/transactions");
+    }, 1500);
   };
 
   const fadeIn = {
@@ -316,11 +306,11 @@ function CheckoutPaymentPageInner() {
 
             <motion.div {...fadeIn} className="flex flex-col gap-1">
               <h1 className="text-[28px] font-bold font-poppins leading-tight">
-                {gateway === "IPAYMU" ? "Bayar dengan iPaymu" : "Transfer & Unggah Bukti"}
+                {gateway === "IPAYMU" ? "Bayar dengan QRIS" : "Transfer & Unggah Bukti"}
               </h1>
               <p className="text-[#A19DAB] text-[13px]">
                 {gateway === "IPAYMU"
-                  ? "Pilih metode di halaman iPaymu, akses terbuka otomatis begitu lunas."
+                  ? "Scan QRIS-nya, akses terbuka otomatis begitu lunas -- gak perlu upload bukti."
                   : "Transfer sesuai nominal, unggah bukti sebelum waktu habis."}
               </p>
             </motion.div>
@@ -333,7 +323,7 @@ function CheckoutPaymentPageInner() {
                     gateway === "IPAYMU" ? "bg-[#148F89] text-white" : "text-[#9CA3AF] hover:text-white"
                   }`}
                 >
-                  Bayar Otomatis (iPaymu)
+                  Bayar QRIS
                 </button>
                 <button
                   onClick={() => setGateway("MANUAL")}
@@ -447,34 +437,10 @@ function CheckoutPaymentPageInner() {
                     {...fadeIn}
                     className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-3"
                   >
-                    <div className="flex items-center gap-2">
-                      <Zap size={16} className="text-[#E2E8F0]" />
-                      <span className="font-bold text-[14px] text-white">Bayar dengan iPaymu</span>
-                    </div>
-                    <p className="text-[#9CA3AF] text-[12px] leading-relaxed">
-                      Kamu bakal diarahkan ke halaman iPaymu buat pilih metode (VA, QRIS, e-wallet,
-                      atau kartu) dan menyelesaikan pembayaran di sana. Begitu lunas, akses langsung
-                      terbuka otomatis -- gak perlu upload bukti apa pun.
-                    </p>
-
-                    {submitError && (
-                      <p className="flex items-start gap-2 text-red-400 text-[11px] bg-red-500/10 border border-red-500/30 rounded-[8px] px-3 py-2.5">
-                        <AlertCircle size={13} className="shrink-0 mt-0.5" />
-                        {submitError}
-                      </p>
-                    )}
-
-                    <button
-                      onClick={handleConfirmIpaymu}
-                      disabled={isSubmitting}
-                      className={`w-full py-3.5 rounded-[8px] font-bold text-[13px] transition-all ${focusRing} ${
-                        isSubmitting
-                          ? "bg-[#148F89]/70 text-white cursor-wait"
-                          : "bg-[#148F89] text-white hover:bg-[#117A75]"
-                      }`}
-                    >
-                      {isSubmitting ? "Menyiapkan..." : "Lanjut ke iPaymu"}
-                    </button>
+                    <QrisPaymentPanel
+                      onCreateTransaction={handleCreateIpaymuTransaction}
+                      onPaid={handleQrisPaid}
+                    />
                   </motion.div>
                 ) : (
                 <>

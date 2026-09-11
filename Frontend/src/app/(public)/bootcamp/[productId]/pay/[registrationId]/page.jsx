@@ -3,11 +3,11 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Landmark, Copy, CheckCircle2, AlertCircle, Upload, FileText, Trash2, Clock, AlertTriangle, Users, Zap } from "lucide-react";
+import { Landmark, Copy, CheckCircle2, AlertCircle, Upload, FileText, Trash2, Clock, AlertTriangle, Users } from "lucide-react";
 import { apiRequest, apiRequestRaw, getAccessToken } from "@/lib/api";
 import { useBankInfo } from "@/lib/bankInfo";
 import { toast } from "sonner";
-import { extractErrorMessage } from "@/lib/formErrors";
+import QrisPaymentPanel from "@/component/QrisPaymentPanel";
 
 const MAX_PROOF_SIZE = 5 * 1024 * 1024;
 
@@ -125,37 +125,28 @@ export default function BootcampPaymentPage() {
     }
   };
 
-  const handleConfirmIpaymu = async () => {
-    if (submitting) return;
-    setSubmitting(true);
-    try {
-      // Dua langkah, sama persis alasannya kayak halaman checkout produk
-      // lain: (1) bikin Transaction-nya dulu (endpoint bayar yang sama,
-      // cuma payment_gateway=IPAYMU & tanpa file), (2) minta sesi bayar
-      // buat Transaction itu lewat endpoint iPaymu yang generic (dipakai
-      // bareng jalur checkout produk lain, gak ada logika beda di situ).
-      const payRes = await apiRequest(`/api/products/bootcamp-registrations/${registrationId}/pay/`, {
-        method: "POST",
-        body: {
-          payment_gateway: "IPAYMU",
-          ...(referralCode.trim() ? { referral_code: referralCode.trim() } : {}),
-          ...(invitedEmails.trim() ? { invited_emails: invitedEmails.trim() } : {}),
-        },
-      });
+  // Dipanggil QrisPaymentPanel -- cuma tugas bikin Transaction-nya (endpoint
+  // bayar yang sama, cuma payment_gateway=IPAYMU & tanpa file), sisanya
+  // (minta QR, gambar QR, countdown, polling) ditangani panel itu sendiri.
+  const handleCreateIpaymuTransaction = async () => {
+    const payRes = await apiRequest(`/api/products/bootcamp-registrations/${registrationId}/pay/`, {
+      method: "POST",
+      body: {
+        payment_gateway: "IPAYMU",
+        ...(referralCode.trim() ? { referral_code: referralCode.trim() } : {}),
+        ...(invitedEmails.trim() ? { invited_emails: invitedEmails.trim() } : {}),
+      },
+    });
+    const txnId = payRes?.registration?.payment?.transaction_id;
+    if (!txnId) throw new Error("Transaksi tidak ditemukan setelah pembayaran dibuat.");
+    return txnId;
+  };
 
-      const txnId = payRes?.registration?.payment?.transaction_id;
-      if (!txnId) throw new Error("Transaksi tidak ditemukan setelah pembayaran dibuat.");
-
-      const sessionRes = await apiRequest(`/api/transactions/${txnId}/ipaymu/create-session/`, {
-        method: "POST",
-      });
-
-      window.location.href = sessionRes.redirect_url;
-    } catch (err) {
-      const pesan = extractErrorMessage(err, "Gagal memulai pembayaran iPaymu.");
-      toast.error("Gagal Memulai Pembayaran", { description: pesan });
-      setSubmitting(false);
-    }
+  const handleQrisPaid = () => {
+    toast.success("Pembayaran Berhasil", { description: "Sampai jumpa di kelas!" });
+    setReferralCode("");
+    setInvitedEmails("");
+    fetchRegistration();
   };
 
   const payment = registration?.payment;
@@ -317,7 +308,7 @@ export default function BootcampPaymentPage() {
                         gateway === "IPAYMU" ? "bg-[#148F89] text-white" : "text-[#9CA3AF] hover:text-white"
                       }`}
                     >
-                      Bayar Otomatis (iPaymu)
+                      Bayar QRIS
                     </button>
                     <button
                       onClick={() => setGateway("MANUAL")}
@@ -377,22 +368,10 @@ export default function BootcampPaymentPage() {
 
                 {gateway === "IPAYMU" ? (
                   <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-3">
-                    <div className="flex items-center gap-2">
-                      <Zap size={16} className="text-[#E2E8F0]" />
-                      <span className="font-bold text-[14px] text-white">Bayar dengan iPaymu</span>
-                    </div>
-                    <p className="text-[#9CA3AF] text-[12px] leading-relaxed">
-                      Kamu bakal diarahkan ke halaman iPaymu buat pilih metode (VA, QRIS, e-wallet,
-                      atau kartu) dan menyelesaikan pembayaran di sana. Begitu lunas, akses langsung
-                      terbuka otomatis -- gak perlu upload bukti apa pun.
-                    </p>
-                    <button
-                      onClick={handleConfirmIpaymu}
-                      disabled={submitting}
-                      className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[14px] hover:bg-[#117A75] transition-colors disabled:opacity-50"
-                    >
-                      {submitting ? "Menyiapkan..." : "Lanjut ke iPaymu"}
-                    </button>
+                    <QrisPaymentPanel
+                      onCreateTransaction={handleCreateIpaymuTransaction}
+                      onPaid={handleQrisPaid}
+                    />
                   </div>
                 ) : (
                 <>
