@@ -14,13 +14,15 @@ import {
   Image as ImageIcon,
   Trash2,
   Timer,
+  Zap,
 } from "lucide-react";
-import { getAccessToken, API_BASE } from "@/lib/api";
+import { getAccessToken, API_BASE, apiRequest } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
 import { useBankInfo } from "@/lib/bankInfo";
 import { toast } from "sonner";
 import LoginRequiredDialog from "@/component/LoginRequiredDialog";
 import { useIsLoggedIn } from "@/lib/useIsLoggedIn";
+import { extractErrorMessage } from "@/lib/formErrors";
 
 const NAVBAR_CLEARANCE = 150;
 const CONTENT_WIDTH = 640;
@@ -103,6 +105,13 @@ function CheckoutPaymentPageInner() {
 
   const [isLeavingAfterSuccess, setIsLeavingAfterSuccess] = useState(false);
 
+  // "MANUAL" (transfer + upload bukti) atau "IPAYMU" (redirect, otomatis).
+  // Pemilihnya cuma muncul kalau ipaymuEnabled -- selama admin belum
+  // menyalakan IpaymuSetting.is_enabled, halaman ini berperilaku PERSIS
+  // seperti sebelum iPaymu ada.
+  const [gateway, setGateway] = useState("MANUAL");
+  const [ipaymuEnabled, setIpaymuEnabled] = useState(false);
+
   useEffect(() => {
     if (!checkoutSummary.productId && !isLeavingAfterSuccess) {
       router.replace(`/checkout/${params.productId}`);
@@ -110,6 +119,24 @@ function CheckoutPaymentPageInner() {
   }, [checkoutSummary.productId, isLeavingAfterSuccess, params.productId, router]);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiRequest("/api/transactions/ipaymu/available/", { auth: false });
+        if (!cancelled && res?.enabled) setIpaymuEnabled(true);
+      } catch {
+        // Diam saja -- kalau gagal dicek, anggap gak tersedia, tetap fallback ke transfer manual.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    // Timer reservasi cuma relevan buat jalur manual (nahan slot/stok
+    // sampai bukti diunggah) -- begitu pembeli pilih iPaymu, dia bakal
+    // ditinggalkan halaman ini duluan buat dialihkan ke iPaymu, jadi
+    // hitung mundur di sini gak ada gunanya buat cabang itu.
+    if (gateway !== "MANUAL") return undefined;
     const interval = setInterval(() => {
       setSecondsLeft((s) => {
         if (s <= 1) {
@@ -121,7 +148,7 @@ function CheckoutPaymentPageInner() {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [gateway]);
 
   const handleCopyBank = () => {
     navigator.clipboard.writeText(bankInfo.account.replace(/\s/g, ""));
@@ -189,6 +216,46 @@ function CheckoutPaymentPageInner() {
         setIsSubmitting(false);
       }
     };
+
+  const handleConfirmIpaymu = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError("");
+    try {
+      // Dua langkah: (1) bikin Transaction-nya dulu lewat endpoint checkout
+      // yang sama seperti jalur manual, cuma dengan payment_gateway=IPAYMU
+      // & tanpa file, (2) minta sesi bayar buat Transaction itu. Dipisah
+      // gitu (bukan digabung 1 endpoint) karena create-session dipakai juga
+      // sama halaman bayar pendaftaran bootcamp yang beda endpoint checkout-nya.
+      const checkoutRes = await apiRequest("/api/transactions/checkout/", {
+        method: "POST",
+        body: {
+          product_id: checkoutSummary.productId,
+          buyer_phone: buyerInfo.phone,
+          ...(voucherCode ? { voucher_code: voucherCode } : {}),
+          ...(selectedSlot?.id ? { availability_slot_id: selectedSlot.id } : {}),
+          ...(notes ? { notes } : {}),
+          payment_gateway: "IPAYMU",
+        },
+      });
+
+      const sessionRes = await apiRequest(
+        `/api/transactions/${checkoutRes.transaction_id}/ipaymu/create-session/`,
+        { method: "POST" }
+      );
+
+      reset();
+      // Redirect penuh (bukan router.push) -- tujuannya domain iPaymu, di
+      // luar aplikasi Next.js ini.
+      window.location.href = sessionRes.redirect_url;
+    } catch (err) {
+      const pesan = extractErrorMessage(err, "Gagal memulai pembayaran iPaymu.");
+      setSubmitError(pesan);
+      toast.error("Gagal Memulai Pembayaran", { description: pesan });
+      setIsSubmitting(false);
+    }
+  };
+
   const fadeIn = {
     initial: { opacity: 0, y: shouldReduceMotion ? 0 : 12 },
     animate: { opacity: 1, y: 0 },
@@ -245,14 +312,37 @@ function CheckoutPaymentPageInner() {
 
             <motion.div {...fadeIn} className="flex flex-col gap-1">
               <h1 className="text-[28px] font-bold font-poppins leading-tight">
-                Transfer & Unggah Bukti
+                {gateway === "IPAYMU" ? "Bayar dengan iPaymu" : "Transfer & Unggah Bukti"}
               </h1>
               <p className="text-[#A19DAB] text-[13px]">
-                Transfer sesuai nominal, unggah bukti sebelum waktu habis.
+                {gateway === "IPAYMU"
+                  ? "Pilih metode di halaman iPaymu, akses terbuka otomatis begitu lunas."
+                  : "Transfer sesuai nominal, unggah bukti sebelum waktu habis."}
               </p>
             </motion.div>
 
-            {isExpired ? (
+            {ipaymuEnabled && (
+              <motion.div {...fadeIn} className="flex items-center gap-2 bg-[#170F26] border border-[#2D2342] rounded-[12px] p-1.5">
+                <button
+                  onClick={() => setGateway("IPAYMU")}
+                  className={`flex-1 py-2 rounded-[8px] text-[12.5px] font-semibold transition-colors ${
+                    gateway === "IPAYMU" ? "bg-[#148F89] text-white" : "text-[#9CA3AF] hover:text-white"
+                  }`}
+                >
+                  Bayar Otomatis (iPaymu)
+                </button>
+                <button
+                  onClick={() => setGateway("MANUAL")}
+                  className={`flex-1 py-2 rounded-[8px] text-[12.5px] font-semibold transition-colors ${
+                    gateway === "MANUAL" ? "bg-[#148F89] text-white" : "text-[#9CA3AF] hover:text-white"
+                  }`}
+                >
+                  Transfer Manual
+                </button>
+              </motion.div>
+            )}
+
+            {isExpired && gateway === "MANUAL" ? (
               <motion.div
                 {...fadeIn}
                 className="bg-[#170F26] border border-red-500/30 rounded-[12px] p-8 flex flex-col items-center text-center gap-4"
@@ -320,23 +410,61 @@ function CheckoutPaymentPageInner() {
                   )}
                 </motion.div>
 
-                <motion.div
-                  {...fadeIn}
-                  className={`flex items-center justify-center gap-2.5 rounded-[8px] px-4 py-3 border ${
-                    secondsLeft <= 60
-                      ? "bg-red-500/10 border-red-500/30 text-red-400"
-                      : "bg-[#F59E0B]/10 border-[#F59E0B]/30 text-[#FBBF24]"
-                  }`}
-                >
-                  <Timer size={15} className="shrink-0" />
-                  <p className="text-[12px] font-medium">
-                    {isMentoring ? "Jadwal direservasi selama" : "Selesaikan dalam"}{" "}
-                    <span className="font-mono font-bold text-[14px]">
-                      {formatCountdown(secondsLeft)}
-                    </span>
-                  </p>
-                </motion.div>
+                {gateway === "MANUAL" && (
+                  <motion.div
+                    {...fadeIn}
+                    className={`flex items-center justify-center gap-2.5 rounded-[8px] px-4 py-3 border ${
+                      secondsLeft <= 60
+                        ? "bg-red-500/10 border-red-500/30 text-red-400"
+                        : "bg-[#F59E0B]/10 border-[#F59E0B]/30 text-[#FBBF24]"
+                    }`}
+                  >
+                    <Timer size={15} className="shrink-0" />
+                    <p className="text-[12px] font-medium">
+                      {isMentoring ? "Jadwal direservasi selama" : "Selesaikan dalam"}{" "}
+                      <span className="font-mono font-bold text-[14px]">
+                        {formatCountdown(secondsLeft)}
+                      </span>
+                    </p>
+                  </motion.div>
+                )}
 
+                {gateway === "IPAYMU" ? (
+                  <motion.div
+                    {...fadeIn}
+                    className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Zap size={16} className="text-[#E2E8F0]" />
+                      <span className="font-bold text-[14px] text-white">Bayar dengan iPaymu</span>
+                    </div>
+                    <p className="text-[#9CA3AF] text-[12px] leading-relaxed">
+                      Kamu bakal diarahkan ke halaman iPaymu buat pilih metode (VA, QRIS, e-wallet,
+                      atau kartu) dan menyelesaikan pembayaran di sana. Begitu lunas, akses langsung
+                      terbuka otomatis -- gak perlu upload bukti apa pun.
+                    </p>
+
+                    {submitError && (
+                      <p className="flex items-start gap-2 text-red-400 text-[11px] bg-red-500/10 border border-red-500/30 rounded-[8px] px-3 py-2.5">
+                        <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                        {submitError}
+                      </p>
+                    )}
+
+                    <button
+                      onClick={handleConfirmIpaymu}
+                      disabled={isSubmitting}
+                      className={`w-full py-3.5 rounded-[8px] font-bold text-[13px] transition-all ${focusRing} ${
+                        isSubmitting
+                          ? "bg-[#148F89]/70 text-white cursor-wait"
+                          : "bg-[#148F89] text-white hover:bg-[#117A75]"
+                      }`}
+                    >
+                      {isSubmitting ? "Menyiapkan..." : "Lanjut ke iPaymu"}
+                    </button>
+                  </motion.div>
+                ) : (
+                <>
                 <motion.div
                   {...fadeIn}
                   className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-3"
@@ -469,6 +597,8 @@ function CheckoutPaymentPageInner() {
                     mengecek, biasanya 1x24 jam.
                   </p>
                 </motion.div>
+                </>
+                )}
               </>
             )}
           </div>

@@ -62,6 +62,7 @@ from django.db.models import Q
 from mentors.models import MentorAvailability
 from transactions.models import (
     Transaction, TransactionItem, PaymentStatus, ReferralCode, ReferralCodeUsage,
+    PaymentGateway, IpaymuSetting,
 )
 from django.views.decorators.csrf import csrf_exempt
 
@@ -3524,15 +3525,36 @@ def create_bootcamp_payment(request, registration_id):
             {"detail": "Sudah ada pembayaran yang sedang diproses/lunas untuk pendaftaran ini."}, status=400
         )
 
-    proof_file = request.FILES.get("proof_of_payment")
-    if not proof_file:
-        return JsonResponse({"detail": "Bukti pembayaran diperlukan."}, status=400)
+    # request.POST kosong kalau body-nya JSON (bukan form-encoded/multipart)
+    # -- jalur iPaymu di bawah dikirim FE sebagai JSON (gak ada file sama
+    # sekali), jadi field-field non-file-nya dibaca lewat get_request_data
+    # yang mengenali dua-duanya, bukan request.POST langsung.
+    request_data = get_request_data(request)
+    if request_data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
-    ext = proof_file.name.rsplit(".", 1)[-1].lower() if "." in proof_file.name else ""
-    if ext not in ALLOWED_PAYMENT_PROOF_EXTENSIONS:
-        return JsonResponse({"detail": "Format file tidak didukung."}, status=400)
-    if proof_file.size > MAX_PAYMENT_PROOF_SIZE:
-        return JsonResponse({"detail": "Ukuran file maksimal 5MB."}, status=400)
+    # payment_gateway OPT-IN -- perlakuan & alasannya persis sama seperti di
+    # transactions.views.checkout_product: gak dikirim = jalur manual apa
+    # adanya seperti sebelum iPaymu ada.
+    payment_gateway = (request_data.get("payment_gateway") or PaymentGateway.MANUAL).upper()
+    if payment_gateway not in (PaymentGateway.MANUAL, PaymentGateway.IPAYMU):
+        return JsonResponse({"detail": "payment_gateway tidak dikenali."}, status=400)
+
+    proof_file = request.FILES.get("proof_of_payment")
+    if payment_gateway == PaymentGateway.MANUAL:
+        if not proof_file:
+            return JsonResponse({"detail": "Bukti pembayaran diperlukan."}, status=400)
+
+        ext = proof_file.name.rsplit(".", 1)[-1].lower() if "." in proof_file.name else ""
+        if ext not in ALLOWED_PAYMENT_PROOF_EXTENSIONS:
+            return JsonResponse({"detail": "Format file tidak didukung."}, status=400)
+        if proof_file.size > MAX_PAYMENT_PROOF_SIZE:
+            return JsonResponse({"detail": "Ukuran file maksimal 5MB."}, status=400)
+    else:
+        if not IpaymuSetting.get_solo().is_enabled:
+            return JsonResponse(
+                {"detail": "Pembayaran iPaymu belum aktif, gunakan transfer bank manual."}, status=400
+            )
 
     package = registration.package
     bootcamp_product = package.bootcamp
@@ -3554,7 +3576,7 @@ def create_bootcamp_payment(request, registration_id):
     # Kode referral -- dipotong CUMA dari harga paket, commitment fee gak ikut
     # didiskon karena duit itu bukan pendapatan (dikembalikan penuh ke peserta
     # di akhir program), jadi mendiskonnya sama aja bikin selisih kas pas refund.
-    voucher_code = (request.POST.get("referral_code") or "").strip()
+    voucher_code = (request_data.get("referral_code") or "").strip()
     referral_code = None
     discount_amount = Decimal("0")
     if voucher_code:
@@ -3577,7 +3599,7 @@ def create_bootcamp_payment(request, registration_id):
     invited_valid = []
     invite_errors = []
     if package.referral_invite_enabled:
-        mentah = request.POST.get("invited_emails") or ""
+        mentah = request_data.get("invited_emails") or ""
         emails_diajukan = [
             e.strip().lower() for e in mentah.replace(",", "\n").splitlines() if e.strip()
         ]
@@ -3656,9 +3678,10 @@ def create_bootcamp_payment(request, registration_id):
                 tax=0,
                 grand_total=grand_total,
                 payment_status=PaymentStatus.PENDING,
-                proof_of_payment=proof_file,
+                proof_of_payment=proof_file if payment_gateway == PaymentGateway.MANUAL else None,
                 bootcamp_registration=registration,
                 commitment_fee_amount=commitment_fee_amount,
+                gateway=payment_gateway,
             )
             TransactionItem.objects.create(
                 transaction=txn,
@@ -3701,16 +3724,20 @@ def create_bootcamp_payment(request, registration_id):
             status=500,
         )
 
-    notify_team(
-        f"Pembayaran bootcamp baru menunggu verifikasi ({txn.id})",
-        f"Ada pembayaran pendaftaran bootcamp yang perlu diverifikasi admin.\n\n"
-        f"ID Transaksi: {txn.id}\n"
-        f"Pembeli: {request.user.fullname} ({request.user.email})\n"
-        f"Bootcamp: {bootcamp_product.title}\n"
-        f"Paket: {package.name}\n"
-        f"Total: Rp {txn.grand_total}\n\n"
-        f"Cek & verifikasi di dashboard admin -> Transaksi.",
-    )
+    # Cuma buat jalur MANUAL -- pembayaran iPaymu diverifikasi otomatis
+    # lewat webhook, notifikasi "tolong verifikasi" di sini gak relevan
+    # buat itu (lihat catatan sama di checkout_product).
+    if payment_gateway == PaymentGateway.MANUAL:
+        notify_team(
+            f"Pembayaran bootcamp baru menunggu verifikasi ({txn.id})",
+            f"Ada pembayaran pendaftaran bootcamp yang perlu diverifikasi admin.\n\n"
+            f"ID Transaksi: {txn.id}\n"
+            f"Pembeli: {request.user.fullname} ({request.user.email})\n"
+            f"Bootcamp: {bootcamp_product.title}\n"
+            f"Paket: {package.name}\n"
+            f"Total: Rp {txn.grand_total}\n\n"
+            f"Cek & verifikasi di dashboard admin -> Transaksi.",
+        )
 
     return JsonResponse(
         {

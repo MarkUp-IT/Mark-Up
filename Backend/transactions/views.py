@@ -1,10 +1,14 @@
 import logging
 from decimal import Decimal
 
+from django.conf import settings
 from django.db.models import Case, DecimalField, ExpressionWrapper, F, Sum, When
-from django.http import JsonResponse, HttpResponseNotAllowed, HttpResponseBadRequest
+from django.http import JsonResponse, HttpResponseNotAllowed, HttpResponseBadRequest, HttpResponse
+from django.urls import reverse
 from .models import (
     PaymentStatus,
+    PaymentMethod,
+    PaymentGateway,
     Transaction,
     TransactionItem,
     ReferralCode,
@@ -12,6 +16,7 @@ from .models import (
     DiscountType,
     MentorPayout,
     PayoutStatus,
+    IpaymuSetting,
 )
 from products.models import (
     Product,
@@ -213,6 +218,132 @@ def _provision_team_members(leader_txn):
         bootcamp.save(update_fields=["sold_count"])
 
 
+def _mark_transaction_paid(transaction_id):
+    """Inti "tandai lunas" -- IDEMPOTENT & terkunci (select_for_update),
+    jadi aman dipanggil berkali-kali dari mana pun (admin PATCH manual lewat
+    verify_transaction, webhook iPaymu, atau webhook yang retry) tanpa
+    pernah memberi akses dobel. Return (txn, sudah_diproses_sebelumnya: bool).
+    Raises Transaction.DoesNotExist kalau id-nya gak ada.
+
+    Ini SATU-SATUNYA tempat akses produk beneran diberikan -- baik dari
+    ACC manual admin maupun konfirmasi otomatis iPaymu lewat jalur yang
+    persis sama, supaya perilakunya gak pernah berbeda tergantung siapa
+    yang memicunya."""
+    with db_transaction.atomic():
+        # of=("self",) -- kunci CUMA baris Transaction-nya sendiri, bukan ikut
+        # mengunci tabel bootcamp_registration/package yang di-JOIN. Postgres
+        # menolak "FOR UPDATE" di sisi nullable dari OUTER JOIN begitu aja
+        # (bootcamp_registration nullable=True), jadi tanpa `of` di sini bakal
+        # kena NotSupportedError persis di titik yang paling sering dipanggil.
+        txn = Transaction.objects.select_for_update(of=("self",)).select_related(
+            "user", "bootcamp_registration__package"
+        ).get(id=transaction_id)
+
+        if txn.payment_status != PaymentStatus.PENDING:
+            return txn, True
+
+        items = list(
+            txn.items.select_related(
+                "product__mentoring_detail",
+                "product__module_detail",
+                "product__bootcamp_detail",
+                "mentor_availability",
+            )
+        )
+
+        # Baru di sinilah akses produk beneran dikasih -- UserLibrary +
+        # sesi-sesinya, plus sold_count baru nambah sekarang (bukan pas
+        # checkout), karena transaksi resmi dianggap "terjual" setelah
+        # diverifikasi (admin ACC atau webhook iPaymu), bukan pas user baru
+        # upload/diarahkan bayar.
+        txn.payment_status = PaymentStatus.PAID
+        txn.paid_at = timezone.now()
+
+        for item in items:
+            product = item.product
+            detail = _get_checkout_detail(product)
+
+            user_library, _ = UserLibrary.objects.get_or_create(
+                user=txn.user, product=product,
+            )
+
+            # Catat paket yang dibeli (kalau ada) -- dipakai buat nge-gate
+            # benefit per paket (resource/sesi eksklusif). Cuma keisi
+            # buat pembayaran yang lewat alur BootcampRegistration; beli
+            # langsung lewat checkout_product lama gak punya info paket.
+            if (
+                txn.bootcamp_registration_id
+                and user_library.package_id != txn.bootcamp_registration.package_id
+            ):
+                user_library.package = txn.bootcamp_registration.package
+                user_library.save(update_fields=["package"])
+
+            if product.type == ProductType.MENTORING and item.mentor_availability:
+                _create_mentoring_sessions(user_library, detail, item.mentor_availability)
+            elif product.type == ProductType.BOOTCAMP:
+                _create_bootcamp_sessions(user_library, product)
+
+            if detail is not None:
+                detail.sold_count = (detail.sold_count or 0) + item.quantity
+                detail.save(update_fields=["sold_count"])
+
+        # Kalau transaksi ini punya bootcamp_registration yang berstatus
+        # KETUA tim, begitu pembayarannya di-ACC di sinilah SEMUA anggota
+        # yang diundang otomatis dapat pendaftaran + akses sekaligus --
+        # mereka sendiri tidak pernah lewat alur bayar apa pun.
+        if txn.bootcamp_registration_id:
+            _provision_team_members(txn)
+
+        txn.save()
+        return txn, False
+
+
+def _release_transaction(transaction_id, status):
+    """Lawan dari _mark_transaction_paid -- lepas lagi semua yang di-reserve
+    pas checkout (slot mentor, stok, kuota kode referral) supaya bisa
+    dipakai/dibeli ulang. `status` = PaymentStatus.FAILED (ditolak admin/
+    kadaluarsa dari sisi kita) atau .EXPIRED (sesi iPaymu kadaluarsa).
+    IDEMPOTENT & terkunci, sama seperti _mark_transaction_paid. Return
+    (txn, sudah_diproses_sebelumnya: bool)."""
+    with db_transaction.atomic():
+        txn = Transaction.objects.select_for_update(of=("self",)).select_related("user").get(id=transaction_id)
+
+        if txn.payment_status != PaymentStatus.PENDING:
+            return txn, True
+
+        items = list(
+            txn.items.select_related(
+                "product__mentoring_detail",
+                "product__module_detail",
+                "product__bootcamp_detail",
+                "mentor_availability",
+            )
+        )
+
+        txn.payment_status = status
+
+        for item in items:
+            detail = _get_checkout_detail(item.product)
+
+            if item.mentor_availability_id:
+                item.mentor_availability.is_booked = False
+                item.mentor_availability.save(update_fields=["is_booked"])
+
+            if detail is not None and getattr(detail, "stock", None) is not None:
+                detail.stock = (detail.stock or 0) + item.quantity
+                detail.save(update_fields=["stock"])
+
+        usage = ReferralCodeUsage.objects.filter(transaction=txn).select_related("referral_code").first()
+        if usage:
+            referral_code = usage.referral_code
+            referral_code.used_count = max(0, referral_code.used_count - 1)
+            referral_code.save(update_fields=["used_count"])
+            usage.delete()
+
+        txn.save()
+        return txn, False
+
+
 @csrf_exempt
 @jwt_required
 @role_required(UserRole.ADMIN)
@@ -221,7 +352,7 @@ def verify_transaction(request, transaction_id):
         return HttpResponseNotAllowed(["PATCH"])
 
     try:
-        txn = Transaction.objects.select_related("user").get(id=transaction_id)
+        txn = Transaction.objects.get(id=transaction_id)
     except Transaction.DoesNotExist:
         return JsonResponse({"detail": "Transaksi tidak ditemukan."}, status=404)
 
@@ -240,83 +371,15 @@ def verify_transaction(request, transaction_id):
             {"detail": "decision harus 'paid' atau 'failed'."}, status=400
         )
 
-    items = list(
-        txn.items.select_related(
-            "product__mentoring_detail",
-            "product__module_detail",
-            "product__bootcamp_detail",
-            "mentor_availability",
+    if decision == "paid":
+        txn, sudah = _mark_transaction_paid(transaction_id)
+    else:
+        txn, sudah = _release_transaction(transaction_id, PaymentStatus.FAILED)
+
+    if sudah:
+        return JsonResponse(
+            {"detail": "Transaksi ini sudah diverifikasi sebelumnya."}, status=400
         )
-    )
-
-    with db_transaction.atomic():
-        if decision == "paid":
-            # Baru di sinilah akses produk beneran dikasih -- UserLibrary +
-            # sesi-sesinya, plus sold_count baru nambah sekarang (bukan pas
-            # checkout), karena transaksi resmi dianggap "terjual" setelah
-            # admin approve buktinya, bukan pas user baru upload.
-            txn.payment_status = PaymentStatus.PAID
-            txn.paid_at = timezone.now()
-
-            for item in items:
-                product = item.product
-                detail = _get_checkout_detail(product)
-
-                user_library, _ = UserLibrary.objects.get_or_create(
-                    user=txn.user, product=product,
-                )
-
-                # Catat paket yang dibeli (kalau ada) -- dipakai buat nge-gate
-                # benefit per paket (resource/sesi eksklusif). Cuma keisi
-                # buat pembayaran yang lewat alur BootcampRegistration; beli
-                # langsung lewat checkout_product lama gak punya info paket.
-                if (
-                    txn.bootcamp_registration_id
-                    and user_library.package_id != txn.bootcamp_registration.package_id
-                ):
-                    user_library.package = txn.bootcamp_registration.package
-                    user_library.save(update_fields=["package"])
-
-                if product.type == ProductType.MENTORING and item.mentor_availability:
-                    _create_mentoring_sessions(user_library, detail, item.mentor_availability)
-                elif product.type == ProductType.BOOTCAMP:
-                    _create_bootcamp_sessions(user_library, product)
-
-                if detail is not None:
-                    detail.sold_count = (detail.sold_count or 0) + item.quantity
-                    detail.save(update_fields=["sold_count"])
-
-            # Kalau transaksi ini punya bootcamp_registration yang berstatus
-            # KETUA tim, begitu pembayarannya di-ACC di sinilah SEMUA anggota
-            # yang diundang otomatis dapat pendaftaran + akses sekaligus --
-            # mereka sendiri tidak pernah lewat alur bayar apa pun.
-            if txn.bootcamp_registration_id:
-                _provision_team_members(txn)
-        else:
-            # Ditolak -- lepas lagi semua yang di-reserve pas checkout (slot
-            # mentor, stok, kuota kode referral) supaya bisa dipakai/dibeli
-            # ulang oleh siapa aja, termasuk user yang sama.
-            txn.payment_status = PaymentStatus.FAILED
-
-            for item in items:
-                detail = _get_checkout_detail(item.product)
-
-                if item.mentor_availability_id:
-                    item.mentor_availability.is_booked = False
-                    item.mentor_availability.save(update_fields=["is_booked"])
-
-                if detail is not None and getattr(detail, "stock", None) is not None:
-                    detail.stock = (detail.stock or 0) + item.quantity
-                    detail.save(update_fields=["stock"])
-
-            usage = ReferralCodeUsage.objects.filter(transaction=txn).select_related("referral_code").first()
-            if usage:
-                referral_code = usage.referral_code
-                referral_code.used_count = max(0, referral_code.used_count - 1)
-                referral_code.save(update_fields=["used_count"])
-                usage.delete()
-
-        txn.save()
 
     log_audit(
         request, AuditAction.UPDATE, "transactions", object_id=txn.id,
@@ -843,15 +906,29 @@ def checkout_product(request):
     notes = (request_data.get("notes") or "").strip()
     proof_file = request.FILES.get("proof_of_payment")
 
+    # payment_gateway OPT-IN -- kalau gak dikirim (persis perilaku frontend
+    # yang sudah jalan sekarang), sama sekali gak ada yang berubah di bawah
+    # ini, tetap jalur manual seperti biasa. iPaymu cuma aktif kalau field
+    # ini eksplisit "IPAYMU" DAN admin sudah menyalakan IpaymuSetting.is_enabled.
+    payment_gateway = (request_data.get("payment_gateway") or PaymentGateway.MANUAL).upper()
+    if payment_gateway not in (PaymentGateway.MANUAL, PaymentGateway.IPAYMU):
+        return JsonResponse({"detail": "payment_gateway tidak dikenali."}, status=400)
+
     if not product_id:
         return JsonResponse({"detail": "product_id diperlukan."}, status=400)
 
-    if not proof_file:
-        return JsonResponse({"detail": "Bukti pembayaran diperlukan."}, status=400)
+    if payment_gateway == PaymentGateway.MANUAL:
+        if not proof_file:
+            return JsonResponse({"detail": "Bukti pembayaran diperlukan."}, status=400)
 
-    err = _validate_checkout_upload(proof_file, "Bukti pembayaran")
-    if err:
-        return JsonResponse({"detail": err}, status=400)
+        err = _validate_checkout_upload(proof_file, "Bukti pembayaran")
+        if err:
+            return JsonResponse({"detail": err}, status=400)
+    else:
+        if not IpaymuSetting.get_solo().is_enabled:
+            return JsonResponse(
+                {"detail": "Pembayaran iPaymu belum aktif, gunakan transfer bank manual."}, status=400
+            )
 
     try:
         product = Product.objects.select_related(
@@ -958,9 +1035,10 @@ def checkout_product(request):
                 discount_amount=discount_amount,
                 tax=0,
                 grand_total=grand_total,
-                proof_of_payment=proof_file,
+                proof_of_payment=proof_file if payment_gateway == PaymentGateway.MANUAL else None,
                 payment_status=PaymentStatus.PENDING,
                 notes=notes,
+                gateway=payment_gateway,
             )
 
             item = TransactionItem.objects.create(
@@ -999,17 +1077,20 @@ def checkout_product(request):
 
     # Notifikasi ke tim -- ada transaksi baru yang nunggu diverifikasi admin.
     # Dikirim setelah DB transaction commit (di luar block atomic) biar
-    # latency email nggak nahan lock DB.
+    # latency email nggak nahan lock DB. Cuma buat jalur MANUAL -- transaksi
+    # iPaymu diverifikasi otomatis lewat webhook, gak butuh aksi admin, jadi
+    # email "tolong verifikasi" di sini bakal nyasar/gak relevan buat itu.
     product_title = getattr(detail, "title", None) or "-"
-    notify_team(
-        f"Transaksi baru menunggu verifikasi ({txn.id})",
-        f"Ada transaksi baru yang butuh diverifikasi admin.\n\n"
-        f"ID Transaksi: {txn.id}\n"
-        f"Pembeli: {request.user.fullname} ({request.user.email})\n"
-        f"Produk: {product_title}\n"
-        f"Total: Rp {txn.grand_total}\n\n"
-        f"Cek & verifikasi di dashboard admin -> Transaksi.",
-    )
+    if payment_gateway == PaymentGateway.MANUAL:
+        notify_team(
+            f"Transaksi baru menunggu verifikasi ({txn.id})",
+            f"Ada transaksi baru yang butuh diverifikasi admin.\n\n"
+            f"ID Transaksi: {txn.id}\n"
+            f"Pembeli: {request.user.fullname} ({request.user.email})\n"
+            f"Produk: {product_title}\n"
+            f"Total: Rp {txn.grand_total}\n\n"
+            f"Cek & verifikasi di dashboard admin -> Transaksi.",
+        )
 
     return JsonResponse(
         {
@@ -1020,6 +1101,316 @@ def checkout_product(request):
         },
         status=201,
     )
+
+
+# ============================================================================
+# iPaymu -- pembeli
+# ============================================================================
+
+@jwt_required
+def get_transaction_status(request, transaction_id):
+    """Status ringkas satu transaksi milik sendiri -- dipakai halaman
+    kembalian iPaymu (2.4) buat polling tanpa perlu narik seluruh daftar
+    transaksi. Webhook, BUKAN halaman ini, yang benar-benar mengubah status;
+    endpoint ini cuma baca."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    try:
+        txn = Transaction.objects.get(id=transaction_id, user=request.user)
+    except Transaction.DoesNotExist:
+        return JsonResponse({"detail": "Transaksi tidak ditemukan."}, status=404)
+
+    return JsonResponse(
+        {
+            "transaction_id": txn.id,
+            "payment_status": txn.payment_status,
+            "payment_method": txn.payment_method,
+            "gateway": txn.gateway,
+            "grand_total": str(txn.grand_total),
+            "paid_at": txn.paid_at.isoformat() if txn.paid_at else None,
+        },
+        status=200,
+    )
+
+
+@csrf_exempt
+@jwt_required
+def create_ipaymu_session(request, transaction_id):
+    """Bikin sesi pembayaran iPaymu buat satu Transaction yang SUDAH ada
+    (dibuat lewat checkout_product atau create_bootcamp_payment dengan
+    payment_gateway=IPAYMU). Dipanggil sekali lagi SETELAH transaksinya
+    dibuat, bukan digabung jadi satu langkah -- supaya endpoint ini bisa
+    dipakai dua jalur checkout yang berbeda (beli langsung & bayar
+    pendaftaran bootcamp) tanpa duplikasi logika, karena di titik ini
+    keduanya sudah sama-sama cuma berupa baris Transaction biasa."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    if is_rate_limited(f"rl:ipaymu-session:user:{request.user.id}", limit=10, window_seconds=3600):
+        return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
+
+    try:
+        # Punya sendiri saja -- jangan bocorkan eksistensi transaksi orang
+        # lain lewat 404 vs 403 yang beda.
+        txn = Transaction.objects.get(id=transaction_id, user=request.user)
+    except Transaction.DoesNotExist:
+        return JsonResponse({"detail": "Transaksi tidak ditemukan."}, status=404)
+
+    if txn.gateway != PaymentGateway.IPAYMU:
+        return JsonResponse({"detail": "Transaksi ini bukan transaksi iPaymu."}, status=400)
+    if txn.payment_status != PaymentStatus.PENDING:
+        return JsonResponse({"detail": "Transaksi ini sudah tidak menunggu pembayaran."}, status=400)
+
+    setting = IpaymuSetting.get_solo()
+    if not setting.is_enabled:
+        return JsonResponse({"detail": "Pembayaran iPaymu belum aktif."}, status=400)
+
+    from mark_up.ipaymu import create_payment_session
+
+    return_url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/payment/ipaymu/return/?transaction_id={txn.id}"
+    notify_url = request.build_absolute_uri(reverse("api_ipaymu_webhook"))
+
+    session_id, url, err = create_payment_session(
+        setting,
+        transaction=txn,
+        buyer_name=request.user.fullname,
+        buyer_phone=txn.buyer_phone or getattr(request.user, "phone", "") or "",
+        buyer_email=request.user.email,
+        return_url=return_url,
+        notify_url=notify_url,
+        cancel_url=return_url,
+        expired_hours=setting.default_expired_hours,
+    )
+    if err:
+        logger.error("iPaymu: gagal bikin sesi buat transaksi %s: %s", txn.id, err)
+        return JsonResponse(
+            {"detail": "Gagal menghubungi iPaymu, coba lagi sebentar lagi."}, status=502
+        )
+
+    txn.ipaymu_session_id = session_id
+    txn.save(update_fields=["ipaymu_session_id"])
+
+    return JsonResponse({"redirect_url": url, "session_id": session_id}, status=200)
+
+
+def is_ipaymu_available(request):
+    """PUBLIK, tanpa login -- dipakai halaman checkout buat tau apakah
+    pemilih metode iPaymu perlu ditampilkan sama sekali. Sengaja gak
+    membocorkan detail lain (VA, mode sandbox/production, dst)."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    return JsonResponse({"enabled": IpaymuSetting.get_solo().is_enabled}, status=200)
+
+
+@csrf_exempt
+def ipaymu_webhook(request):
+    """Dipanggil iPaymu sendiri (unotify) -- BUKAN pembeli, BUKAN admin.
+    SENGAJA cuma @csrf_exempt, TANPA @jwt_required: ini pemanggil eksternal
+    yang gak pernah login ke MarkUp, jadi gak punya token bearer apa pun buat
+    dikirim. Batas keamanannya di sini adalah verifikasi signature request,
+    BUKAN autentikasi Django -- endpoint pertama di codebase ini dengan pola
+    begitu, makanya dikomentari detail.
+
+    Selalu balas 200 kalau requestnya sudah "ditangani" (termasuk yang
+    ditolak/diabaikan) supaya iPaymu berhenti retry -- 200 cuma berarti
+    "sudah kami terima & proses", bukan "pembayaran sukses"."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        setting = IpaymuSetting.get_solo()
+        raw_body = request.body
+
+        from mark_up.ipaymu import verify_webhook_signature, map_via_channel_to_payment_method
+
+        if not verify_webhook_signature(setting, request.headers, raw_body):
+            logger.warning(
+                "iPaymu webhook: signature TIDAK VALID, diabaikan. body[:300]=%r", raw_body[:300]
+            )
+            return HttpResponse(status=200)
+
+        # get_request_data aman dipakai SETELAH verifikasi signature (yang
+        # sudah baca request.body mentah) -- Django cache body-nya, jadi bisa
+        # dibaca ulang tanpa masalah lewat request.POST/json.loads di sini.
+        payload = get_request_data(request)
+        if payload is None:
+            try:
+                import json
+                payload = json.loads(raw_body.decode() or "{}")
+            except Exception:
+                logger.warning("iPaymu webhook: body gak bisa di-parse sama sekali.")
+                return HttpResponse(status=200)
+
+        reference_id = str(payload.get("reference_id") or "").strip()
+        status_code = str(payload.get("status_code") or "").strip()
+
+        try:
+            txn = Transaction.objects.get(id=reference_id, gateway=PaymentGateway.IPAYMU)
+        except Transaction.DoesNotExist:
+            # Termasuk sesi TESTCONN-* dari tombol Uji Koneksi -- memang
+            # sengaja dirancang gak pernah cocok Transaction sungguhan.
+            logger.info("iPaymu webhook: reference_id %r gak ketemu (mungkin sesi uji), diabaikan.", reference_id)
+            return HttpResponse(status=200)
+
+        # Audit -- disimpan lepas dari status_code apa pun, biar ada jejak
+        # kalau nanti ada sengketa pembayaran.
+        Transaction.objects.filter(pk=txn.pk).update(ipaymu_last_webhook=payload)
+
+        if status_code == "1":
+            txn, sudah = _mark_transaction_paid(reference_id)
+            if not sudah:
+                via = payload.get("via")
+                channel = payload.get("channel")
+                txn.payment_method = map_via_channel_to_payment_method(via, channel)
+                txn.save(update_fields=["payment_method"])
+                logger.info("iPaymu webhook: transaksi %s LUNAS (via=%s, channel=%s).", txn.id, via, channel)
+                notify_team(
+                    f"Pembayaran iPaymu diterima ({txn.id})",
+                    f"Transaksi {txn.id} lunas otomatis lewat iPaymu.\n\n"
+                    f"Pembeli: {txn.user.fullname} ({txn.user.email})\n"
+                    f"Total: Rp {txn.grand_total}\n"
+                    f"Metode: {via}/{channel}\n\n"
+                    f"Akses produk sudah terbuka otomatis, gak perlu ACC manual.",
+                )
+        elif status_code == "-2":
+            _release_transaction(reference_id, PaymentStatus.EXPIRED)
+            logger.info("iPaymu webhook: transaksi %s KEDALUWARSA.", txn.id)
+        else:
+            logger.info("iPaymu webhook: transaksi %s status_code=%r, belum final, no-op.", txn.id, status_code)
+
+        return HttpResponse(status=200)
+    except Exception:
+        # Kegagalan di sisi kita jangan bikin iPaymu retry selamanya percuma
+        # buat bug yang gak akan pernah sembuh sendiri lewat retry -- tetap
+        # balas 200, tapi tercatat lengkap di log server buat ditindaklanjuti.
+        logger.exception("iPaymu webhook: gagal diproses.")
+        return HttpResponse(status=200)
+
+
+# ============================================================================
+# iPaymu -- pengaturan admin
+# ============================================================================
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_ipaymu_setting(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    from mark_up.ipaymu import decrypt_secret, IpaymuCredentialError
+
+    setting = IpaymuSetting.get_solo()
+    hint = ""
+    if setting.api_key_encrypted:
+        try:
+            plain = decrypt_secret(setting.api_key_encrypted)
+            hint = f"****{plain[-4:]}" if len(plain) >= 4 else "****"
+        except IpaymuCredentialError:
+            hint = "?"
+
+    return JsonResponse(
+        {
+            "va_number": setting.va_number,
+            "api_key_hint": hint,
+            "is_sandbox": setting.is_sandbox,
+            "is_enabled": setting.is_enabled,
+            "default_expired_hours": setting.default_expired_hours,
+            "key_ready": bool(getattr(settings, "IPAYMU_CRED_KEY", "")),
+            "last_check_at": setting.last_check_at.isoformat() if setting.last_check_at else None,
+            "last_check_ok": setting.last_check_ok,
+            "last_check_note": setting.last_check_note,
+            "last_check_url": setting.last_check_url,
+        },
+        status=200,
+    )
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def update_ipaymu_setting(request):
+    if request.method not in ("PATCH", "PUT"):
+        return HttpResponseNotAllowed(["PATCH", "PUT"])
+
+    from mark_up.ipaymu import encrypt_secret, IpaymuCredentialError
+
+    data = get_request_data(request)
+    if data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    setting = IpaymuSetting.get_solo()
+    errors = {}
+    old_enabled, old_sandbox = setting.is_enabled, setting.is_sandbox
+
+    if "va_number" in data:
+        setting.va_number = (data["va_number"] or "").strip()
+
+    # api_key WRITE-ONLY -- kosong/gak dikirim = jangan diubah. Ini yang
+    # mencegah frontend perlu (dan gak pernah bisa) menampilkan ulang secret
+    # yang sudah tersimpan.
+    if data.get("api_key"):
+        try:
+            setting.api_key_encrypted = encrypt_secret(data["api_key"].strip())
+        except IpaymuCredentialError as exc:
+            errors["api_key"] = [str(exc)]
+
+    if "is_sandbox" in data:
+        setting.is_sandbox = bool(data["is_sandbox"])
+
+    if "is_enabled" in data:
+        if bool(data["is_enabled"]) and not setting.api_key_encrypted:
+            errors["is_enabled"] = ["Isi API Key dulu sebelum mengaktifkan iPaymu."]
+        else:
+            setting.is_enabled = bool(data["is_enabled"])
+
+    if "default_expired_hours" in data:
+        try:
+            jam = int(data["default_expired_hours"])
+            if jam < 1:
+                raise ValueError
+            setting.default_expired_hours = jam
+        except (TypeError, ValueError):
+            errors["default_expired_hours"] = ["Harus angka jam, minimal 1."]
+
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    setting.save()
+
+    log_audit(
+        request, AuditAction.UPDATE, "ipaymu_setting", object_id="1",
+        old_data={"is_enabled": old_enabled, "is_sandbox": old_sandbox},
+        new_data={"is_enabled": setting.is_enabled, "is_sandbox": setting.is_sandbox},
+    )
+
+    return JsonResponse({"detail": "Pengaturan iPaymu tersimpan."}, status=200)
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def test_ipaymu_connection(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    if is_rate_limited(f"rl:ipaymutest:{request.user.id}", limit=20, window_seconds=300):
+        return JsonResponse({"detail": "Terlalu banyak percobaan, tunggu sebentar."}, status=429)
+
+    from mark_up.ipaymu import test_connection
+
+    setting = IpaymuSetting.get_solo()
+    notify_url = request.build_absolute_uri(reverse("api_ipaymu_webhook"))
+    hasil = test_connection(setting, notify_url=notify_url)
+
+    setting.last_check_at = timezone.now()
+    setting.last_check_ok = hasil["ok"]
+    setting.last_check_note = hasil["pesan"][:500]
+    setting.last_check_url = hasil["url"] or ""
+    setting.save(update_fields=["last_check_at", "last_check_ok", "last_check_note", "last_check_url"])
+
+    return JsonResponse(hasil, status=200)
 
 
 def _serialize_referral_code(code):

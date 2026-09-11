@@ -31,6 +31,15 @@ class PaymentMethod(models.TextChoices):
     MANUAL = "MANUAL", "Manual"
 
 
+class PaymentGateway(models.TextChoices):
+    """Jalur pembayaran yang membuat Transaction ini -- BEDA dari
+    PaymentMethod (itu metode transfer yang dipakai pembeli, mis. QRIS/VA;
+    ini jalur sistemnya: manual upload bukti + ACC admin, atau otomatis
+    lewat iPaymu). MANUAL = default, semua baris lama otomatis kebagian ini."""
+    MANUAL = "MANUAL", "Manual (Transfer Bank)"
+    IPAYMU = "IPAYMU", "iPaymu"
+
+
 class Transaction(models.Model):
     id = models.CharField(
         primary_key=True,
@@ -74,6 +83,20 @@ class Transaction(models.Model):
     # Ditandai manual sama admin setelah transfer pengembalian dilakukan DI
     # LUAR sistem (bukan alur bayar) -- gak otomatis, cuma pencatatan status.
     commitment_fee_refunded_at = models.DateTimeField(blank=True, null=True)
+    # --- iPaymu (opsional, cuma keisi kalau gateway=IPAYMU) ---
+    gateway = models.CharField(
+        max_length=20, choices=PaymentGateway.choices, default=PaymentGateway.MANUAL,
+        help_text="Jalur yang membuat transaksi ini -- manual (upload bukti + ACC admin) atau otomatis lewat iPaymu.",
+    )
+    ipaymu_session_id = models.CharField(
+        max_length=64, blank=True, default="",
+        help_text="Data.SessionID dari iPaymu, buat penelusuran/dukungan. Pencocokan transaksi dari webhook "
+                   "TETAP pakai Transaction.id sendiri sebagai referenceId, bukan field ini.",
+    )
+    ipaymu_last_webhook = models.JSONField(
+        blank=True, null=True,
+        help_text="Payload webhook terakhir dari iPaymu apa adanya -- buat audit kalau ada sengketa pembayaran.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(blank=True, null=True)
 
@@ -330,3 +353,66 @@ class BankAccountSetting(models.Model):
 
     def __str__(self) -> str:
         return f"{self.bank_name} {self.account_number} a.n {self.account_holder}"
+
+
+class IpaymuSetting(models.Model):
+    """Kredensial & saklar iPaymu (singleton, pk=1) -- pola sama persis
+    seperti BankAccountSetting di atas, tapi api_key-nya SENSITIF jadi
+    dienkripsi (lihat mark_up/ipaymu.py encrypt_secret/decrypt_secret,
+    kuncinya IPAYMU_CRED_KEY -- pola yang sama juga dipakai ZoomAccount di
+    products/models.py buat client_secret).
+
+    Dua saklar independen yang sengaja dipisah:
+    - is_sandbox: sandbox.ipaymu.com (uji, uang gak sungguhan) vs
+      my.ipaymu.com (production, uang sungguhan). GANTI INI MENENTUKAN UANG
+      SUNGGUHAN ATAU BUKAN.
+    - is_enabled: mati/nyala fitur ini SAMA SEKALI buat pembeli. Default
+      False -- fitur ini baru terlihat begitu admin sengaja menyalakannya,
+      bukan begitu kode ini di-deploy.
+    """
+    va_number = models.CharField(
+        max_length=32, blank=True, default="",
+        help_text="Nomor VA/akun iPaymu -- BUKAN rahasia, dipakai juga sebagai secret verifikasi signature webhook masuk.",
+    )
+    api_key_encrypted = models.TextField(
+        blank=True, default="",
+        help_text="API Key iPaymu, terenkripsi Fernet pakai IPAYMU_CRED_KEY. JANGAN pernah dikirim balik ke frontend -- lihat _serialize_ipaymu_setting.",
+    )
+    is_sandbox = models.BooleanField(
+        default=True,
+        help_text="True = sandbox.ipaymu.com (uji, uang gak sungguhan). False = my.ipaymu.com (PRODUCTION, uang sungguhan).",
+    )
+    is_enabled = models.BooleanField(
+        default=False,
+        help_text="Saklar utama -- mati = pembeli cuma lihat transfer manual, walau kredensial di atas sudah diisi.",
+    )
+    default_expired_hours = models.PositiveIntegerField(
+        default=2,
+        help_text="Umur sesi pembayaran yang dikirim ke iPaymu (jam) -- ini juga jadi jendela reservasi stok/slot yang sesungguhnya buat transaksi lewat iPaymu.",
+    )
+    last_check_at = models.DateTimeField(blank=True, null=True)
+    last_check_ok = models.BooleanField(blank=True, null=True)
+    last_check_note = models.CharField(max_length=500, blank=True, default="")
+    last_check_url = models.URLField(
+        blank=True, default="",
+        help_text="URL sesi uji terakhir dari tombol Uji Koneksi -- buat admin cek responsnya tanpa pernah diarahkan ke sana.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "iPaymu Setting"
+        verbose_name_plural = "iPaymu Settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self) -> str:
+        mode = "sandbox" if self.is_sandbox else "PRODUCTION"
+        status = "aktif" if self.is_enabled else "mati"
+        return f"iPaymu ({mode}, {status})"

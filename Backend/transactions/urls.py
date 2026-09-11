@@ -21,6 +21,13 @@ from .views import (
     get_my_payouts,
     get_commitment_fee_refunds,
     toggle_commitment_fee_refund,
+    create_ipaymu_session,
+    get_transaction_status,
+    ipaymu_webhook,
+    is_ipaymu_available,
+    get_ipaymu_setting,
+    update_ipaymu_setting,
+    test_ipaymu_connection,
 )
 
 urlpatterns = [
@@ -42,6 +49,14 @@ urlpatterns = [
     path("payouts/<uuid:payout_id>/mark-paid/", mark_payout_paid, name="api_payouts_mark_paid"),
     path("payouts/<uuid:payout_id>/fee/", update_payout_fee, name="api_payouts_update_fee"),
     path("commitment-fee-refunds/", get_commitment_fee_refunds, name="api_commitment_fee_refunds_list"),
+    # iPaymu -- rute literal ditaruh sebelum rute <str:transaction_id>/...
+    path("ipaymu/webhook/", ipaymu_webhook, name="api_ipaymu_webhook"),
+    path("ipaymu/available/", is_ipaymu_available, name="api_ipaymu_available"),
+    path("ipaymu/setting/", get_ipaymu_setting, name="api_ipaymu_setting"),
+    path("ipaymu/setting/update/", update_ipaymu_setting, name="api_ipaymu_setting_update"),
+    path("ipaymu/setting/test/", test_ipaymu_connection, name="api_ipaymu_setting_test"),
     path("<str:transaction_id>/verify/", verify_transaction, name="api_transaction_verify"),
     path("<str:transaction_id>/commitment-fee-refund/", toggle_commitment_fee_refund, name="api_commitment_fee_refund_toggle"),
+    path("<str:transaction_id>/status/", get_transaction_status, name="api_transaction_status"),
+    path("<str:transaction_id>/ipaymu/create-session/", create_ipaymu_session, name="api_ipaymu_create_session"),
 ]
