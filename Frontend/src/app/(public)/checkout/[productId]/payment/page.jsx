@@ -104,12 +104,13 @@ function CheckoutPaymentPageInner() {
 
   const [isLeavingAfterSuccess, setIsLeavingAfterSuccess] = useState(false);
 
-  // "MANUAL" (transfer + upload bukti) atau "IPAYMU" (redirect, otomatis).
-  // Pemilihnya cuma muncul kalau ipaymuEnabled -- selama admin belum
-  // menyalakan IpaymuSetting.is_enabled, halaman ini berperilaku PERSIS
-  // seperti sebelum iPaymu ada.
-  const [gateway, setGateway] = useState("MANUAL");
+  // Gak ada lagi pemilih manual/QRIS -- QRIS SATU-SATUNYA opsi selama iPaymu
+  // aktif (ipaymuEnabled), transfer manual otomatis jadi cadangan begitu
+  // iPaymu mati/gak kecek (ipaymuChecked=true tapi ipaymuEnabled=false).
+  // `gateway` diturunkan dari situ, bukan pilihan pembeli lagi.
   const [ipaymuEnabled, setIpaymuEnabled] = useState(false);
+  const [ipaymuChecked, setIpaymuChecked] = useState(false);
+  const gateway = ipaymuEnabled ? "IPAYMU" : "MANUAL";
 
   useEffect(() => {
     if (!checkoutSummary.productId && !isLeavingAfterSuccess) {
@@ -124,7 +125,9 @@ function CheckoutPaymentPageInner() {
         const res = await apiRequest("/api/transactions/ipaymu/available/", { auth: false });
         if (!cancelled && res?.enabled) setIpaymuEnabled(true);
       } catch {
-        // Diam saja -- kalau gagal dicek, anggap gak tersedia, tetap fallback ke transfer manual.
+        // Diam saja -- kalau gagal dicek, anggap gak tersedia, fallback ke transfer manual.
+      } finally {
+        if (!cancelled) setIpaymuChecked(true);
       }
     })();
     return () => { cancelled = true; };
@@ -256,6 +259,13 @@ function CheckoutPaymentPageInner() {
     return null; // lagi redirect, lihat useEffect guard di atas
   }
 
+  if (!ipaymuChecked) {
+    // Belum tau QRIS aktif apa nggak -- jangan render cabang manapun dulu,
+    // biar gak sempat kelihatan "Transfer Manual" sekilas lalu tiba-tiba
+    // ganti jadi QRIS begitu pengecekan selesai.
+    return <div className="w-full min-h-screen bg-[#0F081C]" />;
+  }
+
 
   return (
     <div style={{ backgroundColor: "#060010", minHeight: "100vh" }}>
@@ -315,24 +325,19 @@ function CheckoutPaymentPageInner() {
               </p>
             </motion.div>
 
-            {ipaymuEnabled && (
-              <motion.div {...fadeIn} className="flex items-center gap-2 bg-[#170F26] border border-[#2D2342] rounded-[12px] p-1.5">
-                <button
-                  onClick={() => setGateway("IPAYMU")}
-                  className={`flex-1 py-2 rounded-[8px] text-[12.5px] font-semibold transition-colors ${
-                    gateway === "IPAYMU" ? "bg-[#148F89] text-white" : "text-[#9CA3AF] hover:text-white"
-                  }`}
-                >
-                  Bayar QRIS
-                </button>
-                <button
-                  onClick={() => setGateway("MANUAL")}
-                  className={`flex-1 py-2 rounded-[8px] text-[12.5px] font-semibold transition-colors ${
-                    gateway === "MANUAL" ? "bg-[#148F89] text-white" : "text-[#9CA3AF] hover:text-white"
-                  }`}
-                >
-                  Transfer Manual
-                </button>
+            {/* Manual cuma tampil kalau QRIS lagi MATI (ipaymuEnabled false)
+                -- bukan pilihan pembeli lagi, otomatis nentuin sendiri
+                (lihat const gateway di atas). */}
+            {!ipaymuEnabled && (
+              <motion.div
+                {...fadeIn}
+                className="flex items-start gap-2 bg-[#F59E0B]/10 border border-[#F59E0B]/30 rounded-[10px] px-4 py-3"
+              >
+                <AlertCircle size={15} className="text-[#F59E0B] shrink-0 mt-0.5" />
+                <p className="text-[#FBBF24] text-[11.5px] leading-relaxed">
+                  Pembayaran QRIS lagi gak tersedia sementara -- silakan bayar lewat transfer
+                  manual di bawah ini dulu.
+                </p>
               </motion.div>
             )}
 
