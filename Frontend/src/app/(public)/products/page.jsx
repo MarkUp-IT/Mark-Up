@@ -656,11 +656,9 @@ function ProductCard({ data, index = 0, onClick, reduceMotion }) {
           >
             {formatRupiah(data.price)}
           </p>
-          {data.soldCount > 0 && (
-            <p className="text-gray-500 text-[9px] md:text-[10px]">
-              {data.soldCount} Terjual
-            </p>
-          )}
+          {/* Jumlah terjual SEMENTARA disembunyikan atas permintaan. Datanya
+              tetap ditarik & tetap ada di dashboard admin -- ini murni soal
+              tampilan publik, tinggal dibuka lagi kalau mau ditampilkan. */}
         </div>
       </div>
     </motion.div>

@@ -63,9 +63,25 @@ function BootcampRegisterPageInner() {
   // lihat handleCheckTeamEmail). { [index]: email } & { [index]: hasil cek }.
   const [teamEmails, setTeamEmails] = useState({});
   const [teamChecks, setTeamChecks] = useState({});
+  // Promo yang dipilih: "none" | "team" | "invite". SENGAJA saling meniadakan
+  // -- backend juga menolak kalau dua-duanya dikirim sekaligus, jadi ini
+  // bukan cuma pembatas tampilan.
+  const [promo, setPromo] = useState("none");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteCheck, setInviteCheck] = useState(null);
 
   const selectedPackage = packages.find((p) => p.id === selectedPackageId) || null;
   const requiredTeamSlots = selectedPackage?.group_size > 1 ? selectedPackage.group_size - 1 : 0;
+  const bolehAjakTeman = Boolean(selectedPackage?.referral_invite_enabled);
+  const adaPromo = requiredTeamSlots > 0 || bolehAjakTeman;
+
+  // Ganti paket bisa bikin promo yang lagi dipilih jadi gak berlaku lagi
+  // (tiap paket beda pengaturannya) -- balikin ke "none" biar gak ngirim
+  // data promo yang gak didukung paket barunya.
+  useEffect(() => {
+    if (promo === "team" && requiredTeamSlots === 0) setPromo("none");
+    if (promo === "invite" && !bolehAjakTeman) setPromo("none");
+  }, [promo, requiredTeamSlots, bolehAjakTeman]);
 
   const handleCheckTeamEmail = async (idx) => {
     const email = (teamEmails[idx] || "").trim();
@@ -76,6 +92,18 @@ function BootcampRegisterPageInner() {
       setTeamChecks((c) => ({ ...c, [idx]: { checking: false, valid: res.valid, name: res.name, reason: res.reason } }));
     } catch (err) {
       setTeamChecks((c) => ({ ...c, [idx]: { checking: false, valid: false, reason: err?.message || "Gagal memeriksa email." } }));
+    }
+  };
+
+  const handleCheckInviteEmail = async () => {
+    const email = inviteEmail.trim();
+    if (!email) return;
+    setInviteCheck({ checking: true });
+    try {
+      const res = await apiRequest(`/api/products/${productId}/check-invite-email/?email=${encodeURIComponent(email)}`);
+      setInviteCheck({ checking: false, valid: res.valid, name: res.name, reason: res.reason });
+    } catch (err) {
+      setInviteCheck({ checking: false, valid: false, reason: err?.message || "Gagal memeriksa email." });
     }
   };
 
@@ -194,12 +222,18 @@ function BootcampRegisterPageInner() {
         formData.append("answers", JSON.stringify(jawabanTerpakai));
       }
       if (portfolioFile) formData.append("portfolio", portfolioFile);
-      if (requiredTeamSlots > 0) {
+      // Cuma promo yang BENAR-BENAR dipilih yang dikirim -- isian promo yang
+      // lain sengaja diabaikan walau sempat keisi sebelum pendaftar ganti
+      // pilihan, biar gak kekirim dua-duanya (backend juga nolak kalau dobel).
+      if (promo === "team" && requiredTeamSlots > 0) {
         const emailTim = Array.from({ length: requiredTeamSlots }, (_, i) => (teamEmails[i] || "").trim())
           .filter(Boolean);
         if (emailTim.length > 0) {
           formData.append("team_member_emails", emailTim.join("\n"));
         }
+      }
+      if (promo === "invite" && bolehAjakTeman && inviteEmail.trim()) {
+        formData.append("invited_email", inviteEmail.trim());
       }
       // Lewat apiRequest (bukan fetch mentah) supaya kalau access token keburu
       // kedaluwarsa pas user lama ngisi form, tokennya di-refresh otomatis dan
@@ -230,6 +264,9 @@ function BootcampRegisterPageInner() {
       setSelectedPackageId("");
       setTeamEmails({});
       setTeamChecks({});
+      setPromo("none");
+      setInviteEmail("");
+      setInviteCheck(null);
       fetchAll();
     } catch (err) {
       toast.error("Gagal Mendaftar", { description: err?.message || "Coba lagi." });
@@ -571,16 +608,106 @@ function BootcampRegisterPageInner() {
               </div>
             </div>
 
-            {/* Tim pendaftaran -- cuma tampil kalau paket terpilih mendukungnya
-                (group_size > 1). Yang isi ini jadi KETUA: dia sebut email
-                seluruh anggota lain (harus sudah punya akun), dicek lewat
-                tombol "Cek" per baris sebelum submit. Tim wajib lengkap saat
-                submit -- tidak ada anggota yang bisa menyusul belakangan. */}
-            {requiredTeamSlots > 0 && (
-              <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-3">
+            {/* Promo pendaftaran -- pendaftar memilih SALAH SATU: daftar tim
+                ATAU ajak teman, tidak bisa dua-duanya (backend juga menolak
+                kalau dua-duanya dikirim). Pilihan yang muncul mengikuti
+                pengaturan paket: tim cuma kalau group_size > 1, ajak teman
+                cuma kalau referral_invite_enabled. */}
+            {adaPromo && (
+              <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-4">
                 <div>
-                  <h2 className="font-bold text-[15px]">Daftar Sebagai Tim?</h2>
+                  <h2 className="font-bold text-[15px]">Promo Pendaftaran</h2>
                   <p className="text-[#9CA3AF] text-[12px] mt-1">
+                    Pilih SALAH SATU saja -- tidak bisa dipakai bersamaan.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  {[
+                    { key: "none", label: "Tanpa promo", desc: "Daftar sendiri dengan harga normal." },
+                    ...(requiredTeamSlots > 0
+                      ? [{
+                          key: "team",
+                          label: "Daftar Sebagai Tim",
+                          desc: `Bertim ${selectedPackage.group_size} orang, bayar sekali untuk semua anggota.`,
+                        }]
+                      : []),
+                    ...(bolehAjakTeman
+                      ? [{
+                          key: "invite",
+                          label: "Ajak Teman",
+                          desc: `Potongan ${selectedPackage.referral_invite_discount_percent}% kalau kamu ajak 1 orang yang sudah terdaftar di bootcamp ini.`,
+                        }]
+                      : []),
+                  ].map((opt) => (
+                    <label
+                      key={opt.key}
+                      className={`flex items-start gap-3 rounded-[10px] border px-4 py-3 cursor-pointer transition-colors ${
+                        promo === opt.key
+                          ? "border-[#148F89] bg-[#148F89]/10"
+                          : "border-[#2D2342] hover:border-[#148F89]/40"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="promo"
+                        checked={promo === opt.key}
+                        onChange={() => setPromo(opt.key)}
+                        className="mt-1 accent-[#148F89]"
+                      />
+                      <span className="flex flex-col">
+                        <span className="text-[13.5px] font-semibold text-white">{opt.label}</span>
+                        <span className="text-[#9CA3AF] text-[11.5px]">{opt.desc}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
+                {promo === "invite" && (
+                  <div className="flex flex-col gap-2 border-t border-[#2D2342] pt-4">
+                    <p className="text-[#9CA3AF] text-[12px]">
+                      Tulis email 1 orang yang SUDAH terdaftar di bootcamp ini dan belum diklaim
+                      pendaftar lain, lalu klik &quot;Cek&quot;. Potongan{" "}
+                      <span className="text-[#148F89] font-semibold">
+                        {selectedPackage.referral_invite_discount_percent}%
+                      </span>{" "}
+                      otomatis dipakai saat kamu membayar nanti.
+                    </p>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex gap-2">
+                        <input
+                          type="email"
+                          value={inviteEmail}
+                          onChange={(e) => {
+                            setInviteEmail(e.target.value);
+                            setInviteCheck(null);
+                          }}
+                          placeholder="Email teman yang kamu ajak"
+                          className="flex-1 bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 h-11 text-[13.5px] text-white outline-none focus:border-[#148F89]/60 transition-colors"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleCheckInviteEmail}
+                          disabled={!inviteEmail.trim() || inviteCheck?.checking}
+                          className="px-4 h-11 rounded-[8px] border border-[#2D2342] text-[12.5px] font-semibold text-[#E2E8F0] hover:bg-[#2D1B4E] transition-colors disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {inviteCheck?.checking ? "..." : "Cek"}
+                        </button>
+                      </div>
+                      {inviteCheck && !inviteCheck.checking && (
+                        <span className={`text-[11px] flex items-center gap-1 ${inviteCheck.valid ? "text-[#148F89]" : "text-[#EF4444]"}`}>
+                          {inviteCheck.valid ? <Check size={12} /> : <X size={12} />}
+                          {inviteCheck.valid ? `Valid -- ${inviteCheck.name}` : inviteCheck.reason}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {promo === "team" && requiredTeamSlots > 0 && (
+                  <div className="flex flex-col gap-3 border-t border-[#2D2342] pt-4">
+                <div>
+                  <p className="text-[#9CA3AF] text-[12px]">
                     Kamu jadi KETUA tim. Ajak {requiredTeamSlots} orang lain yang SUDAH punya akun Markup
                     lewat email di bawah, klik &quot;Cek&quot; buat pastikan emailnya valid. Kalau lengkap,
                     kalian bayar SEKALI seharga total{" "}
@@ -631,8 +758,11 @@ function BootcampRegisterPageInner() {
                   })}
                 </div>
                 <p className="text-[#6B7280] text-[11px]">
-                  Belum punya tim lengkap? Kosongkan semua kolom -- kamu tetap bisa mendaftar sendiri dengan harga normal.
+                  Belum punya tim lengkap? Pilih &quot;Tanpa promo&quot; di atas -- kamu tetap bisa
+                  mendaftar sendiri dengan harga normal.
                 </p>
+                  </div>
+                )}
               </div>
             )}
 
