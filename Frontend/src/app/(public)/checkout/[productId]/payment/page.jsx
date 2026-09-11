@@ -383,11 +383,20 @@ function CheckoutPaymentPageInner() {
                   </div>
                   {isMentoring && selectedMentor && (
                     <div className="flex items-center gap-2.5 border-t border-[#2D2342] pt-3">
-                      <div
-                        className={`w-8 h-8 rounded-full bg-gradient-to-br ${selectedMentor.avatarGradient} flex items-center justify-center text-white text-[11px] font-bold shrink-0`}
-                      >
-                        {getInitials(selectedMentor.name)}
-                      </div>
+                      {selectedMentor.photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={selectedMentor.photo}
+                          alt={selectedMentor.name}
+                          className="w-8 h-8 rounded-full object-cover shrink-0"
+                        />
+                      ) : (
+                        <div
+                          className={`w-8 h-8 rounded-full bg-gradient-to-br ${selectedMentor.avatarGradient} flex items-center justify-center text-white text-[11px] font-bold shrink-0`}
+                        >
+                          {getInitials(selectedMentor.name)}
+                        </div>
+                      )}
                       <div className="flex flex-col min-w-0">
                         <span className="text-white text-[12px] font-medium truncate">
                           {selectedMentor.name}

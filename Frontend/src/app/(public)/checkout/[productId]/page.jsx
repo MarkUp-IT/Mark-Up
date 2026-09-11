@@ -84,6 +84,7 @@ function mapMentorFromApi(m) {
     bio: m.bio,
     linkedin: m.linkedin,
     expertise: m.expertise,
+    photo: m.photo || null,
     avatarGradient: pickAvatarGradient(m.id),
     experience: m.experience.map((exp) => ({
       title: exp.title,
@@ -103,6 +104,17 @@ function StarRating({ rating }) {
 }
 
 function MentorAvatar({ mentor, size = 48 }) {
+  if (mentor.photo) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={mentor.photo}
+        alt={mentor.name}
+        style={{ width: size, height: size }}
+        className="shrink-0 rounded-full object-cover"
+      />
+    );
+  }
   return (
     <div
       style={{ width: size, height: size }}
