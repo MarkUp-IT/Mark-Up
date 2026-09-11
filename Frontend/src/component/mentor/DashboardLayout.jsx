@@ -16,9 +16,9 @@ export default function DashboardLayout({ title, children }) {
   return (
     <div
       style={{ backgroundColor: "#0F081C" }}
-      className="w-full min-h-screen font-inter text-white"
+      className="w-full min-h-screen font-inter text-white relative"
     >
-      <div className="fixed inset-x-0 top-0 h-[400px] overflow-hidden pointer-events-none z-0">
+      <div className="absolute inset-x-0 top-0 h-[400px] overflow-hidden pointer-events-none z-0">
         <div
           className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%]"
           style={{
