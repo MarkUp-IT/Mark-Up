@@ -27,7 +27,7 @@ export const faqData = {
     },
     {
       q: "Apakah pembayaran di Mark-Up bisa dicicil?",
-      a: "Saat ini seluruh pembayaran di Mark-Up dilakukan secara penuh (lunas) lewat transfer bank manual. Sistem cicilan belum tersedia, tapi bisa jadi akan kami hadirkan untuk program Bootcamp bernilai besar di masa mendatang.",
+      a: "Saat ini seluruh pembayaran di Mark-Up dilakukan secara penuh (lunas), baik lewat iPaymu maupun transfer bank manual. Sistem cicilan belum tersedia, tapi bisa jadi akan kami hadirkan untuk program Bootcamp bernilai besar di masa mendatang.",
     },
     {
       q: "Bisakah saya melakukan refund jika batal mengikuti kelas?",
@@ -87,11 +87,11 @@ export const faqData = {
   Pembayaran: [
     {
       q: "Metode pembayaran apa saja yang didukung Mark-Up?",
-      a: "Saat ini Mark-Up menerima pembayaran lewat transfer bank manual. Setelah checkout, kamu akan diarahkan ke halaman pembayaran berisi detail rekening tujuan -- transfer sesuai nominal, lalu unggah bukti transfernya langsung di halaman itu.",
+      a: "Mark-Up menerima pembayaran lewat iPaymu (otomatis -- bisa pakai QRIS, transfer virtual account, e-wallet, atau kartu, akses langsung terbuka begitu pembayaran selesai) maupun transfer bank manual (unggah bukti transfer, diverifikasi tim kami maksimal 1x24 jam). Kamu bisa pilih salah satu di halaman pembayaran setelah checkout.",
     },
     {
       q: "Apakah transaksi di Mark-Up aman?",
-      a: "Aman. Setiap transfer diverifikasi manual oleh tim kami berdasarkan bukti yang kamu unggah, dan status pembayaranmu bisa dipantau langsung dari halaman Transaksi.",
+      a: "Aman. Pembayaran lewat iPaymu diproses langsung oleh sistem resmi iPaymu, sedangkan transfer bank manual kami verifikasi berdasarkan bukti yang kamu unggah. Status pembayaranmu bisa dipantau langsung dari halaman Transaksi.",
     },
     {
       q: "Bagaimana jika pembayaran saya gagal atau belum terverifikasi?",

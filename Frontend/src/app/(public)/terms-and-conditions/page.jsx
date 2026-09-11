@@ -54,7 +54,7 @@ const sections = [
     title: "Harga dan Pembayaran",
     bullets: [
       "Seluruh harga ditampilkan dalam Rupiah (IDR), kecuali dinyatakan lain.",
-      "Pembayaran dilakukan lewat transfer bank manual, dengan mengunggah bukti transfer untuk diverifikasi oleh tim kami.",
+      "Pembayaran dapat dilakukan lewat iPaymu (otomatis, terverifikasi langsung setelah pembayaran selesai) maupun transfer bank manual (dengan mengunggah bukti transfer untuk diverifikasi oleh tim kami).",
       "Pesanan dianggap selesai setelah pembayaran berhasil diverifikasi.",
       "Mark-Up berhak membatalkan transaksi apabila ditemukan indikasi penipuan atau pelanggaran hukum.",
     ],

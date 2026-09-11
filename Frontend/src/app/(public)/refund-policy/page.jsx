@@ -51,7 +51,7 @@ const prosedur = [
   {
     step: "1",
     title: "Hubungi Support",
-    desc: 'Kirim email ke support@markup.id dengan subjek "Refund Request - [No. Transaksi]".',
+    desc: 'Kirim email ke markup.ofc@gmail.com dengan subjek "Refund Request - [No. Transaksi]".',
   },
   {
     step: "2",
