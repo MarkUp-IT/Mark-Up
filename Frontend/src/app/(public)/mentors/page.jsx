@@ -122,15 +122,18 @@ export default function MentorPage() {
 
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative overflow-x-hidden">
-      {/* Background Glow */}
-      <div
-        className="fixed top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%] pointer-events-none z-0"
-        style={{
-          background:
-            "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
-          filter: "blur(40px)",
-        }}
-      />
+      {/* Background Glow -- overflow-hidden di-scope ke wrapper kecil ini
+          doang (bukan di root), biar nggak ganggu scroll/sticky halaman. */}
+      <div className="absolute inset-x-0 top-0 h-[400px] overflow-hidden pointer-events-none z-0">
+        <div
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%]"
+          style={{
+            background:
+              "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
+            filter: "blur(40px)",
+          }}
+        />
+      </div>
 
 
       <div className="main-content flex flex-col gap-16 md:gap-24 items-center mt-28 md:mt-36 mb-24 relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6">
