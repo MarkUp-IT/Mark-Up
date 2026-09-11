@@ -664,7 +664,18 @@ def schedule_my_product_session(request, session_id):
         if session.availability_slot and session.availability_slot != slot:
             old_slot = session.availability_slot
             old_slot.is_booked = False
-            old_slot.save()
+            old_slot.save(update_fields=["is_booked"])
+            # TransactionItem.mentor_availability itu OneToOneField -- kalau
+            # TIDAK dipindah ke slot BARU di sini, dua masalah sekaligus:
+            # (1) datanya jadi nyimpen slot LAMA yang udah gak relevan, dan
+            # (2) constraint unique bakal PERMANEN "mengunci" slot lama itu
+            # walau is_booked-nya sendiri sudah balik False, jadi gak akan
+            # PERNAH bisa dibooking orang lain lagi. Bug yang sama persis
+            # ditemukan & diperbaiki di _release_transaction & approve
+            # refund (lihat update_refund_request) -- ternyata pola yang
+            # sama belum diterapkan di jalur reschedule ini juga.
+            from transactions.models import TransactionItem
+            TransactionItem.objects.filter(mentor_availability=old_slot).update(mentor_availability=slot)
 
     slot.is_booked = True
     slot.save()
@@ -1017,8 +1028,18 @@ def update_refund_request(request, refund_id):
 
         # Bebasin lagi slot mentor yang masih terjadwal biar bisa dibooking user lain.
         for session in user_library.mentoring_sessions.filter(status="scheduled", availability_slot__isnull=False):
-            session.availability_slot.is_booked = False
-            session.availability_slot.save()
+            slot = session.availability_slot
+            slot.is_booked = False
+            slot.save(update_fields=["is_booked"])
+            # TransactionItem.mentor_availability itu OneToOneField -- kalau FK-nya
+            # TIDAK ikut dilepas di sini, constraint unique di database bakal
+            # PERMANEN "mengunci" slot ini walau is_booked-nya sendiri sudah
+            # balik False, jadi gak akan PERNAH bisa dibooking orang lain lagi.
+            # Bug yang sama persis pernah ditemukan & diperbaiki di
+            # _release_transaction (transactions/views.py) buat kasus
+            # kedaluwarsa/ditolak -- ternyata perbaikan yang sama belum
+            # diterapkan di jalur approve refund ini.
+            TransactionItem.objects.filter(mentor_availability=slot).update(mentor_availability=None)
 
         # Cari transaksi PAID yang paling cocok (user+produk) buat ditandai REFUNDED.
         # products.UserLibrary belum nyimpen link balik langsung ke Transaction,
