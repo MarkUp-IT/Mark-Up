@@ -151,6 +151,28 @@ def send_mail_async(subject, message, recipient_list):
     threading.Thread(target=_send, daemon=True).start()
 
 
+def notify_user(user, title, message, url=""):
+    """Bikin notifikasi IN-APP buat SATU user (baris di tabel Notification,
+    muncul di tombol lonceng dashboard) -- BEDA dari notify_team di atas
+    yang ngirim EMAIL ke tim internal. Dipakai buat event yang relevan buat
+    pembelinya sendiri (pembayaran lunas/ditolak) atau mentor (booking baru,
+    payout diproses).
+
+    Sinkron (bukan thread) karena cuma satu INSERT ke database, jauh lebih
+    cepat dari kirim email -- gak perlu App off-load ke thread terpisah.
+    Tetap dibungkus try/except supaya kegagalan simpan notifikasi TIDAK
+    PERNAH menggagalkan aksi utama yang sedang berjalan (pembayaran,
+    payout, dst)."""
+    try:
+        from .models import Notification
+        Notification.objects.create(user=user, title=title, message=message, url=url or "")
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "Gagal bikin notifikasi in-app buat user %s", getattr(user, "id", None)
+        )
+
+
 def notify_team(subject, message):
     """Kirim notifikasi internal ke inbox tim (settings.TEAM_NOTIFICATION_EMAIL)
     buat kejadian yang butuh tindakan cepat -- transaksi baru nunggu verifikasi,

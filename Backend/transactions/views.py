@@ -30,7 +30,7 @@ from programs.models import BootcampSession as BootcampSessionTemplate
 from django.utils.dateparse import parse_date
 from accounts.decorators import jwt_required, role_required
 from accounts.models import UserRole, AuditAction
-from accounts.utils import log_audit, notify_team, is_rate_limited
+from accounts.utils import log_audit, notify_team, notify_user, is_rate_limited
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Sum, Case, When, F, DecimalField
@@ -264,9 +264,12 @@ def _mark_transaction_paid(transaction_id):
         txn.payment_status = PaymentStatus.PAID
         txn.paid_at = timezone.now()
 
+        judul_produk = []
         for item in items:
             product = item.product
             detail = _get_checkout_detail(product)
+            if detail is not None and getattr(detail, "title", None):
+                judul_produk.append(detail.title)
 
             user_library, _ = UserLibrary.objects.get_or_create(
                 user=txn.user, product=product,
@@ -285,6 +288,17 @@ def _mark_transaction_paid(transaction_id):
 
             if product.type == ProductType.MENTORING and item.mentor_availability:
                 _create_mentoring_sessions(user_library, detail, item.mentor_availability)
+                # Notifikasi buat MENTOR-nya juga -- ini titik satu-satunya
+                # baris MentoringSession beneran dibuat, jadi mentor yang
+                # bersangkutan pasti kebagian tahu ada booking baru.
+                mentor_user = item.mentor_availability.mentor_profile.user
+                notify_user(
+                    mentor_user,
+                    "Booking Baru",
+                    f"{txn.user.fullname} baru saja booking sesi \"{detail.title if detail else product.type}\" "
+                    f"pada {timezone.localtime(item.mentor_availability.start_time).strftime('%d %B %Y, %H:%M')} WIB.",
+                    url="/mentor/mentoring-schedule",
+                )
             elif product.type == ProductType.BOOTCAMP:
                 _create_bootcamp_sessions(user_library, product)
 
@@ -300,6 +314,15 @@ def _mark_transaction_paid(transaction_id):
             _provision_team_members(txn)
 
         txn.save()
+
+        notify_user(
+            txn.user,
+            "Pembayaran Lunas",
+            f"Pembayaran kamu untuk \"{', '.join(judul_produk) or txn.id}\" sudah dikonfirmasi. "
+            f"Akses produknya sudah terbuka sekarang.",
+            url="/user/transactions",
+        )
+
         return txn, False
 
 
@@ -395,6 +418,19 @@ def verify_transaction(request, transaction_id):
     if sudah:
         return JsonResponse(
             {"detail": "Transaksi ini sudah diverifikasi sebelumnya."}, status=400
+        )
+
+    if decision == "failed":
+        # Notifikasi ke pembeli CUMA buat penolakan yang dipicu admin --
+        # BEDA dari pembatalan sendiri oleh pembeli (cancel_transaction) atau
+        # kedaluwarsa reservasi iPaymu, yang keduanya sengaja diam-diam
+        # (pembeli sendiri yang minta, atau memang gak sempat bayar).
+        notify_user(
+            txn.user,
+            "Pembayaran Ditolak",
+            f"Pembayaran kamu untuk transaksi {txn.id} ditolak oleh tim kami."
+            + (f" Alasan: {txn.notes}" if txn.notes else " Hubungi tim support kami untuk info lebih lanjut."),
+            url="/user/transactions",
         )
 
     log_audit(
@@ -1779,6 +1815,13 @@ def mark_payout_paid(request, payout_id):
     log_audit(
         request, AuditAction.UPDATE, "mentor_payouts", object_id=payout.id,
         old_data={"status": "pending"}, new_data={"status": "paid"},
+    )
+
+    notify_user(
+        payout.mentor_profile.user,
+        "Payout Dicairkan",
+        f"Payout kamu sebesar Rp {payout.net_amount:,.0f}".replace(",", ".") + " sudah kami transfer.",
+        url="/mentor/transactions",
     )
 
     return JsonResponse({"detail": "Pencairan berhasil ditandai lunas.", "payout": _serialize_payout(payout)}, status=200)

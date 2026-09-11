@@ -1374,3 +1374,55 @@ def get_student_sidebar_badges(request):
 	}
 
 	return JsonResponse(data, status=200)
+
+
+@jwt_required
+def get_notifications(request):
+	"""Daftar notifikasi IN-APP punya sendiri buat tombol lonceng dashboard
+	(student & mentor) -- 30 terbaru + jumlah yang belum dibaca. Bukan
+	admin-only kayak get_student_sidebar_badges di atas, karena mentor juga
+	pakai endpoint ini."""
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	from .models import Notification
+
+	qs = Notification.objects.filter(user=request.user)
+	unread_count = qs.filter(is_read=False).count()
+	items = [
+		{
+			"id": str(n.id),
+			"title": n.title,
+			"message": n.message,
+			"url": n.url,
+			"is_read": n.is_read,
+			"created_at": n.created_at.isoformat(),
+		}
+		for n in qs[:30]
+	]
+
+	return JsonResponse({"notifications": items, "unread_count": unread_count}, status=200)
+
+
+@csrf_exempt
+@jwt_required
+def mark_notifications_read(request):
+	"""Tandai notifikasi sudah dibaca -- kirim {"id": "..."} buat satu baris
+	spesifik (dipakai pas notifikasi diklik), atau {"all": true} buat semua
+	sekaligus (dipakai pas buka dropdown lonceng)."""
+	if request.method != "POST":
+		return HttpResponseNotAllowed(["POST"])
+
+	from .models import Notification
+
+	data = get_request_data(request) or {}
+	qs = Notification.objects.filter(user=request.user, is_read=False)
+
+	if data.get("all"):
+		jumlah = qs.update(is_read=True)
+	elif data.get("id"):
+		jumlah = qs.filter(id=data["id"]).update(is_read=True)
+	else:
+		return JsonResponse({"detail": "Sertakan 'id' atau 'all'."}, status=400)
+
+	return JsonResponse({"detail": "Ditandai sudah dibaca.", "jumlah": jumlah}, status=200)

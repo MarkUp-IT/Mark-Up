@@ -347,6 +347,7 @@ export default function MyProducts() {
               label: p.title,
               anchor: `produk-${p.id}`,
             }))}
+            dismissKey="user-my-products-rating"
           />
         </motion.div>
       )}

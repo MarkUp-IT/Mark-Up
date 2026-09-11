@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { LayoutGrid, LogOut } from "lucide-react";
 import { api, ApiError, clearTokens, getRefreshToken } from "@/lib/api";
 import GlassShine from "@/component/GlassShine";
+import NotificationBell from "@/component/NotificationBell";
 
 const menuItems = [
   { name: "Beranda", url: "/" },
@@ -223,7 +224,10 @@ export default function Navbar({ variant = "glass" }) {
       {authLoading ? (
         <div className="hidden sm:block w-24 h-8 rounded-full bg-white/10 animate-pulse" />
       ) : isLoggedIn ? (
-        profileButton
+        <>
+          <NotificationBell />
+          {profileButton}
+        </>
       ) : (
         authButtons
       )}

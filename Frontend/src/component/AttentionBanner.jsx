@@ -1,6 +1,11 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertTriangle, X } from "lucide-react";
+
+function kunciDismiss(dismissKey) {
+  return `markup:dismissed-banner:${dismissKey}`;
+}
 
 /**
  * Spanduk "ini penyebab angka merah di menu".
@@ -16,14 +21,42 @@ import { AlertTriangle } from "lucide-react";
  *
  * `tema`: "gelap" untuk dashboard student/mentor (latar #0F081C),
  *         "terang" untuk panel admin (latar putih).
+ *
+ * `dismissKey`: kalau diisi, muncul tombol X buat nutup spanduk ini secara
+ * permanen (disimpan di localStorage per browser). Dismiss-nya diingat per
+ * KUMPULAN butir yang lagi tampil -- kalau nanti ada butir baru/beda (mis.
+ * transaksi ditolak yang lain), spanduknya muncul lagi, karena itu masalah
+ * baru yang belum pernah "ditutup".
  */
 export default function AttentionBanner({
   judul,
   butir = [],
   tema = "gelap",
   keterangan,
+  dismissKey,
 }) {
+  const [tandaDitutup, setTandaDitutup] = useState(null);
+
+  const tandaSekarang = butir.map((b) => b.key).sort().join("|");
+
+  useEffect(() => {
+    if (!dismissKey) return;
+    // setTimeout(..., 0) -- baca localStorage di luar body efek langsung,
+    // biar gak kena warning "setState sinkron di dalam efek". Nggak masalah
+    // ketunda sepersekian detik: banner sengaja tampil dulu sampai status
+    // dismiss-nya kebaca, baru hilang kalau ternyata sudah pernah ditutup.
+    const id = setTimeout(() => {
+      try {
+        setTandaDitutup(localStorage.getItem(kunciDismiss(dismissKey)));
+      } catch {
+        setTandaDitutup(undefined);
+      }
+    }, 0);
+    return () => clearTimeout(id);
+  }, [dismissKey]);
+
   if (!butir.length) return null;
+  if (dismissKey && tandaDitutup === tandaSekarang) return null;
 
   const gelap = tema === "gelap";
   const kelasKotak = gelap
@@ -45,10 +78,21 @@ export default function AttentionBanner({
     if (isian) setTimeout(() => isian.focus({ preventScroll: true }), 350);
   };
 
+  const tutup = () => {
+    if (!dismissKey) return;
+    try {
+      localStorage.setItem(kunciDismiss(dismissKey), tandaSekarang);
+    } catch {
+      // localStorage gak tersedia (mode privat, dll) -- gak fatal, cuma
+      // berarti spanduknya bakal muncul lagi pas reload berikutnya.
+    }
+    setTandaDitutup(tandaSekarang);
+  };
+
   return (
     <div className={`flex items-start gap-3 px-4 py-3.5 rounded-[10px] border ${kelasKotak}`}>
       <AlertTriangle size={17} className={`${kelasJudul} shrink-0 mt-0.5`} />
-      <div className="flex flex-col gap-2 min-w-0">
+      <div className="flex flex-col gap-2 min-w-0 flex-1">
         <p className={`text-[13.5px] font-semibold ${kelasJudul}`}>{judul}</p>
         {keterangan && <p className={`text-[12.5px] ${kelasTeks}`}>{keterangan}</p>}
         <div className="flex flex-wrap gap-1.5">
@@ -66,6 +110,18 @@ export default function AttentionBanner({
           ))}
         </div>
       </div>
+      {dismissKey && (
+        <button
+          type="button"
+          onClick={tutup}
+          aria-label="Tutup"
+          className={`shrink-0 p-1 rounded-[6px] transition-colors ${
+            gelap ? "text-[#FCD9A0]/70 hover:text-[#FCD9A0] hover:bg-white/10" : "text-[#92400E]/60 hover:text-[#92400E] hover:bg-black/5"
+          }`}
+        >
+          <X size={15} />
+        </button>
+      )}
     </div>
   );
 }
