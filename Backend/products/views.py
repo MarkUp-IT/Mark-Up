@@ -3657,6 +3657,15 @@ def create_bootcamp_payment(request, registration_id):
 
             # Stok di-reserve begitu bayar, sama pola-nya kayak checkout_product
             # biasa buat MODULE/BOOTCAMP -- sold_count baru nambah pas admin approve.
+            #
+            # Lepas dulu reservasi IPAYMU yang sudah lewat 15 menit tanpa dibayar
+            # (kalau ada) sebelum ngecek stok -- konsisten sama checkout_product,
+            # lihat catatan lengkap di sana (transactions/views.py).
+            from transactions.views import _release_expired_transactions, RESERVATION_MINUTES
+            _release_expired_transactions(
+                Transaction.objects.filter(items__product=bootcamp_product.product)
+            )
+
             detail_locked = BootcampProduct.objects.select_for_update().get(
                 product_id=bootcamp_product.product_id
             )
@@ -3682,6 +3691,13 @@ def create_bootcamp_payment(request, registration_id):
                 bootcamp_registration=registration,
                 commitment_fee_amount=commitment_fee_amount,
                 gateway=payment_gateway,
+                # MANUAL: None (bukti sudah dilampirkan, tinggal nunggu admin
+                # tinjau). IPAYMU: 15 menit -- lihat RESERVATION_MINUTES &
+                # catatan di Transaction.expires_at.
+                expires_at=(
+                    timezone.now() + timedelta(minutes=RESERVATION_MINUTES)
+                    if payment_gateway == PaymentGateway.IPAYMU else None
+                ),
             )
             TransactionItem.objects.create(
                 transaction=txn,

@@ -328,6 +328,17 @@ def _release_transaction(transaction_id, status):
             if item.mentor_availability_id:
                 item.mentor_availability.is_booked = False
                 item.mentor_availability.save(update_fields=["is_booked"])
+                # TransactionItem.mentor_availability itu OneToOneField --
+                # kalau FK-nya TIDAK dilepas di sini, baris item yang sudah
+                # gagal/kedaluwarsa ini bakal PERMANEN "mengunci" slot itu di
+                # level database (unique constraint), walau is_booked-nya
+                # sendiri sudah balik False. Akibatnya slot yang sama gak
+                # akan PERNAH bisa dipesan orang lain lagi selamanya. Riwayat
+                # transaksinya sendiri tetap utuh (cuma link ke slotnya yang
+                # diputus), jadwal & waktunya masih kebaca dari kapan
+                # transaksi ini dibuat kalau suatu saat perlu ditelusuri.
+                item.mentor_availability = None
+                item.save(update_fields=["mentor_availability"])
 
             if detail is not None and getattr(detail, "stock", None) is not None:
                 detail.stock = (detail.stock or 0) + item.quantity
@@ -872,6 +883,40 @@ def _validate_checkout_upload(f, label):
     return None
 
 
+# Berapa lama transaksi IPAYMU (belum dibayar, tanpa bukti apa pun) boleh
+# menahan reservasi slot mentor / stok sebelum otomatis dilepas lagi.
+# MANUAL sengaja TIDAK pakai ini -- lihat catatan di Transaction.expires_at.
+RESERVATION_MINUTES = 15
+
+
+def _release_expired_transactions(queryset=None):
+    """Cari transaksi PENDING yang sudah lewat expires_at (cuma ada buat
+    gateway=IPAYMU) dan lepas reservasinya satu per satu lewat
+    _release_transaction yang sudah idempotent & row-locked. Dipanggil dari
+    DUA tempat:
+      1. Management command terjadwal (cron ~tiap 2 menit) -- jaring pengaman
+         umum, gak nunggu ada yang bentrok baru kelepas.
+      2. Lazy, PERSIS di titik kontensi (pas checkout_product/create_bootcamp_payment
+         mau reservasi slot/stok yang sama) -- biar reservasi basi langsung
+         kelepas SAAT itu juga, gak nunggu jadwal cron berikutnya.
+    Return jumlah yang dilepas."""
+    qs = queryset if queryset is not None else Transaction.objects.all()
+    kadaluarsa = qs.filter(
+        payment_status=PaymentStatus.PENDING,
+        expires_at__isnull=False,
+        expires_at__lt=timezone.now(),
+    )
+    dilepas = 0
+    for transaction_id in list(kadaluarsa.values_list("id", flat=True)):
+        try:
+            _txn, sudah = _release_transaction(transaction_id, PaymentStatus.EXPIRED)
+            if not sudah:
+                dilepas += 1
+        except Transaction.DoesNotExist:
+            continue
+    return dilepas
+
+
 @csrf_exempt
 @jwt_required
 def checkout_product(request):
@@ -1007,6 +1052,17 @@ def checkout_product(request):
                 except MentorAvailability.DoesNotExist:
                     return JsonResponse({"detail": "Slot jadwal tidak ditemukan."}, status=404)
 
+                # Cek ulang PERSIS di sini, di dalam kuncinya -- kalau slot ini
+                # kelihatan "dibooking" tapi ternyata itu reservasi IPAYMU yang
+                # udah lewat 15 menit tanpa dibayar, lepas dulu sebelum ditolak.
+                # Ini yang bikin "klik Bayar" beneran ngecek ulang ketersediaan,
+                # bukan cuma percaya status is_booked yang mungkin sudah basi.
+                if mentor_availability.is_booked:
+                    _release_expired_transactions(
+                        Transaction.objects.filter(items__mentor_availability=mentor_availability)
+                    )
+                    mentor_availability.refresh_from_db()
+
                 if mentor_availability.is_booked:
                     return JsonResponse({"detail": "Slot ini sudah dibooking orang lain."}, status=400)
 
@@ -1019,6 +1075,15 @@ def checkout_product(request):
                 # tapi sold_count BARU nambah begitu admin approve (lihat
                 # verify_transaction) -- supaya angka "terjual" yang tampil ke
                 # publik nggak ikut kehitung transaksi yang masih pending/gagal.
+                #
+                # Lepas dulu reservasi IPAYMU basi (lihat catatan MENTORING di
+                # atas, alasannya sama) sebelum nge-cek stok -- kalau ada
+                # transaksi kadaluarsa yang masih nahan unit, itu harus balik
+                # ke stok dulu sebelum kita putuskan stoknya habis atau tidak.
+                _release_expired_transactions(
+                    Transaction.objects.filter(items__product=product)
+                )
+
                 detail_locked = type(detail).objects.select_for_update().get(pk=detail.pk)
 
                 if getattr(detail_locked, "stock", None) is not None:
@@ -1039,6 +1104,12 @@ def checkout_product(request):
                 payment_status=PaymentStatus.PENDING,
                 notes=notes,
                 gateway=payment_gateway,
+                # MANUAL: None -- gak ada batas waktu, bukti udah dilampirkan,
+                # tinggal nunggu admin tinjau (lihat catatan di model).
+                expires_at=(
+                    timezone.now() + timedelta(minutes=RESERVATION_MINUTES)
+                    if payment_gateway == PaymentGateway.IPAYMU else None
+                ),
             )
 
             item = TransactionItem.objects.create(
@@ -1273,6 +1344,28 @@ def ipaymu_webhook(request):
                     f"Total: Rp {txn.grand_total}\n"
                     f"Metode: {via}/{channel}\n\n"
                     f"Akses produk sudah terbuka otomatis, gak perlu ACC manual.",
+                )
+            elif txn.payment_status == PaymentStatus.EXPIRED:
+                # Kasus langka tapi serius: pembeli BENERAN bayar di iPaymu,
+                # tapi baru sampai SETELAH reservasinya kami lepas duluan
+                # (lewat 15 menit) -- uangnya sudah masuk, tapi slot/stoknya
+                # mungkin sudah diambil orang lain. Sengaja TIDAK otomatis
+                # dipaksa PAID lagi di sini (bisa nabrak reservasi baru punya
+                # orang lain) -- butuh admin cek manual & putuskan sendiri.
+                logger.error(
+                    "iPaymu webhook: transaksi %s BAYAR SUKSES tapi reservasinya SUDAH KEDALUWARSA -- perlu cek manual.",
+                    txn.id,
+                )
+                notify_team(
+                    f"[PERLU CEK MANUAL] Pembayaran iPaymu terlambat ({txn.id})",
+                    f"Transaksi {txn.id} baru dikonfirmasi LUNAS oleh iPaymu, tapi reservasinya "
+                    f"(slot mentor/stok) SUDAH kami lepas duluan karena lewat {RESERVATION_MINUTES} "
+                    f"menit tanpa kabar dari iPaymu.\n\n"
+                    f"Pembeli: {txn.user.fullname} ({txn.user.email})\n"
+                    f"Total: Rp {txn.grand_total}\n\n"
+                    f"Uangnya sudah masuk -- mohon dicek manual apakah slot/stoknya masih bisa "
+                    f"dikasih ke pembeli ini, atau perlu diproses refund kalau sudah terlanjur "
+                    f"diambil orang lain.",
                 )
         elif status_code == "-2":
             _release_transaction(reference_id, PaymentStatus.EXPIRED)

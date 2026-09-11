@@ -97,6 +97,15 @@ class Transaction(models.Model):
         blank=True, null=True,
         help_text="Payload webhook terakhir dari iPaymu apa adanya -- buat audit kalau ada sengketa pembayaran.",
     )
+    # Cuma keisi buat transaksi gateway=IPAYMU (lihat _create_transaction_with_reservation
+    # di views.py) -- MANUAL sengaja TIDAK punya batas waktu di sini karena bukti
+    # pembayarannya sudah dilampirkan SAAT transaksi dibuat, tinggal nunggu admin
+    # tinjau (bisa lewat 15 menit, itu wajar, bukan berarti reservasinya harus lepas).
+    # Buat IPAYMU, pembeli belum bayar apa-apa saat baris ini dibuat -- slot/stok
+    # yang di-reserve harus dilepas lagi kalau dia gak nyelesain bayar di iPaymu
+    # dalam waktu segini. Dicek & dilepas oleh _release_expired_transactions
+    # (dipanggil management command terjadwal + lazy di titik kontensi).
+    expires_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(blank=True, null=True)
 
@@ -388,7 +397,10 @@ class IpaymuSetting(models.Model):
     )
     default_expired_hours = models.PositiveIntegerField(
         default=2,
-        help_text="Umur sesi pembayaran yang dikirim ke iPaymu (jam) -- ini juga jadi jendela reservasi stok/slot yang sesungguhnya buat transaksi lewat iPaymu.",
+        help_text="Umur sesi HALAMAN BAYAR iPaymu (jam) -- cuma buffer, biar halamannya "
+                  "gak keburu mati pas pembeli masih di sana. BUKAN penentu reservasi slot/stok "
+                  "-- itu tetap 15 menit tetap (RESERVATION_MINUTES di transactions/views.py), "
+                  "gak ikut berubah walau angka ini diubah.",
     )
     last_check_at = models.DateTimeField(blank=True, null=True)
     last_check_ok = models.BooleanField(blank=True, null=True)
