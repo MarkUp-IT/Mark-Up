@@ -4,14 +4,11 @@ import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { LayoutGrid, LogOut } from "lucide-react";
 import { api, ApiError, clearTokens, getRefreshToken } from "@/lib/api";
-
-const GlassSurfaceDynamic = dynamic(() => import("@/component/GlassSurface"), {
-  ssr: false,
-});
+import GlassShine from "@/component/GlassShine";
+import NotificationBell from "@/component/NotificationBell";
 
 const menuItems = [
   { name: "Beranda", url: "/" },
@@ -113,7 +110,14 @@ export default function Navbar({ variant = "glass" }) {
   );
 
   const desktopLinks = (
-    <div className="hidden lg:flex font-light items-center gap-6 relative z-20">
+    // absolute + left-1/2 -translate-x-1/2 -- SENGAJA gak ikut flex row biasa
+    // (yang justify-between) di parent. Logo (kiri) dan rightSection (kanan)
+    // lebarnya beda jauh (rightSection lebih lebar karena ada nama+email+
+    // avatar+lonceng), jadi kalau menu ini masih ikut jadi anak flex ke-2 di
+    // antara keduanya, dia bakal kegeser ke sisi yang lebih sempit (kiri),
+    // bukan bener-bener di tengah navbar. Dengan absolute+translate, posisinya
+    // dihitung dari TENGAH KONTAINER PENUH, gak peduli lebar dua sisi lainnya.
+    <div className="hidden lg:flex font-light items-center gap-6 absolute left-1/2 -translate-x-1/2 z-20">
       {menuItems.map((menu, i) => {
         const isCurrentActive = pathname === menu.url;
         return (
@@ -133,12 +137,6 @@ export default function Navbar({ variant = "glass" }) {
     </div>
   );
 
-  const GlassLayer = ({ borderRadius }) => (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ borderRadius }}>
-      <GlassSurfaceDynamic width="100%" height="100%" borderRadius={borderRadius} distortionScale={300} />
-    </div>
-  );
-
   const profileButton = (
     <div className="relative z-50" ref={profileMenuRef}>
       <button
@@ -150,7 +148,15 @@ export default function Navbar({ variant = "glass" }) {
           <span className="text-[11px] text-[#9CA3AF]">{profile.email}</span>
         </div>
         <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-white/20 shrink-0">
-          <img src={profile.avatarSrc} alt={profile.profileName} className="w-full h-full object-cover" />
+          <img
+            src={profile.avatarSrc || "/images/default-avatar.svg"}
+            alt={profile.profileName}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "/images/default-avatar.svg";
+            }}
+          />
         </div>
       </button>
 
@@ -161,9 +167,13 @@ export default function Navbar({ variant = "glass" }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-[120%] mt-2 w-56 rounded-[14px] border border-white/20 bg-white/10 backdrop-blur-md shadow-2xl z-[100] overflow-hidden"
+            className="absolute right-0 top-[120%] mt-2 w-56 rounded-[14px] border border-white/20 shadow-2xl z-[100] overflow-hidden"
           >
-            <GlassLayer borderRadius={14} />
+            {/* Latar pekat (bukan cuma bg-white/10) -- blur tetap dipasang
+                buat browser yang dukung, tapi keterbacaan gak boleh gantung
+                semata ke situ. Lihat catatan sama di NotificationBell.jsx. */}
+            <div className="absolute inset-0 bg-[#170F26]/95 backdrop-blur-md" />
+            <GlassShine borderRadius={14} />
             <div className="relative z-10 p-2">
               <Link
                 href={profile.dashboardHref}
@@ -225,7 +235,10 @@ export default function Navbar({ variant = "glass" }) {
       {authLoading ? (
         <div className="hidden sm:block w-24 h-8 rounded-full bg-white/10 animate-pulse" />
       ) : isLoggedIn ? (
-        profileButton
+        <>
+          <NotificationBell />
+          {profileButton}
+        </>
       ) : (
         authButtons
       )}
@@ -242,9 +255,13 @@ export default function Navbar({ variant = "glass" }) {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.2 }}
-          className="fixed top-[80px] left-1/2 -translate-x-1/2 w-[95%] md:w-[90%] rounded-[24px] border border-white/20 bg-white/10 backdrop-blur-md shadow-2xl lg:hidden z-[90] overflow-hidden"
+          className="absolute top-full left-0 mt-3 w-full rounded-[24px] border border-white/20 shadow-2xl lg:hidden z-[90] overflow-hidden pointer-events-auto"
         >
-          <GlassLayer borderRadius={24} />
+          {/* Latar pekat (bukan cuma bg-white/10) -- blur tetap dipasang
+              buat browser yang dukung, tapi keterbacaan gak boleh gantung
+              semata ke situ. Lihat catatan sama di NotificationBell.jsx. */}
+          <div className="absolute inset-0 bg-[#170F26]/95 backdrop-blur-md" />
+          <GlassShine borderRadius={24} />
           <div className="relative z-10 p-6 flex flex-col gap-4">
             {menuItems.map((menu, index) => {
               const isMenuCurrentlyActive = pathname === menu.url;
@@ -306,10 +323,26 @@ export default function Navbar({ variant = "glass" }) {
   if (variant === "solid") {
     return (
       <div className="fixed top-0 left-0 z-[100] w-full flex justify-center mt-4 px-4 pointer-events-none">
-        <nav className="relative pointer-events-auto text-white flex font-jakarta justify-between items-center border border-white/20 bg-white/10 backdrop-blur-md shadow-lg w-[95%] md:w-[90%] rounded-full z-50">
-          <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none">
-            <GlassSurfaceDynamic width="100%" height="100%" borderRadius={100} distortionScale={300} />
-          </div>
+        <div className="relative w-[95%] md:w-[90%]">
+          <nav className="relative pointer-events-auto text-white flex font-jakarta justify-between items-center border border-white/20 bg-white/10 backdrop-blur-md shadow-lg w-full rounded-full z-50">
+            <GlassShine borderRadius={9999} />
+            <div className="relative z-10 flex items-center py-2 px-4 md:py-3 md:px-8 justify-between w-full">
+              {logo}
+              {desktopLinks}
+              {rightSection}
+            </div>
+          </nav>
+          {mobileMenu}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed top-0 left-0 z-[100] flex w-full justify-center mt-4 px-4 pointer-events-none">
+      <div className="relative w-[95%] md:w-[90%]">
+        <nav className="relative pointer-events-auto text-white flex font-jakarta justify-between items-center border border-white/20 bg-white/10 backdrop-blur-md shadow-lg w-full rounded-full z-50">
+          <GlassShine borderRadius={9999} />
           <div className="relative z-10 flex items-center py-2 px-4 md:py-3 md:px-8 justify-between w-full">
             {logo}
             {desktopLinks}
@@ -318,22 +351,6 @@ export default function Navbar({ variant = "glass" }) {
         </nav>
         {mobileMenu}
       </div>
-    );
-  }
-
-  return (
-    <div className="fixed top-0 left-0 z-[100] flex w-full justify-center mt-4 px-4 pointer-events-none">
-      <nav className="relative pointer-events-auto text-white flex font-jakarta justify-between items-center border border-white/20 bg-white/10 backdrop-blur-md shadow-lg w-[95%] md:w-[90%] rounded-full z-50">
-        <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none">
-          <GlassSurfaceDynamic width="100%" height="100%" borderRadius={100} distortionScale={300} />
-        </div>
-        <div className="relative z-10 flex items-center py-2 px-4 md:py-3 md:px-8 justify-between w-full">
-          {logo}
-          {desktopLinks}
-          {rightSection}
-        </div>
-      </nav>
-      {mobileMenu}
     </div>
   );
 }

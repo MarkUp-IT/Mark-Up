@@ -21,7 +21,11 @@ from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    # Sengaja bukan path 'admin/' -- itu udah dipakai dashboard admin custom
+    # (Next.js) di frontend, dan nginx nge-proxy /admin/ ke Gunicorn, jadi
+    # bentrok kalau namanya sama (yang muncul admin bawaan Django ini terus,
+    # dashboard custom-nya nggak pernah ke-render).
+    path('django-admin/', admin.site.urls),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/accounts/', include('accounts.urls')),
     path('api/products/', include('products.urls')),

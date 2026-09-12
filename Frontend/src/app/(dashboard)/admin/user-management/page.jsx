@@ -3,7 +3,6 @@
 import { Search, ChevronDown, PenLine, Eye, X } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
@@ -35,6 +34,7 @@ export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [formRole, setFormRole] = useState("STUDENT");
   const [formStatus, setFormStatus] = useState("ACTIVE");
+  const [formFeeOverride, setFormFeeOverride] = useState("");
   const [saving, setSaving] = useState(false);
 
   const fetchUsers = useCallback(async () => {
@@ -68,15 +68,22 @@ export default function UserManagement() {
     setSelectedUser(item);
     setFormRole(item.role);
     setFormStatus(item.status);
+    const override = item.mentoring_fee_percent_override;
+    setFormFeeOverride(override === null || override === undefined ? "" : String(override));
     setIsEditOpen(true);
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const body = { role: formRole, status: formStatus };
+      if (formRole === "MENTOR") {
+        body.mentoring_fee_percent_override =
+          formFeeOverride === "" ? null : Number(formFeeOverride);
+      }
       await apiRequest(`/api/accounts/users/${selectedUser.id}/update/`, {
         method: "PATCH",
-        body: { role: formRole, status: formStatus },
+        body,
       });
       setIsEditOpen(false);
       fetchUsers();
@@ -95,7 +102,7 @@ export default function UserManagement() {
   const totalMentors = users.filter((u) => u.role === "MENTOR").length;
 
   return (
-    <DashboardLayout title="Manajemen User">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -142,7 +149,7 @@ export default function UserManagement() {
         </div>
 
         {!loading && users.length === 0 ? (
-          <EmptyState message="Nggak ada user yang cocok sama filter ini." />
+          <EmptyState message="Tidak ada pengguna yang sesuai dengan filter ini." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
             <div className="overflow-x-auto">
@@ -165,13 +172,11 @@ export default function UserManagement() {
                             style={{ width: "38px", height: "38px" }}
                             className="rounded-full overflow-hidden border border-[#E2E8F0] shrink-0 bg-[#F1F5F9]"
                           >
-                            {item.profile_image && (
-                              <img
-                                src={item.profile_image}
-                                alt={item.fullname}
-                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                              />
-                            )}
+                            <img
+                              src={item.profile_image || "/images/default-avatar.svg"}
+                              alt={item.fullname}
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            />
                           </div>
                           <div className="flex flex-col">
                             <span className="font-bold text-[#1E293B] text-[13.5px]">{item.fullname}</span>
@@ -238,13 +243,11 @@ export default function UserManagement() {
               style={{ width: "56px", height: "56px" }}
               className="rounded-full overflow-hidden border border-[#E2E8F0] shrink-0 bg-white"
             >
-              {selectedUser?.profile_image && (
-                <img
-                  src={selectedUser.profile_image}
-                  alt="avatar"
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
-              )}
+              <img
+                src={selectedUser?.profile_image || "/images/default-avatar.svg"}
+                alt="avatar"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-[#1E293B] text-[15px]">{selectedUser?.fullname}</span>
@@ -267,11 +270,36 @@ export default function UserManagement() {
               <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none" />
             </div>
             <p className="text-[#94A3B8] text-[11px] leading-relaxed">
-              Semua orang daftar sebagai User biasa. Naikin ke Mentor kalau udah
-              lolos seleksi jadi pemateri (lengkapin profil mentor-nya
-              belakangan lewat halaman Mentor).
+              Semua orang mendaftar sebagai User biasa. Naikkan menjadi Mentor
+              jika sudah lolos seleksi sebagai pemateri (profil mentor dapat
+              dilengkapi kemudian melalui halaman Mentor).
             </p>
           </div>
+
+          {formRole === "MENTOR" && (
+            <div className="flex flex-col gap-2">
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Komisi Mentoring Khusus
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="Default"
+                  value={formFeeOverride}
+                  onChange={(e) => setFormFeeOverride(e.target.value)}
+                  style={{ width: "100px" }}
+                  className="adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                />
+                <span className="text-[#64748B] text-[13px] font-medium">% untuk mentor ini</span>
+              </div>
+              <p className="text-[#94A3B8] text-[11px] leading-relaxed">
+                Kosongkan buat pakai persentase komisi global (diatur di halaman
+                Pencairan Mentor).
+              </p>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Status Akun</p>
@@ -305,6 +333,6 @@ export default function UserManagement() {
           </button>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

@@ -16,7 +16,17 @@ class RegisterForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ["fullname", "email"]
+        # Data profil ikut diambil sekalian pas daftar (langkah 2 di form),
+        # supaya user gak kejebak "gerbang lengkapi profil" pas mau checkout.
+        # linkedin_url sengaja opsional -- bukan data yang kepakai buat
+        # transaksi, dan dulu bikin orang mandek di gerbang profil.
+        fields = ["fullname", "email", "phone", "institution", "current_status", "linkedin_url"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name in ("phone", "institution", "current_status"):
+            self.fields[name].required = True
+        self.fields["linkedin_url"].required = False
 
     def clean_email(self):
         email = self.cleaned_data.get("email")

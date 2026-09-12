@@ -4,19 +4,18 @@ import {
   Plus,
   Download,
   X,
-  ImageIcon,
+  CloudUpload,
   PenLine,
   ExternalLink,
   Loader2,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import CategoryDropdown from "@/component/admin/CategoryDropdown";
 import CurrencyInput from "@/component/admin/CurrencyInput";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, getAccessToken, API_BASE } from "@/lib/api";
 import { extractErrorMessage, extractFieldErrors, fieldBorderClass as fieldBorder } from "@/lib/formErrors";
 
 const STATUS_FILTERS = ["Semua", "Aktif", "Kedaluwarsa"];
@@ -35,7 +34,6 @@ const EMPTY_FORM = {
   registration_fee: "",
   prizepool: "",
   registration_link: "",
-  image_url: "",
 };
 
 // status turunan dari deadline vs sekarang, sama persis kayak logic di
@@ -87,6 +85,29 @@ export default function Competitions() {
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [addError, setAddError] = useState(null);
   const [addFieldErrors, setAddFieldErrors] = useState({});
+  const [addImage, setAddImage] = useState({ key: "", preview: "", uploading: false });
+  const [editImage, setEditImage] = useState({ key: "", preview: "", uploading: false });
+
+  const uploadCompetitionPoster = async (file, setImageState) => {
+    if (!file) return;
+    setImageState((s) => ({ ...s, uploading: true }));
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const token = getAccessToken();
+      const res = await fetch(`${API_BASE}/api/programs/upload-poster/`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail || "Gagal mengunggah poster.");
+      setImageState({ key: data.key, preview: data.url, uploading: false });
+    } catch (err) {
+      showToast("error", "Gagal unggah poster", err?.message || "Coba lagi.");
+      setImageState((s) => ({ ...s, uploading: false }));
+    }
+  };
 
   const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [editSubmitting, setEditSubmitting] = useState(false);
@@ -179,8 +200,8 @@ export default function Competitions() {
       registration_fee: selectedCompetition.fee ?? "",
       prizepool: selectedCompetition.prize ?? "",
       registration_link: selectedCompetition.link || "",
-      image_url: selectedCompetition.image || "",
     });
+    setEditImage({ key: "", preview: selectedCompetition.image || "", uploading: false });
     setEditError(null);
   }, [selectedCompetition, categories]);
 
@@ -211,7 +232,6 @@ export default function Competitions() {
         form.registration_fee !== "" ? Number(form.registration_fee) : null,
       prizepool: form.prizepool !== "" ? Number(form.prizepool) : null,
       registration_link: form.registration_link || null,
-      image_url: form.image_url || null,
     };
   }
 
@@ -236,7 +256,7 @@ export default function Competitions() {
     try {
       const data = await api.post(
         `${COMPETITIONS_PATH}/add/`,
-        buildPayload(addForm)
+        { ...buildPayload(addForm), image_key: addImage.key || undefined }
       );
 
       if (data === null) {
@@ -254,6 +274,7 @@ export default function Competitions() {
         ...EMPTY_FORM,
         category: categories[0] ? String(categories[0].id) : "",
       });
+      setAddImage({ key: "", preview: "", uploading: false });
 
       await Promise.all([
         fetchCompetitions(),
@@ -289,7 +310,7 @@ export default function Competitions() {
     try {
       const data = await api.patch(
         `${COMPETITIONS_PATH}/${selectedCompetition.id}/`,
-        buildPayload(editForm)
+        { ...buildPayload(editForm), image_key: editImage.key || undefined }
       );
 
       if (data === null) {
@@ -351,7 +372,7 @@ export default function Competitions() {
   }
 
   return (
-    <DashboardLayout title="Info Lomba">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -368,6 +389,7 @@ export default function Competitions() {
               ...EMPTY_FORM,
               category: categories[0] ? String(categories[0].id) : "",
             });
+            setAddImage({ key: "", preview: "", uploading: false });
             setIsAddOpen(true);
           }}
           className="adm-h-42 flex items-center gap-2 px-5 rounded-[8px] bg-[#148F89] text-white text-[13px] font-semibold hover:bg-[#117A75] transition-colors"
@@ -456,7 +478,7 @@ export default function Competitions() {
             </button>
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState message="Nggak ada lomba yang cocok sama filter ini." />
+          <EmptyState message="Tidak ada lomba yang sesuai dengan filter ini." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
             <div className="overflow-x-auto">
@@ -587,21 +609,30 @@ export default function Competitions() {
 
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-              URL Poster Lomba (opsional)
+              Poster Lomba (opsional)
             </p>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 shrink-0 rounded-[8px] bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center">
-                <ImageIcon size={18} className="text-[#94A3B8]" />
-              </div>
+            <label
+              style={{ height: "160px" }}
+              className="relative bg-[#F8FAFC] w-full rounded-[8px] flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:bg-[#F1F5F9] transition-all cursor-pointer overflow-hidden"
+            >
               <input
-                type="url"
-                name="image_url"
-                value={addForm.image_url}
-                onChange={handleAddChange}
-                placeholder="https://...poster.jpg"
-                className="flex-1 adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => uploadCompetitionPoster(e.target.files?.[0], setAddImage)}
               />
-            </div>
+              {addImage.preview ? (
+                <img src={addImage.preview} alt="Preview" className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <>
+                  <CloudUpload size={22} className="text-[#148F89] mb-2" />
+                  <p className="text-[#1E293B] font-semibold text-[14px]">
+                    {addImage.uploading ? "Mengunggah..." : "Klik untuk unggah poster"}
+                  </p>
+                  <p className="text-[#94A3B8] text-[12px]">JPG/PNG/WEBP, maks. 5MB</p>
+                </>
+              )}
+            </label>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -747,7 +778,7 @@ export default function Competitions() {
               Link Pendaftaran
             </p>
             <input
-              type="url"
+              type="text"
               name="registration_link"
               value={addForm.registration_link}
               onChange={handleAddChange}
@@ -809,6 +840,34 @@ export default function Competitions() {
               {editError}
             </div>
           )}
+
+          <div className="flex flex-col gap-2">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Poster Lomba (opsional)
+            </p>
+            <label
+              style={{ height: "160px" }}
+              className="relative bg-[#F8FAFC] w-full rounded-[8px] flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:bg-[#F1F5F9] transition-all cursor-pointer overflow-hidden"
+            >
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => uploadCompetitionPoster(e.target.files?.[0], setEditImage)}
+              />
+              {editImage.preview ? (
+                <img src={editImage.preview} alt="Preview" className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <>
+                  <CloudUpload size={22} className="text-[#148F89] mb-2" />
+                  <p className="text-[#1E293B] font-semibold text-[14px]">
+                    {editImage.uploading ? "Mengunggah..." : "Klik untuk unggah poster"}
+                  </p>
+                  <p className="text-[#94A3B8] text-[12px]">JPG/PNG/WEBP, maks. 5MB</p>
+                </>
+              )}
+            </label>
+          </div>
 
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
@@ -890,7 +949,7 @@ export default function Competitions() {
               Link Pendaftaran
             </p>
             <input
-              type="url"
+              type="text"
               name="registration_link"
               value={editForm.registration_link}
               onChange={handleEditChange}
@@ -916,6 +975,6 @@ export default function Competitions() {
           </button>
         </div>
       </form>
-    </DashboardLayout>
+    </>
   );
 }

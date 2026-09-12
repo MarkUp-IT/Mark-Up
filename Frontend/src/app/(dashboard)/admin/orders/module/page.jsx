@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Eye, EyeOff, Pencil, ExternalLink } from "lucide-react";
 import Link from "next/link";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
@@ -66,7 +65,7 @@ export default function ModuleOrders() {
   const inactiveCount = modules.filter((m) => !m.is_active).length;
 
   return (
-    <DashboardLayout title="Kelola Pesanan · Modul">
+    <>
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-bold text-[22px] text-[#0F172A]">Manajemen Konten Modul</h1>
@@ -75,9 +74,9 @@ export default function ModuleOrders() {
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total Modul" value={modules.length} unit="modul" />
-        <StatCard label="Aktif" value={activeCount} unit="modul" variant="success" />
-        <StatCard label="Nonaktif" value={inactiveCount} unit="modul" variant="warning" />
+        <StatCard label="Total Modul" value={modules.length} unit="modul" loading={loading} />
+        <StatCard label="Aktif" value={activeCount} unit="modul" variant="success" loading={loading} />
+        <StatCard label="Nonaktif" value={inactiveCount} unit="modul" variant="warning" loading={loading} />
       </div>
 
       <div className="flex flex-col gap-4">
@@ -152,6 +151,6 @@ export default function ModuleOrders() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

@@ -3,6 +3,7 @@ from datetime import datetime
 
 from django import forms
 from django.utils import timezone
+from accounts.utils import normalize_and_validate_url
 from .models import MentorAvailability, MentorProfile, MentorExperience
 
 
@@ -18,6 +19,39 @@ class MentorProfileForm(forms.ModelForm):
             "linkedin_url",
             "instagram_url",
         ]
+
+    def clean_linkedin_url(self):
+        url, error = normalize_and_validate_url(
+            self.cleaned_data.get("linkedin_url"), must_contain="linkedin.com"
+        )
+        if error:
+            raise forms.ValidationError(
+                "URL LinkedIn tidak valid." if "valid" in error else error
+            )
+        return url
+
+    def clean_instagram_url(self):
+        url, error = normalize_and_validate_url(
+            self.cleaned_data.get("instagram_url"), must_contain="instagram.com"
+        )
+        if error:
+            raise forms.ValidationError(
+                "URL Instagram tidak valid." if "valid" in error else error
+            )
+        return url
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # bank_name/bank_account/linkedin_url di model wajib (gak ada blank=True),
+        # tapi UI Settings nyimpen per-section (Info Pribadi vs Rekening Bank
+        # kirim field yang beda-beda). Kalau field-nya tetep wajib di form,
+        # mentor BARU gak akan pernah bisa nyimpen section manapun -- section
+        # yang lagi disimpen bakal ketolak gara-gara field section LAIN masih
+        # kosong. Jadi semua field di-longgarin jadi opsional di sini;
+        # kelengkapan profil beneran tetep dijaga terpisah lewat
+        # MentorProfile.is_profile_complete() + gate useAuthGuard di FE.
+        for field in self.fields.values():
+            field.required = False
 
 
 class MentorExperienceForm(forms.ModelForm):

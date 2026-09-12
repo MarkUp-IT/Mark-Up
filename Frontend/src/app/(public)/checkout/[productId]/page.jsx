@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
@@ -18,8 +18,11 @@ import {
   Search,
   CalendarClock,
 } from "lucide-react";
-import Navbar from "@/component/Navbar";
-import { api, ApiError } from "@/lib/api";
+import Linkify from "@/component/Linkify";
+import { toast } from "sonner";
+import LoginRequiredDialog from "@/component/LoginRequiredDialog";
+import { useIsLoggedIn } from "@/lib/useIsLoggedIn";
+import { api, ApiError, getAccessToken } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
 
 // Jarak & lebar krusial dipaksa lewat inline style (bukan class Tailwind) --
@@ -68,7 +71,7 @@ function pickAvatarGradient(id) {
 function formatExperiencePeriod(exp) {
   const startYear = new Date(exp.start_date).getFullYear();
   const endYear = exp.end_date ? new Date(exp.end_date).getFullYear() : "Sekarang";
-  return `${startYear} — ${endYear}`;
+  return `${startYear} s.d. ${endYear}`;
 }
 
 function mapMentorFromApi(m) {
@@ -81,6 +84,7 @@ function mapMentorFromApi(m) {
     bio: m.bio,
     linkedin: m.linkedin,
     expertise: m.expertise,
+    photo: m.photo || null,
     avatarGradient: pickAvatarGradient(m.id),
     experience: m.experience.map((exp) => ({
       title: exp.title,
@@ -100,6 +104,17 @@ function StarRating({ rating }) {
 }
 
 function MentorAvatar({ mentor, size = 48 }) {
+  if (mentor.photo) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={mentor.photo}
+        alt={mentor.name}
+        style={{ width: size, height: size }}
+        className="shrink-0 rounded-full object-cover"
+      />
+    );
+  }
   return (
     <div
       style={{ width: size, height: size }}
@@ -134,7 +149,10 @@ function StepPill({ current }) {
 
 
 
-export default function CheckoutDetailPage() {
+function CheckoutDetailPageInner() {
+  // null = belum ketahuan (masih SSR). Gerbang baru ditampilkan setelah
+  // statusnya pasti, biar user yang sudah login gak kena popup sekilas.
+  const isLoggedIn = useIsLoggedIn();
   const params = useParams();
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
@@ -153,6 +171,9 @@ export default function CheckoutDetailPage() {
   const buyerInfo = useCheckoutFormStore((s) => s.buyerInfo);
   const setBuyerInfo = useCheckoutFormStore((s) => s.setBuyerInfo);
 
+  const notes = useCheckoutFormStore((s) => s.notes);
+  const setNotes = useCheckoutFormStore((s) => s.setNotes);
+
   const voucherCode = useCheckoutFormStore((s) => s.voucherCode);
   const setVoucherCode = useCheckoutFormStore((s) => s.setVoucherCode);
 
@@ -169,6 +190,12 @@ export default function CheckoutDetailPage() {
   const [voucherInput, setVoucherInput] = useState("");
 
   const [formError, setFormError] = useState("");
+
+  // Semua tipe produk (bukan cuma mentoring) sekarang wajib profil lengkap
+  // sebelum bisa checkout -- kalau belum, langsung diarahkan ke Pengaturan
+  // begitu halaman ini dibuka (lihat useEffect checkProfileCompleteness di
+  // bawah), jadi nggak perlu banner/nunggu tombol diklik dulu.
+  const [checkingProfile, setCheckingProfile] = useState(true);
 
   const selectedMentor = mentors.find((m) => m.id === selectedMentorId) || null;
   const selectedSlot =
@@ -210,19 +237,11 @@ export default function CheckoutDetailPage() {
   };
 
   const handleProceed = () => {
-    if (
-      !buyerInfo.fullName.trim() ||
-      !buyerInfo.email.trim() ||
-      !buyerInfo.phone.trim()
-    ) {
-      setFormError(
-        "Lengkapi dulu Informasi Pembeli sebelum lanjut ke pembayaran.",
-      );
-      return;
-    }
+    // Data pembeli (nama/email/telepon) diambil dari profil, jadi gak divalidasi
+    // manual di sini lagi -- gate kelengkapan profil di atas + backend yang jaga.
     if (isMentoring && (!selectedMentorId || !selectedSlotId)) {
       setFormError(
-        "Pilih mentor dan jadwal sesi dulu sebelum lanjut ke pembayaran.",
+        "Silakan pilih mentor dan jadwal sesi sebelum melanjutkan ke pembayaran.",
       );
       return;
     }
@@ -231,6 +250,7 @@ export default function CheckoutDetailPage() {
     setCheckoutSummary({
       productId: product.id,
       productTitle: product.title,
+      productType: product.type,
       total,
     });
 
@@ -251,6 +271,14 @@ export default function CheckoutDetailPage() {
       setProductError("");
       try {
         const data = await api.get(`/api/products/${params.productId}/`, { auth: false });
+        // Bootcamp punya jalur sendiri (daftar -> diseleksi/di-ACC -> baru
+        // bayar) -- checkout langsung di sini melewati semua itu. Dulu masih
+        // bisa diakses manual lewat URL (linknya sudah tidak ada di mana pun
+        // di UI), jadi dialihkan paksa ke jalur yang benar.
+        if (data?.type === "BOOTCAMP") {
+          router.replace(`/bootcamp/${params.productId}/register`);
+          return;
+        }
         setProduct(data);
       } catch (err) {
         if (err instanceof ApiError) {
@@ -273,7 +301,10 @@ export default function CheckoutDetailPage() {
       setIsLoadingMentors(true);
       setMentorsError("");
       try {
-        const data = await api.get("/api/mentors/", { auth: false });
+        const data = await api.get(
+          `/api/mentors/?product_id=${params.productId}`,
+          { auth: false },
+        );
         setMentors(data.mentors.map(mapMentorFromApi));
       } catch (err) {
         setMentorsError(
@@ -285,10 +316,66 @@ export default function CheckoutDetailPage() {
     }
 
     fetchMentors();
-  }, [isMentoring]);
+  }, [isMentoring, params.productId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkProfileCompleteness() {
+      try {
+        const data = await api.get("/api/accounts/me/profile/");
+        if (cancelled) return;
+
+        if (!data) {
+          // Belum login -- biarin lanjut, nanti keblokir wajar pas submit
+          // checkout beneran (butuh token).
+          setCheckingProfile(false);
+          return;
+        }
+
+        // Prefill data pembeli dari profil user -- nama/email/telepon udah
+        // diisi di halaman Pengaturan, jadi gak perlu diketik ulang di checkout.
+        setBuyerInfo({
+          email: data.user?.email || "",
+          fullName: data.user?.fullname || "",
+          phone: data.user?.phone || "",
+        });
+
+        const REQUIRED_FIELDS = {
+          phone: "Nomor WhatsApp",
+          institution: "Institusi",
+          current_status: "Status Saat Ini",
+          linkedin_url: "LinkedIn",
+        };
+        const missingFields = Object.entries(REQUIRED_FIELDS)
+          .filter(([field]) => !data.user?.[field]?.trim())
+          .map(([, label]) => label);
+        if (!data.user?.profile_image) {
+          missingFields.push("Foto Profil");
+        }
+
+        if (missingFields.length > 0) {
+          toast.error("Lengkapi Profil Kamu Terlebih Dahulu", {
+            description: `Sebelum membeli produk, mohon lengkapi: ${missingFields.join(", ")}.`,
+          });
+          router.replace("/user/settings");
+          return;
+        }
+
+        setCheckingProfile(false);
+      } catch {
+        if (!cancelled) setCheckingProfile(false);
+      }
+    }
+
+    checkProfileCompleteness();
+    return () => {
+      cancelled = true;
+    };
+  }, [router, setBuyerInfo]);
 
 
-  if (isLoadingProduct) {
+  if (isLoadingProduct || checkingProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center text-white">
         Loading...
@@ -307,6 +394,7 @@ export default function CheckoutDetailPage() {
   if (!product) {
     return null;
   }
+
   return (
     <div style={{ backgroundColor: "#060010", minHeight: "100vh" }}>
       <style>{`
@@ -316,7 +404,14 @@ export default function CheckoutDetailPage() {
         .mentor-scroll::-webkit-scrollbar-thumb:hover { background: #3D3159; }
       `}</style>
 
-      <Navbar />
+
+      {isLoggedIn === false && (
+        <LoginRequiredDialog
+          title="Masuk Terlebih Dahulu untuk Melanjutkan"
+          message="Pembelian butuh akun supaya pesanan dan pembayaranmu bisa dilacak."
+          backHref="/products"
+        />
+      )}
 
       <main
         style={{
@@ -358,11 +453,13 @@ export default function CheckoutDetailPage() {
             className="rounded-[12px] overflow-hidden border border-[#2D2342] bg-[#170F26]"
           >
             <div className="h-[160px] bg-[#120822]">
-              <img
-                src={product.image}
-                alt={product.title}
-                className="w-full h-full object-cover"
-              />
+              {product.image_url && (
+                <img
+                  src={product.image_url}
+                  alt={product.title}
+                  className="w-full h-full object-cover"
+                />
+              )}
             </div>
             <div className="px-5 py-4 flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-3">
@@ -455,7 +552,7 @@ export default function CheckoutDetailPage() {
                       <p className="text-[#6B7280] text-[12px]">
                         {mentors.length === 0
                           ? "Belum ada mentor yang tersedia untuk sesi ini. Coba lagi beberapa saat lagi ya."
-                          : `Mentor "${mentorSearch}" nggak ketemu.`}
+                          : `Mentor "${mentorSearch}" tidak ditemukan.`}
                       </p>
                     </div>
                   ) : (
@@ -513,8 +610,8 @@ export default function CheckoutDetailPage() {
 
                           {isExpanded && (
                             <div className="px-3 pb-3 pt-1 border-t border-[#2D2342] flex flex-col gap-2.5">
-                              <p className="text-[#E2E8F0] text-[11px] leading-relaxed pt-2.5">
-                                {mentor.bio}
+                              <p className="text-[#E2E8F0] text-[11px] leading-relaxed pt-2.5 whitespace-pre-line">
+                                <Linkify text={mentor.bio} />
                               </p>
                               <div className="flex flex-wrap gap-1.5">
                                 {mentor.expertise.map((exp) => (
@@ -575,11 +672,11 @@ export default function CheckoutDetailPage() {
                     <CalendarClock size={16} className="text-[#148F89]" />
                     <h2 className="font-bold text-[15px] text-white">
                       {product.sessionCount > 1
-                        ? `Jadwal Sesi Pertama — ${selectedMentor.name}`
-                        : `Jadwal Tersedia — ${selectedMentor.name}`}
+                        ? `Jadwal Sesi Pertama untuk ${selectedMentor.name}`
+                        : `Jadwal Tersedia untuk ${selectedMentor.name}`}
                     </h2>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="mentor-scroll flex flex-wrap gap-2 max-h-[220px] overflow-y-auto pr-1">
                     {selectedMentor.slots.map((slot) => (
                       <button
                         key={slot.id}
@@ -601,17 +698,17 @@ export default function CheckoutDetailPage() {
                         size={13}
                         className="shrink-0 mt-0.5 text-[#08C7E1]"
                       />
-                      Paket ini {product.sessionCount} sesi. Jadwal di atas cuma
-                      buat{" "}
+                      Paket ini {product.sessionCount} sesi. Jadwal di atas hanya
+                      untuk{" "}
                       <span className="text-white font-medium">
                         sesi pertama
-                      </span>{" "}
-                      — sisanya ({product.sessionCount - 1} sesi lagi) bisa kamu
+                      </span>
+                      . Sisanya ({product.sessionCount - 1} sesi lagi) dapat kamu
                       pilih sendiri nanti di halaman{" "}
                       <span className="text-white font-medium">
                         Produk Saya
-                      </span>
-                      , begitu pembayaran ini udah dikonfirmasi.
+                      </span>{" "}
+                      setelah pembayaran ini dikonfirmasi.
                     </p>
                   )}
                 </motion.div>
@@ -619,59 +716,62 @@ export default function CheckoutDetailPage() {
             </>
           )}
 
-          {/* Informasi Pembeli */}
+          {/* Informasi Pembeli -- diambil otomatis dari profil (Pengaturan),
+              jadi user gak perlu ngetik ulang. Cuma ditampilin read-only + catatan. */}
           <motion.div
             {...fadeIn}
             className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-4"
           >
-            <h2 className="font-bold text-[15px] text-white">
-              Informasi Pembeli
-            </h2>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col min-w-0">
+                <h2 className="font-bold text-[15px] text-white">
+                  Informasi Pembeli
+                </h2>
+                <p className="text-[#6B7280] text-[11px] mt-0.5">
+                  Diambil dari profil kamu. Ubah di{" "}
+                  <a href="/user/settings" className="text-[#148F89] hover:underline">
+                    Pengaturan
+                  </a>
+                  .
+                </p>
+              </div>
+            </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[#E2E8F0] text-[12px] font-semibold">
-                Email <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="email"
-                value={buyerInfo.email}
-                onChange={(e) =>
-                  setBuyerInfo({ ...buyerInfo, email: e.target.value })
-                }
-                className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
-              />
+            <div className="bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 flex flex-col gap-1.5 text-[13px]">
+              <div className="flex justify-between gap-3">
+                <span className="text-[#6B7280] shrink-0">Nama</span>
+                <span className="text-white font-medium text-right truncate">
+                  {buyerInfo.fullName || "-"}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-[#6B7280] shrink-0">Email</span>
+                <span className="text-white font-medium text-right truncate">
+                  {buyerInfo.email || "-"}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-[#6B7280] shrink-0">WhatsApp</span>
+                <span className="text-white font-medium text-right truncate">
+                  {buyerInfo.phone || "-"}
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-[#E2E8F0] text-[12px] font-semibold">
-                Nama Lengkap <span className="text-red-400">*</span>
+                Catatan <span className="text-[#6B7280] font-normal">(opsional)</span>
               </label>
-              <input
-                type="text"
-                value={buyerInfo.fullName}
-                onChange={(e) =>
-                  setBuyerInfo({ ...buyerInfo, fullName: e.target.value })
-                }
-                className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                placeholder="Contoh: kalau ini pesanan tim, tulis nama-nama anggota di sini."
+                className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white placeholder:text-[#64748B] outline-none focus:border-[#148F89] transition-colors resize-none ${focusRing}`}
               />
               <p className="text-[#6B7280] text-[10px]">
-                Sesuai KTP/KK, dipakai buat sertifikat.
+                Kalau produk ini dipesan buat tim/kelompok, tuliskan nama-nama anggotanya di sini biar mentor tahu.
               </p>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[#E2E8F0] text-[12px] font-semibold">
-                Nomor WhatsApp <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="tel"
-                value={buyerInfo.phone}
-                onChange={(e) =>
-                  setBuyerInfo({ ...buyerInfo, phone: e.target.value })
-                }
-                placeholder="+62"
-                className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3.5 py-3 text-[13px] text-white placeholder:text-[#64748B] outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
-              />
             </div>
           </motion.div>
 
@@ -743,7 +843,7 @@ export default function CheckoutDetailPage() {
 
             <button
               onClick={handleProceed}
-              className={`w-full bg-[#148F89] text-white text-[14px] font-bold py-3.5 rounded-[8px] hover:bg-[#117A75] transition-colors ${focusRing}`}
+              className={`w-full bg-[#148F89] text-white text-[14px] font-bold py-3.5 rounded-[8px] hover:bg-[#117A75] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#148F89] ${focusRing}`}
             >
               Lanjut ke Pembayaran
             </button>
@@ -756,5 +856,15 @@ export default function CheckoutDetailPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+// useRequireLogin pakai useSearchParams, jadi wajib ada Suspense di atasnya
+// supaya build produksi gak gagal waktu prerender.
+export default function CheckoutDetailPage() {
+  return (
+    <Suspense fallback={<div className="w-full min-h-screen bg-[#0F081C]" />}>
+      <CheckoutDetailPageInner />
+    </Suspense>
   );
 }

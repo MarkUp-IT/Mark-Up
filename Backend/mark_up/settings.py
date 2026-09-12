@@ -129,12 +129,71 @@ DATABASES = {
 }
 
 
+# Cache -- dipakai rate limiter (is_rate_limited) buat throttle brute-force &
+# spam. WAJIB backend yang SHARED antar-proses di produksi: Gunicorn jalan
+# multi-worker, kalau pakai LocMemCache (default) tiap worker punya penghitung
+# sendiri -> limit efektif jadi berkali lipat lebih longgar (gampang di-bypass).
+# DatabaseCache pakai PostgreSQL yang udah ada, konsisten lintas worker, dan
+# tahan restart. Tabelnya dibuat sekali lewat `manage.py createcachetable`.
+if os.getenv("PRODUCTION", "False").lower() == "true":
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "markup_cache",
+        }
+    }
+
+
+# Logging -- sebelumnya nggak dikonfigurasi sama sekali, jadi error internal
+# cuma nyangkut di stderr Gunicorn lewat handler darurat bawaan Python.
+# Sekarang view yang nangkep Exception (mis. checkout) bisa nulis traceback
+# lengkap ke log server, sementara respons ke user tetap pesan umum yang
+# nggak bocorin struktur DB/storage.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} {name}: {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        # stderr -- ditangkap systemd/Gunicorn (--error-logfile -), jadi
+        # kebaca lewat `journalctl -u gunicorn`.
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
+
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'accounts.validators.SimplePasswordValidator',
+    },
+    {
+        # Nolak password yang ada di daftar 20.000 password paling sering
+        # dipakai/bocor. "Password1!" lolos aturan panjang+kapital+simbol tapi
+        # ditebak duluan sama penyerang. Validator bawaan Django yang lain
+        # (similarity/numeric) sengaja TIDAK dipakai -- sesuai keputusan
+        # sebelumnya yang menilai itu terlalu ribet buat user.
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
     },
 ]
 
@@ -154,7 +213,18 @@ CORS_ALLOW_CREDENTIALS = True
 # Belum ada SMTP beneran -- default ke console backend (email ke-print di
 # log server) biar alur lupa password tetap bisa dites di dev. Isi
 # EMAIL_HOST dkk di .env begitu ada kredensial SMTP asli buat production.
-if os.getenv("EMAIL_HOST"):
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
+
+# Urutan pilihan backend email:
+#   1. API Brevo lewat HTTPS -- provider hosting ini MEMBLOKIR SMTP keluar
+#      (DNS smtp-relay dibelokkan ke IP lokal & koneksinya diam tanpa banner,
+#      bikin send_mail menggantung sampai worker gunicorn mati). Port 443 lolos
+#      normal, jadi ini jalur yang dipakai kalau kuncinya ada.
+#   2. SMTP -- disimpan sebagai cadangan, buat hosting lain yang gak memblokir.
+#   3. Console -- dev lokal tanpa kredensial apa pun.
+if BREVO_API_KEY:
+    EMAIL_BACKEND = "mark_up.email_backend.BrevoAPIEmailBackend"
+elif os.getenv("EMAIL_HOST"):
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST = os.getenv("EMAIL_HOST")
     EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
@@ -164,9 +234,37 @@ if os.getenv("EMAIL_HOST"):
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@markup.com")
+# Inbox tim buat notifikasi internal yang butuh tindakan cepat (transaksi baru
+# nunggu verifikasi, pesan masuk, pengajuan refund).
+TEAM_NOTIFICATION_EMAIL = os.getenv("TEAM_NOTIFICATION_EMAIL", "markup.ofc@gmail.com")
 PASSWORD_RESET_TIMEOUT = 60 * 30  # 30 menit, samain sama teks di halaman lupa password FE
 
 FRONTEND_BASE_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+
+# Kunci Fernet buat mengenkripsi client_secret akun Zoom sebelum masuk DB.
+# Kredensial ini disimpan di database (BUKAN .env) karena akun Zoom-nya dirotasi
+# berkala dan harus bisa diganti dari panel admin tanpa redeploy. Konsekuensinya
+# secret itu ikut kebawa kalau dump database bocor -- makanya dienkripsi.
+# Bikin sekali:  python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Kalau kosong, penyimpanan kredensial DITOLAK (lihat mark_up/zoom.py) -- sengaja
+# gagal berisik, jangan diam-diam nyimpen plaintext.
+ZOOM_CRED_KEY = os.getenv("ZOOM_CRED_KEY", "")
+
+# Kunci Fernet KHUSUS buat api_key iPaymu (lihat transactions.models.IpaymuSetting
+# & mark_up/ipaymu.py) -- SENGAJA kunci terpisah dari ZOOM_CRED_KEY, biar kalau
+# salah satu bocor/dirotasi, yang lain gak ikut kebuka. Bikin sekali:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+IPAYMU_CRED_KEY = os.getenv("IPAYMU_CRED_KEY", "")
+
+# Link Zoom dibuat H-berapa jam sebelum sesi. Sengaja mepet, bukan pas sesi
+# dijadwalkan: akun Zoom-nya dirotasi ~2 minggu sekali, jadi meeting yang dibuat
+# jauh-jauh hari bisa mati hostnya pas hari-H.
+ZOOM_GENERATE_LEAD_HOURS = int(os.getenv("ZOOM_GENERATE_LEAD_HOURS", "24"))
+# Jeda antar meeting di satu akun. Satu akun Zoom cuma bisa meng-host SATU
+# meeting live dalam satu waktu, jadi jendela pemakaiannya dikasih bantalan.
+ZOOM_BUFFER_MINUTES = int(os.getenv("ZOOM_BUFFER_MINUTES", "15"))
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
@@ -203,7 +301,40 @@ S3_REGION_NAME = os.getenv("S3_REGION_NAME", "auto")
 
 USE_S3_STORAGE = all([S3_ENDPOINT_URL, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET_NAME])
 
+# Fallback ke storage lokal cuma boleh di dev. Di produksi, satu env var S3
+# yang kelupaan diisi bakal diam-diam nurunin SEMUA berkas user (bukti bayar,
+# CV, dokumen pendaftaran, sertifikat) ke folder lokal -- dan folder itu dulu
+# disajikan Nginx tanpa autentikasi. Gagal keras di sini jauh lebih baik
+# daripada server nyala tapi dokumen pribadi user kebuka tanpa ada yang sadar.
+if PRODUCTION and not USE_S3_STORAGE:
+    from django.core.exceptions import ImproperlyConfigured
+
+    _missing = [
+        name
+        for name, value in (
+            ("S3_ENDPOINT_URL", S3_ENDPOINT_URL),
+            ("S3_ACCESS_KEY_ID", S3_ACCESS_KEY_ID),
+            ("S3_SECRET_ACCESS_KEY", S3_SECRET_ACCESS_KEY),
+            ("S3_BUCKET_NAME", S3_BUCKET_NAME),
+        )
+        if not value
+    ]
+    raise ImproperlyConfigured(
+        "PRODUCTION=True tapi object storage belum lengkap dikonfigurasi. "
+        f"Env var yang masih kosong: {', '.join(_missing)}. "
+        "Isi dulu di .env -- jangan jalanin produksi dengan storage lokal, "
+        "berkas pribadi user bakal nyimpen di disk server tanpa proteksi."
+    )
+
 if USE_S3_STORAGE:
+    # Botocore versi baru default-nya kirim checksum (x-amz-content-sha256)
+    # yang belum semua provider S3-compatible non-AWS dukung dengan benar,
+    # bikin error "XAmzContentSHA256Mismatch" pas upload. Ini fix standarnya --
+    # balikin ke perilaku lama (checksum cuma kalau operasinya benar-benar
+    # butuh, bukan selalu).
+    os.environ.setdefault("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required")
+    os.environ.setdefault("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required")
+
     AWS_ACCESS_KEY_ID = S3_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY = S3_SECRET_ACCESS_KEY
     AWS_STORAGE_BUCKET_NAME = S3_BUCKET_NAME
@@ -217,8 +348,15 @@ if USE_S3_STORAGE:
     AWS_QUERYSTRING_AUTH = True
     AWS_QUERYSTRING_EXPIRE = 3600  # 1 jam
 
+    # Header yang nempel di objek waktu diunggah. "immutable" aman di sini
+    # karena AWS_S3_FILE_OVERWRITE=False -- nama file selalu unik, jadi isi di
+    # satu URL gak pernah berubah. Dipasangin sama memo URL di
+    # mark_up/storage.py: header ini bikin browser MAU nyimpen, memo itu yang
+    # bikin URL-nya konsisten sehingga simpanannya kepakai.
+    AWS_S3_OBJECT_PARAMETERS = {"CacheControl": "public, max-age=31536000, immutable"}
+
     STORAGES = {
-        "default": {"BACKEND": "storages.backends.s3.S3Storage"},
+        "default": {"BACKEND": "mark_up.storage.TolerantS3Storage"},
         "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
     }
 else:

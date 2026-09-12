@@ -85,3 +85,6 @@ htmlcov/
 
 # OS
 Thumbs.db
+# Data pribadi peserta -- JANGAN pernah masuk git, apalagi Frontend/public/
+bootcamp.xlsx
+Frontend/public/bukti-bootcamp/

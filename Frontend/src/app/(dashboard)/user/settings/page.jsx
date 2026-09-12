@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Camera,
@@ -13,20 +12,36 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
-import DashboardLayout from "@/component/user/DashboardLayout";
-import { apiRequest, getAccessToken, clearTokens, API_BASE } from "@/lib/api";
+import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
 import { toast } from "sonner";
+import AttentionBanner from "@/component/AttentionBanner";
 
-function Field({ label, value, onChange, disabled, note, type = "text" }) {
+/**
+ * `anchor` + `perluDiisi` dipakai untuk menyorot kolom yang bikin badge angka
+ * di sidebar menyala. Sorotannya hilang sendiri begitu kolomnya diketik,
+ * bukan menunggu disimpan -- supaya terasa langsung terjawab.
+ */
+function Field({ label, value, onChange, disabled, note, type = "text", anchor, perluDiisi }) {
+  const kosong = perluDiisi && !(value || "").trim();
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-[#E2E8F0] text-[13px] font-medium">{label}</label>
+    <div className="flex flex-col gap-1.5 scroll-mt-32" id={anchor}>
+      <label className="text-[#E2E8F0] text-[13px] font-medium flex items-center gap-2">
+        {label}
+        {kosong && (
+          <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-[#F59E0B]/15 text-[#FBBF24] border border-[#F59E0B]/30">
+            Belum diisi
+          </span>
+        )}
+      </label>
       <input
         type={type}
         value={value}
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         disabled={disabled}
-        className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[14px] outline-none transition-colors ${
+        aria-invalid={kosong || undefined}
+        className={`w-full bg-[#0F081C] border rounded-[8px] px-4 py-3 text-[14px] outline-none transition-colors ${
+          kosong ? "border-[#F59E0B]/70" : "border-[#2D2342]"
+        } ${
           disabled
             ? "text-[#6B7280] cursor-not-allowed"
             : "text-white focus:border-[#148F89]/60"
@@ -37,9 +52,19 @@ function Field({ label, value, onChange, disabled, note, type = "text" }) {
   );
 }
 
+const SHOW_CV_SECTION = false;
+
+// Orang biasanya ngetik "linkedin.com/in/nama" tanpa skema. Dulu field ini
+// pakai type="url", jadi validasi bawaan browser NGEBLOKIR submit -- field yang
+// ditulis "opsional" malah kerasa wajib. Sekarang dirapikan di sini saja.
+function normalizeUrl(v) {
+  const t = (v || "").trim();
+  if (!t) return "";
+  return /^https?:\/\//i.test(t) ? t : `https://${t}`;
+}
+
 export default function Settings() {
   const shouldReduceMotion = useReducedMotion();
-  const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [initialInfo, setInitialInfo] = useState({
@@ -60,7 +85,13 @@ export default function Settings() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState(null);
 
+  const [missingFields, setMissingFields] = useState([]);
   const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Sebuah kolom disorot hanya kalau backend memang menandainya kurang. Nilai
+  // kosongnya sendiri dicek ulang di dalam <Field>, jadi sorotannya lenyap
+  // begitu diketik tanpa perlu menunggu tersimpan.
+  const perluDiisi = (key) => missingFields.some((f) => f.key === key);
   const [isSaving, setIsSaving] = useState(false);
 
 
@@ -102,7 +133,7 @@ export default function Settings() {
           phone,
           institution,
           current_status: currentStatus,
-          linkedin_url: linkedIn,
+          linkedin_url: normalizeUrl(linkedIn),
         },
       });
       const u = res.user;
@@ -208,15 +239,20 @@ const handleDeleteCv = async () => {
 };
 
 const handleDeleteAccount = async () => {
-  if (deleteConfirmText !== "HAPUS" || isDeletingAccount) return;
+  if (isDeletingAccount) return;
   setIsDeletingAccount(true);
   try {
-    await apiRequest("/api/accounts/me/delete/", { method: "POST" });
-    clearTokens();
-    toast.success("Akun berhasil dihapus", { description: "Sampai jumpa lagi." });
-    router.push("/login");
+    // Ini cuma MINTA hapus akun -- backend kirim link konfirmasi ke email.
+    // Akun baru beneran dihapus setelah user klik link di email itu.
+    const res = await apiRequest("/api/accounts/me/delete/", { method: "POST" });
+    setShowDeleteModal(false);
+    toast.success("Periksa email kamu", {
+      description:
+        res?.detail ||
+        "Tautan konfirmasi penghapusan akun sudah dikirim ke email kamu.",
+    });
   } catch (err) {
-    toast.error("Gagal menghapus akun", { description: err?.message || "Terjadi kesalahan." });
+    toast.error("Gagal mengirim konfirmasi", { description: err?.message || "Terjadi kesalahan." });
   } finally {
     setIsDeletingAccount(false);
   }
@@ -230,6 +266,9 @@ const handleDeleteAccount = async () => {
         const res = await apiRequest("/api/accounts/me/profile/");
         const u = res.user;
         setEmail(u.email);
+        // Daftar kolom yang bikin badge angka di sidebar menyala. Datang dari
+        // backend, memakai aturan yang sama dengan badge-nya.
+        setMissingFields(u.missing_profile_fields || []);
         setProfileImage(u.profile_image || null); // BARU
         setCvUrl(u.cv_url || null);
         setCvFileName(u.cv_filename || null);
@@ -256,7 +295,7 @@ const handleDeleteAccount = async () => {
   }, []);
 
   return (
-    <DashboardLayout title="Pengaturan Akun">
+    <>
       <motion.div {...sectionReveal} className="flex flex-col gap-1">
         <h1 className="text-[28px] sm:text-[32px] font-bold text-white leading-tight">
           Pengaturan Akun
@@ -273,15 +312,15 @@ const handleDeleteAccount = async () => {
       >
         <div className="relative shrink-0">
           <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#2D2342] bg-[#0F081C] flex items-center justify-center">
-            {profileImage ? (
-              <img
-                src={profileImage}
-                alt="Foto profil"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <span className="text-[#6B7280] text-[11px]">Tidak ada foto</span>
-            )}
+            <img
+              src={profileImage || "/images/default-avatar.svg"}
+              alt="Foto profil"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = "/images/default-avatar.svg";
+              }}
+            />
           </div>
           <label
             aria-label="Ganti foto"
@@ -354,8 +393,25 @@ const handleDeleteAccount = async () => {
           </p>
         </div>
 
+        <AttentionBanner
+          judul={`${missingFields.length} data wajib belum diisi`}
+          keterangan="Ini yang membuat angka merah muncul di menu Pengaturan Akun. Klik salah satu untuk langsung menuju kolomnya."
+          butir={missingFields.map((f) => ({
+            key: f.key,
+            label: f.label,
+            anchor: `profil-${f.key}`,
+          }))}
+          dismissKey="user-settings-lengkapi"
+        />
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Nama Lengkap" value={fullName} onChange={setFullName} />
+          <Field
+            label="Nama Lengkap"
+            value={fullName}
+            onChange={setFullName}
+            anchor="profil-fullname"
+            perluDiisi={perluDiisi("fullname")}
+          />
           <Field
             label="Email"
             value={email}
@@ -363,26 +419,35 @@ const handleDeleteAccount = async () => {
             type="email"
             note="Hubungi support untuk mengubah email."
           />
-          <Field label="Nomor WhatsApp" value={phone} onChange={setPhone} />
+          <Field
+            label="Nomor WhatsApp"
+            value={phone}
+            onChange={setPhone}
+            anchor="profil-phone"
+            perluDiisi={perluDiisi("phone")}
+          />
 
           {/* Mulai Tambahan Data Baris #11, #13 */}
           <Field
             label="Universitas / Institusi Asal"
             value={institution}
             onChange={setInstitution}
+            anchor="profil-institution"
+            perluDiisi={perluDiisi("institution")}
           />
           <Field
             label="Semester Saat Ini"
             value={currentStatus}
             onChange={setCurrentStatus}
             note="Contoh: Mahasiswa Semester 5, Fresh Graduate, dll."
+            anchor="profil-current_status"
+            perluDiisi={perluDiisi("current_status")}
           />
           <Field
-            label="URL LinkedIn"
+            label="URL LinkedIn (opsional)"
             value={linkedIn}
             onChange={setLinkedIn}
-            type="url"
-            note="Format: linkedin.com/in/username"
+            note="Boleh ditulis singkat, contoh: linkedin.com/in/namamu"
           />
           {/* Akhir Tambahan Data */}
         </div>
@@ -398,7 +463,12 @@ const handleDeleteAccount = async () => {
         </div>
       </motion.form>
 
-      {/* CV / Portofolio */}
+      {/* CV sekarang diminta pas daftar bootcamp (per pendaftaran, biar selalu
+          versi terbaru), bukan sekali-seumur-hidup di profil. Section ini
+          dimatikan lewat flag -- bukan dihapus -- supaya gampang dihidupkan
+          lagi kalau nanti dibutuhkan. */}
+      {SHOW_CV_SECTION && (
+        <>
       <motion.div
         {...sectionReveal}
         className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col gap-4"
@@ -473,6 +543,9 @@ const handleDeleteAccount = async () => {
         )}
       </motion.div>
 
+        </>
+      )}
+
       {/* Keamanan Akun */}
       <motion.div
         {...sectionReveal}
@@ -483,7 +556,7 @@ const handleDeleteAccount = async () => {
             Keamanan Akun
           </h3>
           <p className="text-[#9CA3AF] text-[12px] mt-1">
-            Kata sandi terakhir diubah 3 bulan lalu.
+            Ganti kata sandi secara berkala dan pakai yang kuat untuk menjaga keamanan akunmu.
           </p>
         </div>
         <Link
@@ -515,8 +588,10 @@ const handleDeleteAccount = async () => {
           <div>
             <p className="text-white text-[13px] font-medium">Hapus Akun</p>
             <p className="text-[#9CA3AF] text-[12px] mt-0.5">
-              Akunmu akan dinonaktifkan dan nggak bisa dipakai login lagi.
-              Riwayat transaksi dan sertifikat tetap tersimpan sebagai catatan.
+              Ingin menghapus akun? Tekan tombol di samping. Kami akan mengirim
+              tautan konfirmasi ke email kamu, dan akun baru dihapus setelah kamu
+              membuka tautan tersebut. Riwayat transaksi dan sertifikat tetap
+              tersimpan.
             </p>
           </div>
           <button
@@ -567,22 +642,17 @@ const handleDeleteAccount = async () => {
                 </button>
               </div>
               <p className="text-[#9CA3AF] text-[13px] leading-relaxed">
-                Akunmu akan langsung dinonaktifkan dan kamu nggak akan bisa
-                login lagi. Riwayat sertifikat dan transaksimu tetap tersimpan
-                sebagai catatan -- hubungi tim support kalau ingin
-                mengaktifkan kembali.
+                Kami akan mengirim{" "}
+                <span className="text-white font-medium">tautan konfirmasi</span>{" "}
+                ke email{" "}
+                <span className="text-white font-medium">{email || "kamu"}</span>.
+                Akun kamu{" "}
+                <span className="text-white font-medium">
+                  baru dihapus setelah kamu membuka tautan pada email tersebut
+                </span>
+                , sehingga akun aman dari penghapusan yang tidak disengaja.
+                Riwayat transaksi dan sertifikat tetap tersimpan.
               </p>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[#E2E8F0] text-[12px]">
-                  Ketik <span className="font-bold text-white">HAPUS</span>{" "}
-                  untuk konfirmasi
-                </label>
-                <input
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-2.5 text-[13px] text-white outline-none focus:border-red-500/50 transition-colors"
-                />
-              </div>
               <div className="flex items-center gap-3 mt-1">
                 <button
                   onClick={closeDeleteModal}
@@ -592,16 +662,16 @@ const handleDeleteAccount = async () => {
                 </button>
                 <button
                   onClick={handleDeleteAccount}
-                  disabled={deleteConfirmText !== "HAPUS" || isDeletingAccount}
+                  disabled={isDeletingAccount}
                   className="flex-1 py-2.5 rounded-[8px] bg-red-500 text-white text-[13px] font-semibold hover:bg-red-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {isDeletingAccount ? "Menghapus..." : "Hapus Akun"}
+                  {isDeletingAccount ? "Mengirim..." : "Kirim Link Konfirmasi"}
                 </button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-    </DashboardLayout>
+    </>
   );
 }

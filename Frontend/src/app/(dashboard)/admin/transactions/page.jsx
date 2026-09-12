@@ -11,9 +11,11 @@ import {
   Loader2,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
+import BankAccountPanel from "@/component/admin/BankAccountPanel";
+import IpaymuSettingPanel from "@/component/admin/IpaymuSettingPanel";
+import ImageLightbox from "@/component/admin/ImageLightbox";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 
@@ -29,6 +31,25 @@ const STATUS_META = {
 };
 
 const STATUS_FILTERS = ["Semua", "PENDING", "PAID", "FAILED", "EXPIRED", "REFUNDED"];
+
+const METHOD_LABELS = {
+  BANK_TRANSFER: "Transfer Bank",
+  QRIS: "QRIS",
+  E_WALLET: "E-Wallet",
+  CREDIT_CARD: "Kartu Kredit/Debit",
+  MANUAL: "Transfer Bank",
+};
+
+// method di baris Transaction cuma keisi definitif SETELAH lunas (webhook
+// iPaymu yang ngisi) -- sebelum itu nilainya cuma placeholder default
+// BANK_TRANSFER, gak peduli gateway aslinya apa.
+function formatMethod(tx) {
+  if (!tx) return "-";
+  if (tx.gateway === "IPAYMU") {
+    return tx.status === "PAID" ? `${METHOD_LABELS[tx.method] || tx.method} (iPaymu)` : "iPaymu";
+  }
+  return METHOD_LABELS[tx.method] || tx.method || "-";
+}
 
 function formatIDR(val) {
   return new Intl.NumberFormat("id-ID", {
@@ -156,7 +177,7 @@ export default function Transactions() {
   }
 
   return (
-    <DashboardLayout title="Transaksi">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -176,17 +197,24 @@ export default function Transactions() {
           label="Total Transaksi"
           value={transactions.length}
           unit="transaksi"
+          loading={loading}
         />
         <StatCard
           label="Menunggu Verifikasi"
           value={waitingCount}
           unit="transaksi"
           variant="warning"
+          loading={loading}
         />
         <StatCard
           label="Pendapatan Bulan Ini"
           value={monthlyRevenue == null ? "-" : formatIDR(monthlyRevenue)}
         />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <BankAccountPanel />
+        <IpaymuSettingPanel />
       </div>
 
       <div className="flex flex-col gap-4">
@@ -250,7 +278,7 @@ export default function Transactions() {
             </button>
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState message="Nggak ada transaksi yang cocok sama filter ini." />
+          <EmptyState message="Tidak ada transaksi yang sesuai dengan filter ini." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
             <div className="overflow-x-auto">
@@ -388,9 +416,29 @@ export default function Transactions() {
                     Metode Pembayaran
                   </span>
                   <span className="text-[#1E293B] font-medium">
-                    {selectedTx?.method || "-"}
+                    {formatMethod(selectedTx)}
                   </span>
                 </div>
+                {selectedTx?.mentor_name && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                      Mentor
+                    </span>
+                    <span className="text-[#1E293B] font-medium">
+                      {selectedTx.mentor_name}
+                    </span>
+                  </div>
+                )}
+                {selectedTx?.session_time && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                      Jadwal Sesi
+                    </span>
+                    <span className="text-[#1E293B] font-medium">
+                      {formatDateTime(selectedTx.session_time)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="bg-[#F8FAFC] border border-[#E2E8F0] p-4 rounded-[8px] flex justify-between items-center">
@@ -402,6 +450,17 @@ export default function Transactions() {
                 </span>
               </div>
 
+              {selectedTx?.notes ? (
+                <div className="flex flex-col gap-1">
+                  <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                    Catatan dari Pembeli
+                  </span>
+                  <p className="text-[#1E293B] text-[13px] bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3 whitespace-pre-wrap">
+                    {selectedTx.notes}
+                  </p>
+                </div>
+              ) : null}
+
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
                   <Landmark size={15} className="text-[#148F89]" />
@@ -410,12 +469,16 @@ export default function Transactions() {
                   </span>
                 </div>
                 {selectedTx?.proof_of_payment ? (
-                  <img
+                  <ImageLightbox
                     src={selectedTx.proof_of_payment}
                     alt="Bukti transfer"
-                    style={{ maxHeight: "240px" }}
                     className="w-full rounded-[8px] border border-[#E2E8F0] object-cover"
+                    style={{ maxHeight: "240px" }}
                   />
+                ) : selectedTx?.gateway === "IPAYMU" ? (
+                  <p className="text-[#94A3B8] text-[12px] bg-[#F8FAFC] border border-dashed border-[#E2E8F0] rounded-[8px] px-4 py-6 text-center">
+                    Transaksi iPaymu -- gak ada bukti transfer yang diunggah, pembayaran dikonfirmasi otomatis lewat webhook iPaymu begitu lunas. Tombol di bawah tetap bisa dipakai buat override manual kalau webhook-nya gagal.
+                  </p>
                 ) : (
                   <p className="text-[#94A3B8] text-[12px] bg-[#F8FAFC] border border-dashed border-[#E2E8F0] rounded-[8px] px-4 py-6 text-center">
                     User belum mengunggah bukti transfer.
@@ -456,6 +519,6 @@ export default function Transactions() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

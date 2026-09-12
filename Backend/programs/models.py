@@ -30,7 +30,12 @@ class Competition(models.Model):
         related_name="competitions",
     )
     title = models.CharField(max_length=255)
-    image_url = models.URLField(blank=True, null=True)
+    image_url = models.URLField(
+        blank=True, null=True,
+        help_text="Legacy -- link poster lama. Dipakai fallback kalau `image` "
+                   "(file upload) belum diisi.",
+    )
+    image = models.ImageField(upload_to="competition_posters/%Y/%m/", blank=True, null=True)
     organizer = models.CharField(max_length=255, blank=True, null=True)
     registration_fee = models.DecimalField(
         max_digits=12,
@@ -61,6 +66,15 @@ class Competition(models.Model):
         return self.title
 
 
+class BootcampSessionRequiredBenefit(models.TextChoices):
+    """Subset benefit BootcampPackage yang bentuknya sesi terjadwal (bukan
+    file) -- dipetakan ke field benefit_<value> di BootcampPackage. Kosong
+    ("") berarti sesi inti/materi utama, kelihatan buat semua paket."""
+    MENTORING_CASE = "mentoring_case", "Mentoring Case Competition"
+    CAREER_COACHING = "career_coaching", "Career Coaching"
+    NETWORKING = "networking", "Networking Session"
+
+
 class BootcampSession(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     bootcamp = models.ForeignKey(
@@ -71,15 +85,42 @@ class BootcampSession(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     meeting_link = models.URLField(blank=True, null=True)
-    start_time = models.DateTimeField()
-    end_time = models.DateTimeField()
+    # Nullable -- slot sesi kosong yang di-generate otomatis dari
+    # BootcampProduct.session_count belum punya tanggal sampai admin
+    # ngisinya sendiri di Kelola Pesanan Bootcamp.
+    start_time = models.DateTimeField(blank=True, null=True)
+    end_time = models.DateTimeField(blank=True, null=True)
+    # Urutan tampil (Sesi 1, 2, 3, ...) -- gak bisa ngandelin start_time
+    # doang buat sorting karena slot kosong belum punya tanggal.
+    order = models.PositiveIntegerField(default=1)
+    # Kosong ("", default) = sesi inti, di-clone ke SEMUA pembeli bootcamp
+    # ini (perilaku lama, gak berubah). Keisi = cuma di-clone ke pembeli
+    # yang benefit_<value> paketnya True -- lihat _create_bootcamp_sessions
+    # di transactions/views.py.
+    required_benefit = models.CharField(
+        max_length=30, choices=BootcampSessionRequiredBenefit.choices, blank=True, default="",
+        help_text="USANG -- diganti field `packages`. Masih disimpan buat jejak data lama.",
+    )
+    # Penanda eksplisit, BUKAN "kosong berarti semua". Kalau pakai aturan
+    # kosong-berarti-semua, kasus "dibatasi tapi belum ada paket yang dipilih"
+    # jadi kebalikannya (malah kebuka ke semua orang) -- gampang salah setel.
+    for_all_packages = models.BooleanField(
+        default=True,
+        help_text="True = semua peserta bootcamp ini dapat sesi ini. False = cuma paket "
+                   "yang dipilih di `packages`.",
+    )
+    packages = models.ManyToManyField(
+        "products.BootcampPackage", blank=True, related_name="session_templates",
+        help_text="Dipakai cuma kalau for_all_packages=False. Menggantikan required_benefit "
+                   "yang cuma bisa 3 kategori tetap & gak bisa diatur admin dari panel.",
+    )
 
     class Meta:
         db_table = "bootcamp_sessions"
         verbose_name = "Bootcamp Session"
         verbose_name_plural = "Bootcamp Sessions"
         indexes = [models.Index(fields=["start_time"])]
-        ordering = ["start_time"]
+        ordering = ["order", "start_time"]
 
     def __str__(self) -> str:
         return self.title

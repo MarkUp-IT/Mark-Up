@@ -70,12 +70,12 @@ class ProductsApiTests(TestCase):
             user_library=self.user_library,
             order=1,
             title="Session 1",
-            mentor=self.mentor_profile,
             start_time=timezone.now() + timezone.timedelta(days=1),
             status=BootcampSession.SessionStatus.SCHEDULED,
             meeting_link="https://meet.example.com/1",
             recording_url="",
         )
+        self.bootcamp_session.mentors.set([self.mentor_profile])
 
         self.mentoring_product = Product.objects.create(type=ProductType.MENTORING)
         self.mentoring_detail = MentoringProduct.objects.create(

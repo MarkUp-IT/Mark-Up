@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { api, clearTokens, getRefreshToken } from "@/lib/api";
+import NotifBadge from "@/component/NotifBadge";
 import {
   GraduationCap,
   CalendarDays,
@@ -15,11 +17,15 @@ import {
   X,
 } from "lucide-react";
 
+// badgeKey nyambung ke response /api/mentors/me/sidebar-badges/ -- Mentoring
+// Schedule/Certificates/Reviews/Transactions gak punya konsep "butuh
+// tindakan" yang jelas dari sisi mentor, jadi gak dikasih badge.
 const menuList = [
   {
     name: "Active Classes",
     url: "/mentor/active-classes",
     icon: GraduationCap,
+    badgeKey: "active_classes",
   },
   {
     name: "Mentoring Schedule",
@@ -29,12 +35,20 @@ const menuList = [
   { name: "Certificates", url: "/mentor/certificates", icon: ShieldCheck },
   { name: "Reviews", url: "/mentor/reviews", icon: Star },
   { name: "Transactions", url: "/mentor/transactions", icon: Receipt },
-  { name: "Settings", url: "/mentor/settings", icon: Settings },
+  { name: "Settings", url: "/mentor/settings", icon: Settings, badgeKey: "settings" },
 ];
 
 export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const pathname = usePathname() || "/mentor/active-classes";
   const router = useRouter();
+  const [badges, setBadges] = useState({});
+
+  useEffect(() => {
+    api
+      .get("/api/mentors/me/sidebar-badges/")
+      .then((data) => data && setBadges(data))
+      .catch(() => {});
+  }, []);
 
   async function handleLogout() {
     try {
@@ -99,7 +113,8 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
                 }`}
               >
                 <Icon size={20} />
-                <span className="font-medium text-[14px]">{menu.name}</span>
+                <span className="font-medium text-[14px] flex-1">{menu.name}</span>
+                <NotifBadge count={badges[menu.badgeKey]} />
               </Link>
             );
           })}

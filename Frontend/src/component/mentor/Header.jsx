@@ -1,32 +1,34 @@
 "use client";
 
 import { Menu } from "lucide-react";
+import NotificationBell from "@/component/NotificationBell";
 
 export default function Header({
   title,
   onMenuClick = () => {},
   profileName = "Mentor",
   email = "",
-  avatarSrc = "/images/pp.png",
+  avatarSrc,
 }) {
   return (
     <div className="sticky top-0 z-30 w-full h-[72px] bg-[#1A1128] border-b border-white/5 flex flex-row items-center justify-between px-4 sm:px-6 lg:px-10 shadow-sm">
       {/* Judul halaman + hamburger (mobile) */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 min-w-0">
         <button
           onClick={onMenuClick}
           aria-label="Buka menu"
-          className="lg:hidden text-[#9CA3AF] hover:text-white transition-colors"
+          className="lg:hidden text-[#9CA3AF] hover:text-white transition-colors shrink-0"
         >
           <Menu size={24} />
         </button>
-        <h1 className="text-white font-bold text-[16px] sm:text-[18px]">
+        <h1 className="text-white font-bold text-[16px] sm:text-[18px] truncate">
           {title}
         </h1>
       </div>
 
       {/* User Profile -- struktur & ukuran sama persis kayak Header user */}
-      <div className="flex flex-row gap-3 sm:gap-4 items-center">
+      <div className="flex flex-row gap-2 sm:gap-4 items-center shrink-0 pl-3">
+        <NotificationBell />
         <div className="hidden sm:flex flex-col text-right">
           <p className="font-semibold text-white text-[13px]">{profileName}</p>
           <p className="text-[11px] text-[#9CA3AF]">{email}</p>
@@ -36,9 +38,13 @@ export default function Header({
         <div className="rounded-full bg-gradient-to-tr from-[#06B6D4] to-[#3B82F6] p-[2px] shadow-sm flex items-center justify-center">
           <div className="bg-[#1A1128] w-[32px] h-[32px] rounded-full overflow-hidden">
             <img
-              src={avatarSrc}
+              src={avatarSrc || "/images/default-avatar.svg"}
               alt={profileName}
               className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = "/images/default-avatar.svg";
+              }}
             />
           </div>
         </div>

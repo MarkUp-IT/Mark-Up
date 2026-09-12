@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { Eye, EyeOff, Check, X as XIcon, MailCheck } from "lucide-react";
 import { toast } from "sonner";
-import { api, ApiError } from "@/lib/api";
+import { apiRequest, ApiError } from "@/lib/api";
+import GoogleSignInButton from "@/component/GoogleSignInButton";
 
 const PASSWORD_REQUIREMENTS = [
   { label: "Minimal 8 karakter", test: (pw) => pw.length >= 8 },
@@ -26,7 +27,7 @@ const autofillFix = `
   }
 `;
 
-function Field({ label, type = "text", value, onChange, error, rightIcon }) {
+function Field({ label, type = "text", value, onChange, error, rightIcon, placeholder }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label className="text-[13px] text-[#B19EEF] font-medium">{label}</label>
@@ -35,6 +36,7 @@ function Field({ label, type = "text", value, onChange, error, rightIcon }) {
           type={type}
           value={value}
           onChange={onChange}
+          placeholder={placeholder}
           className={`w-full h-[48px] bg-[#2B2B2B] rounded-[12px] px-4 ${
             rightIcon ? "pr-12" : ""
           } text-[14px] text-white outline-none focus:ring-2 focus:ring-[#B19EEF]/50 transition-shadow`}
@@ -57,6 +59,16 @@ export default function Register() {
   const [confirm, setConfirm] = useState("");
   const [isChecked, setIsChecked] = useState(false);
 
+  // Langkah 2 -- data profil. Diambil sekalian di sini biar user gak kejebak
+  // gerbang "lengkapi profil dulu" pas mau checkout.
+  const [step, setStep] = useState(1);
+  const [phone, setPhone] = useState("");
+  const [institution, setInstitution] = useState("");
+  const [currentStatus, setCurrentStatus] = useState("");
+  const [linkedIn, setLinkedIn] = useState("");
+  const [photo, setPhoto] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState("");
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -67,12 +79,32 @@ export default function Register() {
 
   const passwordMet = PASSWORD_REQUIREMENTS.every((r) => r.test(password));
 
-  const isValid =
+  // Langkah 1 gak butuh centang S&K -- itu baru diminta pas benar-benar
+  // mengirim di langkah 2, biar user gak dipaksa setuju sebelum lihat isinya.
+  const isStep1Valid =
     namaLengkap.trim() !== "" &&
     email.trim() !== "" &&
     passwordMet &&
-    confirm === password &&
-    isChecked;
+    confirm === password;
+
+  const isStep2Valid =
+    phone.trim() !== "" &&
+    institution.trim() !== "" &&
+    currentStatus.trim() !== "";
+
+  const isValid = isStep1Valid && isStep2Valid && isChecked;
+
+  const handlePhotoChange = (e) => {
+    const f = e.target.files?.[0] || null;
+    e.target.value = "";
+    if (!f) return;
+    if (f.size > 2 * 1024 * 1024) {
+      toast.error("Foto Terlalu Besar", { description: "Ukuran maksimal 2MB." });
+      return;
+    }
+    setPhoto(f);
+    setPhotoPreview(URL.createObjectURL(f));
+  };
 
   const showToast = (type, title, message) => {
     if (type === "error") toast.error(title, { description: message });
@@ -88,14 +120,28 @@ export default function Register() {
     setIsSubmitting(true);
 
     try {
-      const payload = {
-        fullname: namaLengkap,
-        email,
-        password,
-        confirm_password: confirm,
-      };
+      // FormData, bukan JSON -- karena foto profil (opsional) ikut dikirim.
+      const payload = new FormData();
+      payload.append("fullname", namaLengkap);
+      payload.append("email", email);
+      payload.append("password", password);
+      payload.append("confirm_password", confirm);
+      payload.append("phone", phone);
+      payload.append("institution", institution);
+      payload.append("current_status", currentStatus);
+      // Orang biasanya ngetik "linkedin.com/in/nama" tanpa skema. Dirapikan di
+      // sini biar yang tersimpan konsisten & bisa diklik, bukan ditolak.
+      const li = linkedIn.trim();
+      if (li) {
+        payload.append("linkedin_url", /^https?:\/\//i.test(li) ? li : `https://${li}`);
+      }
+      if (photo) payload.append("profile_image", photo);
 
-      await api.post("/api/accounts/register/", payload, { auth: false });
+      await apiRequest("/api/accounts/register/", {
+        method: "POST",
+        body: payload,
+        auth: false,
+      });
 
       setIsRegistered(true);
       showToast(
@@ -111,6 +157,11 @@ export default function Register() {
           mapped[key] = Array.isArray(val) ? val.join(" ") : String(val);
         });
         setFieldErrors(mapped);
+        // Balikin ke langkah 1 kalau yang salah field di sana (mis. email sudah
+        // dipakai) -- kalau nggak, errornya gak keliatan karena beda halaman.
+        if (mapped.fullname || mapped.email || mapped.password || mapped.confirm_password) {
+          setStep(1);
+        }
         if (mapped.non_field_errors) {
           setFormError(mapped.non_field_errors);
         }
@@ -196,6 +247,29 @@ export default function Register() {
 
           {formError && <p className="text-red-400 text-[13px]">{formError}</p>}
 
+          {/* Indikator langkah -- form dipecah 2 supaya gak terasa panjang,
+              tapi tetap di satu halaman (gak pindah route). */}
+          <div className="flex items-center gap-2">
+            {[1, 2].map((n) => (
+              <div key={n} className="flex items-center gap-2 flex-1">
+                <span
+                  className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[11px] font-bold transition-colors ${
+                    step >= n ? "bg-[#B19EEF] text-black" : "bg-[#2B2B2B] text-[#6B7280]"
+                  }`}
+                >
+                  {n}
+                </span>
+                <span className={`text-[12px] ${step >= n ? "text-white" : "text-[#6B7280]"}`}>
+                  {n === 1 ? "Akun" : "Profil"}
+                </span>
+                {n === 1 && <div className={`h-px flex-1 ${step > 1 ? "bg-[#B19EEF]" : "bg-[#2B2B2B]"}`} />}
+              </div>
+            ))}
+          </div>
+
+          {step === 1 && (
+          <>
+
           <Field
             label="Nama Lengkap"
             value={namaLengkap}
@@ -280,6 +354,75 @@ export default function Register() {
             </p>
           )}
 
+          <button
+            type="button"
+            onClick={() => setStep(2)}
+            disabled={!isStep1Valid}
+            className="bg-[#B19EEF] flex items-center justify-center w-full h-[48px] rounded-[12px] text-black font-bold text-[14px] disabled:bg-[#635983] disabled:cursor-not-allowed transition-colors mt-1"
+          >
+            Lanjut
+          </button>
+          </>
+          )}
+
+          {step === 2 && (
+          <>
+          <Field
+            label="Nomor WhatsApp"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            error={fieldErrors.phone}
+          />
+
+          <Field
+            label="Asal Universitas / Sekolah"
+            value={institution}
+            onChange={(e) => setInstitution(e.target.value)}
+            error={fieldErrors.institution}
+          />
+
+          <Field
+            label="Semester / Status"
+            value={currentStatus}
+            onChange={(e) => setCurrentStatus(e.target.value)}
+            error={fieldErrors.current_status}
+          />
+
+          <Field
+            label="URL LinkedIn (opsional)"
+            value={linkedIn}
+            onChange={(e) => setLinkedIn(e.target.value)}
+            error={fieldErrors.linkedin_url}
+            placeholder="linkedin.com/in/namamu"
+          />
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[13px] text-[#B19EEF] font-medium">Foto Profil (opsional)</label>
+            <div className="flex items-center gap-3">
+              {photoPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photoPreview} alt="Pratinjau foto profil" className="w-12 h-12 rounded-full object-cover shrink-0" />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-[#2B2B2B] shrink-0" />
+              )}
+              <label className="flex-1 h-[44px] bg-[#2B2B2B] rounded-[12px] flex items-center justify-center text-[13px] text-white cursor-pointer hover:bg-[#333] transition-colors">
+                <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handlePhotoChange} />
+                {photo ? "Ganti foto" : "Pilih foto"}
+              </label>
+              {photo && (
+                <button
+                  type="button"
+                  onClick={() => { setPhoto(null); setPhotoPreview(""); }}
+                  className="text-red-400 text-[12px] font-semibold hover:underline shrink-0"
+                >
+                  Hapus
+                </button>
+              )}
+            </div>
+            <p className="text-[#6B7280] text-[11.5px]">JPG, PNG, atau WEBP. Maksimal 2MB.</p>
+          </div>
+
+
           <label className="flex flex-row gap-2.5 items-start cursor-pointer">
             <input
               type="checkbox"
@@ -307,13 +450,26 @@ export default function Register() {
             </p>
           </label>
 
-          <button
-            type="submit"
-            disabled={!isValid || isSubmitting}
-            className="bg-[#B19EEF] flex items-center justify-center w-full h-[48px] rounded-[12px] text-black font-bold text-[14px] disabled:bg-[#635983] disabled:cursor-not-allowed transition-colors mt-1"
-          >
-            {isSubmitting ? "Memproses..." : "Buat akun"}
-          </button>
+          <div className="flex gap-2 mt-1">
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="w-[110px] h-[48px] rounded-[12px] border border-[#3A3A3A] text-white font-semibold text-[14px] hover:bg-[#2B2B2B] transition-colors"
+            >
+              Kembali
+            </button>
+            <button
+              type="submit"
+              disabled={!isValid || isSubmitting}
+              className="bg-[#B19EEF] flex-1 flex items-center justify-center h-[48px] rounded-[12px] text-black font-bold text-[14px] disabled:bg-[#635983] disabled:cursor-not-allowed transition-colors"
+            >
+              {isSubmitting ? "Memproses..." : "Buat akun"}
+            </button>
+          </div>
+          </>
+          )}
+
+          <GoogleSignInButton />
 
           <p className="text-[13px] text-center text-[#9CA3AF]">
             Sudah memiliki akun?{" "}

@@ -4,11 +4,27 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { FileText, Star, AlertCircle } from "lucide-react";
-import DashboardLayout from "@/component/user/DashboardLayout";
+import { toast } from "sonner";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { extractErrorMessage } from "@/lib/formErrors";
+import AttentionBanner from "@/component/AttentionBanner";
 
 const FILTERS = ["Semua", "Bootcamp", "Mentoring", "Modul", "Riwayat"];
+
+// Bentuk data kosong yang dipakai bareng sebagai nilai awal DAN sebagai dasar
+// saat merge respons backend -- supaya render di bawah selalu bisa mengandalkan
+// data.stats/.bootcamp/.mentoring/.modul ada, walau responsnya nggak lengkap.
+const EMPTY_PRODUCTS = {
+  stats: {
+    mentoring_active: 0,
+    bootcamp_active: 0,
+    modul_active: 0,
+  },
+  bootcamp: [],
+  mentoring: [],
+  modul: [],
+};
 
 // Card produk yang dipakai bareng buat Bootcamp/Mentoring/Modul. Titik-tiga
 // refund/ganti-jadwal SENGAJA nggak ada lagi di sini -- itu aksi yang lebih
@@ -18,18 +34,26 @@ function ProductCard({
   id,
   title,
   description,
+  imageUrl,
   imageClass,
   badge,
   isCompleted,
   hasRating,
   onRate,
 }) {
+  // Kartu inilah yang bikin angka merah di menu Produk Saya menyala: sudah
+  // selesai tapi belum dinilai. Ditandai supaya penyebabnya kelihatan tanpa
+  // harus menyisir satu per satu.
+  const perluDinilai = isCompleted && !hasRating;
   return (
     <div
-      className={`relative h-full flex flex-col rounded-[12px] overflow-hidden border transition-colors ${
-        isCompleted
-          ? "border-[#2D2342] opacity-80 hover:opacity-100"
-          : "border-[#2D2342] hover:border-[#4C1D95]"
+      id={perluDinilai && id ? `produk-${id}` : undefined}
+      className={`relative h-full flex flex-col rounded-[12px] overflow-hidden border transition-colors scroll-mt-32 ${
+        perluDinilai
+          ? "border-[#F59E0B]/70 hover:border-[#F59E0B]"
+          : isCompleted
+            ? "border-[#2D2342] opacity-80 hover:opacity-100"
+            : "border-[#2D2342] hover:border-[#4C1D95]"
       }`}
     >
       <Link
@@ -38,11 +62,21 @@ function ProductCard({
       >
         <div
           className={`h-[140px] shrink-0 relative ${
-            isCompleted
-              ? "bg-gradient-to-br from-[#2D2342] to-[#1A1128]"
-              : `bg-gradient-to-br ${imageClass || ""}`
+            imageUrl
+              ? "bg-[#1A1128]"
+              : isCompleted
+                ? "bg-gradient-to-br from-[#2D2342] to-[#1A1128]"
+                : `bg-gradient-to-br ${imageClass || ""}`
           }`}
         >
+          {imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageUrl}
+              alt={title}
+              className={`w-full h-full object-cover ${isCompleted ? "opacity-70" : ""}`}
+            />
+          )}
           <div className="absolute top-3 right-3 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 flex items-center gap-1.5">
             {isCompleted ? (
               <>
@@ -131,30 +165,38 @@ export default function MyProducts() {
         animate: { opacity: 1, scale: 1, y: 0 },
       };
 
-  const [data, setData] = useState({
-    stats: {
-      mentoring_active: 0,
-      bootcamp_active: 0,
-      modul_active: 0,
-    },
-    bootcamp: [],
-    mentoring: [],
-    modul: [],
-  });
+  const [data, setData] = useState(EMPTY_PRODUCTS);
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [user, setUser] = useState(null);
 
+  // Dulu fungsi ini nggak punya try/catch sama sekali. Kalau requestnya gagal
+  // (backend mati, sesi habis), setLoading(false) nggak pernah kepanggil DAN
+  // setData(res) keisi null -- render di bawah langsung nyentuh data.stats,
+  // jadi halamannya crash tanpa pesan apa pun. Sekarang error-nya ditangkep,
+  // ditampilin, dan bentuk data-nya dijaga tetap utuh.
   async function fetchProducts() {
-      setLoading(true);
+    setLoading(true);
+    setLoadError("");
 
+    try {
       const res = await apiRequest(
-          `/api/products/my-products/?filter=${activeFilter.toLowerCase()}`
+        `/api/products/my-products/?filter=${activeFilter.toLowerCase()}`
       );
 
-      setData(res);
-
+      // Sesi habis sekarang dilempar sebagai ApiError sama lib/api.js, jadi
+      // ketangkep di catch. Guard ini buat sisanya: respons kosong / bukan
+      // JSON, supaya null nggak pernah masuk ke state dan mecahin render.
+      if (res) setData({ ...EMPTY_PRODUCTS, ...res });
+      else setLoadError("Server membalas dengan data kosong. Coba lagi.");
+    } catch (err) {
+      const message = extractErrorMessage(err, "Gagal memuat produk kamu.");
+      setLoadError(message);
+      toast.error("Gagal memuat produk", { description: message });
+    } finally {
       setLoading(false);
+    }
   }
 
   async function fetchUser() {
@@ -185,30 +227,48 @@ export default function MyProducts() {
   };
   const closeRatingModal = () => setRatingProduct(null);
 
+  // Sama kayak fetchProducts: tanpa try/catch, request yang gagal bikin
+  // isSubmittingRating nyangkut true selamanya -- tombol kirim mati permanen
+  // dan user nggak dikasih tau kenapa.
   const handleSubmitRating = async (e) => {
-      e.preventDefault();
+    e.preventDefault();
 
-      if (ratingValue === 0) return;
+    if (ratingValue === 0 || isSubmittingRating) return;
 
-      setIsSubmittingRating(true);
+    const productId = ratingProduct.id;
+    setIsSubmittingRating(true);
 
-      await apiRequest(
-          `/api/products/my-products/${ratingProduct.id}/rate/`,
-          {
-              method: "POST",
-              body: {
-                  rating: ratingValue,
-                  review_text: ratingText,
-              },
-          }
-      );
+    try {
+      await apiRequest(`/api/products/my-products/${productId}/rate/`, {
+        method: "POST",
+        body: {
+          rating: ratingValue,
+          review_text: ratingText,
+        },
+      });
 
-      setRatedIds((prev) => [...prev, ratingProduct.id]);
-
+      setRatedIds((prev) => [...prev, productId]);
       setRatingProduct(null);
-
+      toast.success("Terima kasih atas ulasannya!");
+    } catch (err) {
+      // Modalnya sengaja dibiarin kebuka biar user nggak kehilangan teks
+      // ulasan yang udah diketik dan bisa langsung coba kirim lagi.
+      toast.error("Gagal mengirim ulasan", {
+        description: extractErrorMessage(err, "Coba lagi sebentar lagi."),
+      });
+    } finally {
       setIsSubmittingRating(false);
+    }
   };
+
+  // Produk yang bikin angka merah di menu Produk Saya menyala: sudah selesai
+  // tapi belum dinilai. Aturannya disamakan dengan badge di backend
+  // (get_student_sidebar_badges) -- modul sengaja tidak ikut dihitung di sana.
+  const perluDinilai = [...data.bootcamp, ...data.mentoring].filter(
+    (item) =>
+      item.status === "completed" &&
+      !(!!item.hasRating || ratedIds.includes(item.id))
+  );
 
   const stats = [
     {
@@ -226,7 +286,7 @@ export default function MyProducts() {
   ];
 
   return (
-    <DashboardLayout title="My Products">
+    <>
       <motion.div
         {...sectionReveal}
         className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6"
@@ -241,33 +301,35 @@ export default function MyProducts() {
             </p>
           </div>
 
-          <div className="inline-flex items-center gap-1 bg-[#170F26] border border-[#2D2342] rounded-[10px] p-1 w-fit overflow-x-auto no-scrollbar">
-            {FILTERS.map((f) => (
-              <button
-                key={f}
-                onClick={() => setActiveFilter(f)}
-                className={`px-5 py-2 rounded-[8px] text-[13px] font-medium whitespace-nowrap transition-colors ${
-                  activeFilter === f
-                    ? "bg-[#2D1B4E] text-white shadow-sm"
-                    : "text-[#9CA3AF] hover:text-white"
-                }`}
-              >
-                {f}
-              </button>
-            ))}
+          <div className="max-w-full overflow-x-auto no-scrollbar">
+            <div className="inline-flex items-center gap-1 bg-[#170F26] border border-[#2D2342] rounded-[10px] p-1">
+              {FILTERS.map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setActiveFilter(f)}
+                  className={`px-5 py-2 rounded-[8px] text-[13px] font-medium whitespace-nowrap transition-colors ${
+                    activeFilter === f
+                      ? "bg-[#2D1B4E] text-white shadow-sm"
+                      : "text-[#9CA3AF] hover:text-white"
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 shrink-0">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 shrink-0">
           {stats.map((s) => (
             <div
               key={s.label}
-              className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-4 sm:px-6 py-5 flex flex-col items-center justify-center min-w-[95px] sm:min-w-[120px]"
+              className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-2 sm:px-6 py-3 sm:py-5 flex flex-col items-center justify-center min-w-0 sm:min-w-[120px]"
             >
-              <p className="text-[#148F89] font-bold text-[30px] sm:text-[34px] leading-none">
+              <p className="text-[#148F89] font-bold text-[22px] sm:text-[34px] leading-none">
                 {s.value}
               </p>
-              <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center whitespace-nowrap">
+              <p className="text-[#9CA3AF] text-[10px] sm:text-[12px] mt-1.5 sm:mt-2 text-center leading-tight">
                 {s.label}
               </p>
             </div>
@@ -275,13 +337,60 @@ export default function MyProducts() {
         </div>
       </motion.div>
 
-      {!!isRiwayat && (
-        <motion.p {...sectionReveal} className="text-[#6B7280] text-[13px]">
-          Produk yang udah selesai. Klik kartunya buat lihat rekaman tiap sesi.
+      {!loading && !loadError && (
+        <motion.div {...sectionReveal}>
+          <AttentionBanner
+            judul={`${perluDinilai.length} produk selesai belum kamu nilai`}
+            keterangan="Ini yang membuat angka merah muncul di menu Produk Saya. Klik untuk menuju kartunya."
+            butir={perluDinilai.map((p) => ({
+              key: p.id,
+              label: p.title,
+              anchor: `produk-${p.id}`,
+            }))}
+            dismissKey="user-my-products-rating"
+          />
+        </motion.div>
+      )}
+
+      {/* Sebelumnya state `loading` diset tapi nggak pernah dirender, dan
+          kegagalan muat nggak keliatan sama sekali. Sekarang dua-duanya punya
+          tampilan sendiri, dan daftar produk di bawah baru dirender setelah
+          datanya beneran ada. */}
+      {loading && (
+        <motion.p {...sectionReveal} className="text-[#9CA3AF] text-[14px]">
+          Memuat produk kamu...
         </motion.p>
       )}
 
-      {(showBootcamp || isRiwayat) && (
+      {!loading && !!loadError && (
+        <motion.div
+          {...sectionReveal}
+          className="flex flex-col items-start gap-3 rounded-[12px] border border-[#4C2A2A] bg-[#1F1417] px-5 py-4"
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-[#F87171] shrink-0" />
+            <p className="text-white text-[14px] font-semibold">
+              Gagal memuat produk kamu
+            </p>
+          </div>
+          <p className="text-[#9CA3AF] text-[13px]">{loadError}</p>
+          <button
+            type="button"
+            onClick={fetchProducts}
+            className="rounded-[8px] border border-[#4C1D95] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#4C1D95]"
+          >
+            Coba lagi
+          </button>
+        </motion.div>
+      )}
+
+      {!loading && !loadError && !!isRiwayat && (
+        <motion.p {...sectionReveal} className="text-[#6B7280] text-[13px]">
+          Produk yang sudah selesai. Tekan kartunya untuk melihat rekaman tiap sesi.
+        </motion.p>
+      )}
+
+      {!loading && !loadError && (showBootcamp || isRiwayat) && (
         <motion.div {...sectionReveal} className="flex flex-col gap-5">
           <div
             className={`border-l-[4px] pl-3 ${isRiwayat ? "border-[#3A3545]" : "border-[#00C6D1]"}`}
@@ -312,6 +421,7 @@ export default function MyProducts() {
                     id={item.id}
                     title={item.title}
                     description={item.description}
+                    imageUrl={item.image_url}
                     imageClass={item.imageClass}
                     isCompleted={item.status === "completed"}
                     hasRating={!!item.hasRating || ratedIds.includes(item.id)}
@@ -319,7 +429,7 @@ export default function MyProducts() {
                     badge={
                       item.status !== "completed" ? (
                         <p className="text-[11px] font-bold text-white tracking-wider">
-                          SESSION {item.currentSession}/{item.totalSessions}
+                          SESSION {item.current_session}/{item.total_sessions}
                         </p>
                       ) : null
                     }
@@ -331,7 +441,7 @@ export default function MyProducts() {
         </motion.div>
       )}
 
-      {(showMentoring || isRiwayat) && (
+      {!loading && !loadError && (showMentoring || isRiwayat) && (
         <motion.div {...sectionReveal} className="flex flex-col gap-5">
           <div
             className={`border-l-[4px] pl-3 ${isRiwayat ? "border-[#3A3545]" : "border-[#D1D83E]"}`}
@@ -362,6 +472,7 @@ export default function MyProducts() {
                     id={item.id}
                     title={item.title}
                     description={item.description}
+                    imageUrl={item.image_url}
                     imageClass={item.imageClass}
                     isCompleted={item.status === "completed"}
                     hasRating={!!item.hasRating || ratedIds.includes(item.id)}
@@ -369,7 +480,7 @@ export default function MyProducts() {
                     badge={
                       item.status !== "completed" ? (
                         <p className="text-[11px] font-bold text-white tracking-wider">
-                          SESI {item.currentSession}/{item.totalSessions}
+                          SESI {item.current_session}/{item.total_sessions}
                         </p>
                       ) : null
                     }
@@ -381,7 +492,7 @@ export default function MyProducts() {
         </motion.div>
       )}
 
-      {showModul && !isRiwayat && (
+      {!loading && !loadError && showModul && !isRiwayat && (
         <motion.div {...sectionReveal} className="flex flex-col gap-5">
           <div className="border-l-[4px] border-[#B19EEF] pl-3">
             <h3 className="text-[18px] font-bold text-white">
@@ -406,6 +517,7 @@ export default function MyProducts() {
                     id={item.id}
                     title={item.title}
                     description={item.description}
+                    imageUrl={item.image_url}
                     imageClass={item.imageClass}
                     badge={
                       <>
@@ -509,6 +621,6 @@ export default function MyProducts() {
           </motion.form>
         </motion.div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

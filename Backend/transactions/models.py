@@ -31,6 +31,15 @@ class PaymentMethod(models.TextChoices):
     MANUAL = "MANUAL", "Manual"
 
 
+class PaymentGateway(models.TextChoices):
+    """Jalur pembayaran yang membuat Transaction ini -- BEDA dari
+    PaymentMethod (itu metode transfer yang dipakai pembeli, mis. QRIS/VA;
+    ini jalur sistemnya: manual upload bukti + ACC admin, atau otomatis
+    lewat iPaymu). MANUAL = default, semua baris lama otomatis kebagian ini."""
+    MANUAL = "MANUAL", "Manual (Transfer Bank)"
+    IPAYMU = "IPAYMU", "iPaymu"
+
+
 class Transaction(models.Model):
     id = models.CharField(
         primary_key=True,
@@ -53,6 +62,57 @@ class Transaction(models.Model):
             blank=True,
             null=True,
         )
+    notes = models.TextField(
+        blank=True,
+        default="",
+        help_text="Catatan dari pembeli, misal nama-nama anggota tim buat pesanan grup.",
+    )
+    # Dipakai buat alur bayar-setelah-diterima paket Bootcamp (beda dari
+    # checkout_product biasa) -- link balik ke pendaftaran yang dibayar, dan
+    # snapshot commitment fee-nya sendiri (constant di titik ini) supaya
+    # nanti gampang dipisah lagi buat fitur pengembalian commitment fee,
+    # walau package.commitment_fee-nya berubah di kemudian hari.
+    bootcamp_registration = models.ForeignKey(
+        "products.BootcampRegistration",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_transactions",
+    )
+    commitment_fee_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Ditandai manual sama admin setelah transfer pengembalian dilakukan DI
+    # LUAR sistem (bukan alur bayar) -- gak otomatis, cuma pencatatan status.
+    commitment_fee_refunded_at = models.DateTimeField(blank=True, null=True)
+    # --- iPaymu (opsional, cuma keisi kalau gateway=IPAYMU) ---
+    gateway = models.CharField(
+        max_length=20, choices=PaymentGateway.choices, default=PaymentGateway.MANUAL,
+        help_text="Jalur yang membuat transaksi ini -- manual (upload bukti + ACC admin) atau otomatis lewat iPaymu.",
+    )
+    ipaymu_session_id = models.CharField(
+        max_length=64, blank=True, default="",
+        help_text="Data.SessionID dari iPaymu, buat penelusuran/dukungan. Pencocokan transaksi dari webhook "
+                   "TETAP pakai Transaction.id sendiri sebagai referenceId, bukan field ini.",
+    )
+    ipaymu_last_webhook = models.JSONField(
+        blank=True, null=True,
+        help_text="Payload webhook terakhir dari iPaymu apa adanya -- buat audit kalau ada sengketa pembayaran.",
+    )
+    ipaymu_qr_string = models.TextField(
+        blank=True, default="",
+        help_text="Payload teks QRIS (format EMVCo standar) dari QRIS Direct Payment -- disimpan biar "
+                  "pembeli yang reload/kembali ke halaman bayar lihat QR yang SAMA (bukan bikin sesi "
+                  "baru tiap reload), selama masih dalam jendela expires_at. Digambar ulang jadi QR "
+                  "code di frontend, BUKAN gambar/URL dari iPaymu -- lihat catatan di mark_up/ipaymu.py.",
+    )
+    # Cuma keisi buat transaksi gateway=IPAYMU (lihat _create_transaction_with_reservation
+    # di views.py) -- MANUAL sengaja TIDAK punya batas waktu di sini karena bukti
+    # pembayarannya sudah dilampirkan SAAT transaksi dibuat, tinggal nunggu admin
+    # tinjau (bisa lewat 5 menit, itu wajar, bukan berarti reservasinya harus lepas).
+    # Buat IPAYMU, pembeli belum bayar apa-apa saat baris ini dibuat -- slot/stok
+    # yang di-reserve harus dilepas lagi kalau dia gak nyelesain bayar di iPaymu
+    # dalam waktu segini. Dicek & dilepas oleh _release_expired_transactions
+    # (dipanggil management command terjadwal + lazy di titik kontensi).
+    expires_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(blank=True, null=True)
 
@@ -218,12 +278,15 @@ class MentorPayout(models.Model):
         blank=True,
         related_name="payout",
     )
-    bootcamp_session = models.OneToOneField(
+    bootcamp_session = models.ForeignKey(
         "products.BootcampSession",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name="payout",
+        related_name="payouts",
+        help_text="ForeignKey (bukan OneToOne) karena satu sesi bootcamp bisa "
+                  "diajar >1 mentor -- tiap mentor yang ditugaskan dapat baris "
+                  "payout sendiri-sendiri untuk sesi yang sama.",
     )
     gross_amount = models.DecimalField(max_digits=12, decimal_places=2)
     fee_percent = models.PositiveIntegerField(default=20)
@@ -242,6 +305,133 @@ class MentorPayout(models.Model):
         verbose_name = "Mentor Payout"
         verbose_name_plural = "Mentor Payouts"
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bootcamp_session", "mentor_profile"],
+                condition=models.Q(bootcamp_session__isnull=False),
+                name="unique_bootcamp_session_mentor_payout",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.mentor_profile} - {self.gross_amount}"
+
+
+class CommissionSetting(models.Model):
+    """Setelan komisi global (singleton, pk=1). mentoring_fee_percent =
+    persen yang masuk kas MarkUp dari tiap payout mentoring (default 25,
+    artinya mentor dapat 75%). Bootcamp gak pakai ini -- fee-nya diisi admin
+    manual per payout di halaman Pencairan Mentor."""
+    mentoring_fee_percent = models.PositiveIntegerField(default=25)
+
+    class Meta:
+        verbose_name = "Commission Setting"
+        verbose_name_plural = "Commission Settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self) -> str:
+        return f"Komisi mentoring: {self.mentoring_fee_percent}% ke MarkUp"
+
+
+class BankAccountSetting(models.Model):
+    """Rekening tujuan transfer (singleton, pk=1).
+
+    Dulu di-hardcode di Frontend/src/lib/bankInfo.js, jadi tiap ganti rekening
+    harus ubah kode + deploy ulang. Sekarang admin bisa ubah sendiri lewat
+    halaman Pengaturan, dan halaman pembayaran ngambilnya dari sini.
+    """
+
+    bank_name = models.CharField(max_length=100, default="Mandiri")
+    account_number = models.CharField(max_length=50, default="")
+    account_holder = models.CharField(max_length=150, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Bank Account Setting"
+        verbose_name_plural = "Bank Account Settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self) -> str:
+        return f"{self.bank_name} {self.account_number} a.n {self.account_holder}"
+
+
+class IpaymuSetting(models.Model):
+    """Kredensial & saklar iPaymu (singleton, pk=1) -- pola sama persis
+    seperti BankAccountSetting di atas, tapi api_key-nya SENSITIF jadi
+    dienkripsi (lihat mark_up/ipaymu.py encrypt_secret/decrypt_secret,
+    kuncinya IPAYMU_CRED_KEY -- pola yang sama juga dipakai ZoomAccount di
+    products/models.py buat client_secret).
+
+    Dua saklar independen yang sengaja dipisah:
+    - is_sandbox: sandbox.ipaymu.com (uji, uang gak sungguhan) vs
+      my.ipaymu.com (production, uang sungguhan). GANTI INI MENENTUKAN UANG
+      SUNGGUHAN ATAU BUKAN.
+    - is_enabled: mati/nyala fitur ini SAMA SEKALI buat pembeli. Default
+      False -- fitur ini baru terlihat begitu admin sengaja menyalakannya,
+      bukan begitu kode ini di-deploy.
+    """
+    va_number = models.CharField(
+        max_length=32, blank=True, default="",
+        help_text="Nomor VA/akun iPaymu -- BUKAN rahasia, dipakai juga sebagai secret verifikasi signature webhook masuk.",
+    )
+    api_key_encrypted = models.TextField(
+        blank=True, default="",
+        help_text="API Key iPaymu, terenkripsi Fernet pakai IPAYMU_CRED_KEY. JANGAN pernah dikirim balik ke frontend -- lihat _serialize_ipaymu_setting.",
+    )
+    is_sandbox = models.BooleanField(
+        default=True,
+        help_text="True = sandbox.ipaymu.com (uji, uang gak sungguhan). False = my.ipaymu.com (PRODUCTION, uang sungguhan).",
+    )
+    is_enabled = models.BooleanField(
+        default=False,
+        help_text="Saklar utama -- mati = pembeli cuma lihat transfer manual, walau kredensial di atas sudah diisi.",
+    )
+    default_expired_hours = models.PositiveIntegerField(
+        default=2,
+        help_text="Umur sesi HALAMAN BAYAR iPaymu (jam) -- cuma buffer, biar halamannya "
+                  "gak keburu mati pas pembeli masih di sana. BUKAN penentu reservasi slot/stok "
+                  "-- itu tetap 5 menit (RESERVATION_MINUTES di transactions/views.py), "
+                  "gak ikut berubah walau angka ini diubah.",
+    )
+    last_check_at = models.DateTimeField(blank=True, null=True)
+    last_check_ok = models.BooleanField(blank=True, null=True)
+    last_check_note = models.CharField(max_length=500, blank=True, default="")
+    last_check_url = models.URLField(
+        blank=True, default="",
+        help_text="URL sesi uji terakhir dari tombol Uji Koneksi -- buat admin cek responsnya tanpa pernah diarahkan ke sana.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "iPaymu Setting"
+        verbose_name_plural = "iPaymu Settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self) -> str:
+        mode = "sandbox" if self.is_sandbox else "PRODUCTION"
+        status = "aktif" if self.is_enabled else "mati"
+        return f"iPaymu ({mode}, {status})"

@@ -16,7 +16,7 @@ export default function DashboardLayout({ title, children }) {
 
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative">
-      <div className="fixed inset-x-0 top-0 h-[400px] overflow-hidden pointer-events-none z-0">
+      <div className="absolute inset-x-0 top-0 h-[400px] overflow-hidden pointer-events-none z-0">
         <div
           className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%]"
           style={{
@@ -46,10 +46,10 @@ export default function DashboardLayout({ title, children }) {
         />
       )}
 
-      <div className="flex flex-col min-h-screen lg:ml-[288px] relative z-10">
+      <div className="flex flex-col min-h-screen lg:ml-[288px] relative z-10 min-w-0 overflow-x-hidden">
         {/* Trigger buka Sidebar khusus mobile -- hamburger di Navbar tugasnya
             beda (buka menu situs). mt biar nggak ketiban Navbar yang ngambang. */}
-        <div className="lg:hidden sticky top-0 z-20 bg-[#0F081C]/90 backdrop-blur-sm px-4 py-4 mt-28 flex items-center gap-3 border-b border-white/5">
+        <div className="lg:hidden sticky top-0 z-20 bg-[#0F081C]/90 backdrop-blur-sm px-4 py-4 mt-28 md:mt-36 flex items-center gap-3 border-b border-white/5">
           <button
             onClick={() => setMobileNavOpen(true)}
             aria-label="Buka menu"
@@ -61,7 +61,7 @@ export default function DashboardLayout({ title, children }) {
         </div>
 
         <main className="flex-1 flex flex-col px-4 sm:px-6 lg:px-10 py-6 lg:pt-36 lg:pb-10">
-          <div className="w-full max-w-[1200px] mx-auto flex flex-col gap-8">
+          <div className="w-full max-w-[1200px] mx-auto flex flex-col gap-8 min-w-0">
             {children}
           </div>
         </main>

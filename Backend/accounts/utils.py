@@ -1,6 +1,27 @@
 import json
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.cache import cache
+from django.core.validators import URLValidator
+from django.core.exceptions import ValidationError as DjangoValidationError
+
+
+def normalize_and_validate_url(value, must_contain=None):
+    """Pastikan sebuah field link beneran berupa URL (bukan username doang).
+    Nge-prepend https:// kalau user gak nulis skema, lalu validasi. Balikin
+    tuple (url_ternormalisasi, pesan_error|None). must_contain dipakai buat
+    maksa domain tertentu (mis. 'linkedin.com')."""
+    value = (value or "").strip()
+    if not value:
+        return "", None
+    if not value.startswith(("http://", "https://")):
+        value = "https://" + value
+    try:
+        URLValidator()(value)
+    except DjangoValidationError:
+        return value, "Harus berupa link yang valid, contoh: https://..."
+    if must_contain and must_contain not in value.lower():
+        return value, f"Link harus mengarah ke {must_contain}."
+    return value, None
 
 
 class EmailVerificationTokenGenerator(PasswordResetTokenGenerator):
@@ -10,6 +31,15 @@ class EmailVerificationTokenGenerator(PasswordResetTokenGenerator):
 
     def _make_hash_value(self, user, timestamp):
         return f"{user.pk}{user.is_email_verified}{timestamp}"
+
+
+class AccountDeletionTokenGenerator(PasswordResetTokenGenerator):
+    """Token buat konfirmasi hapus akun lewat email. Ikut nyertain user.status
+    di hash -- jadi begitu akun kehapus (status jadi INACTIVE), token yang sama
+    otomatis gak valid lagi (efeknya sekali pakai)."""
+
+    def _make_hash_value(self, user, timestamp):
+        return f"{user.pk}{user.status}{timestamp}"
 
 
 def get_request_data(request):
@@ -24,9 +54,29 @@ def get_request_data(request):
 
 
 def get_client_ip(request):
+    """IP asli pengunjung, dipakai buat rate limit & audit log.
+
+    X-Forwarded-For itu header yang BISA DIISI KLIEN, jadi entri paling depan
+    nggak boleh dipercaya. Dulu fungsi ini ngambil entri pertama -- akibatnya
+    penyerang tinggal ngirim "X-Forwarded-For: 1.2.3.4" (diacak tiap request)
+    buat ngendaliin cache key rate limiter, dan semua limit per-IP (login,
+    register, lupa password, hapus akun) jadi nggak ada artinya.
+
+    Yang dipercaya cuma entri PALING BELAKANG, karena itu yang ditulis reverse
+    proxy kita sendiri -- benar untuk dua-duanya: kalau Nginx nimpa headernya
+    ($remote_addr, lihat deploy/nginx.conf) isinya cuma satu nilai, dan kalau
+    suatu saat balik ke mode nambah ($proxy_add_x_forwarded_for) entri
+    terakhir tetap IP yang dilihat proxy.
+
+    Catatan: kalau nanti ada CDN (mis. Cloudflare) di depan Nginx, IP asli
+    pindah ke header khusus CDN-nya (CF-Connecting-IP) dan fungsi ini harus
+    disesuaikan -- jangan balik ke entri pertama.
+    """
     forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+        hops = [part.strip() for part in forwarded_for.split(",") if part.strip()]
+        if hops:
+            return hops[-1]
     return request.META.get("REMOTE_ADDR")
 
 
@@ -62,3 +112,92 @@ def log_audit(request, action, table_name, object_id="", old_data=None, new_data
         new_data=new_data,
         ip_address=get_client_ip(request),
     )
+
+def send_mail_async(subject, message, recipient_list):
+    """Kirim email TANPA nahan response HTTP.
+
+    SMTP di server ini pernah menggantung >2 menit. Karena send_mail dipanggil
+    langsung di dalam view, requestnya ikut nunggu -- gunicorn (timeout 30 detik)
+    keburu ngebunuh workernya, user dapat 500, PADAHAL datanya sudah tersimpan.
+    Persis gejala "ditolak tapi muncul error, giliran di-refresh statusnya sudah
+    berubah".
+
+    Polanya sama dengan notify_team di bawah: thread daemon + fail_silently,
+    jadi email yang lambat/gagal gak pernah ngerusak aksi user.
+
+    Konsekuensi yang disengaja: pengirimannya jadi "kirim & lupakan" -- view gak
+    tahu lagi kalau emailnya gagal. Itu pertukaran yang sepadan; aksi user yang
+    sudah berhasil gak boleh dilaporkan gagal cuma gara-gara email nyangkut.
+    """
+    import threading
+    from django.conf import settings
+    from django.core.mail import send_mail
+
+    if not recipient_list:
+        return
+
+    def _send():
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=recipient_list,
+                fail_silently=True,
+            )
+        except Exception:
+            pass
+
+    threading.Thread(target=_send, daemon=True).start()
+
+
+def notify_user(user, title, message, url=""):
+    """Bikin notifikasi IN-APP buat SATU user (baris di tabel Notification,
+    muncul di tombol lonceng dashboard) -- BEDA dari notify_team di atas
+    yang ngirim EMAIL ke tim internal. Dipakai buat event yang relevan buat
+    pembelinya sendiri (pembayaran lunas/ditolak) atau mentor (booking baru,
+    payout diproses).
+
+    Sinkron (bukan thread) karena cuma satu INSERT ke database, jauh lebih
+    cepat dari kirim email -- gak perlu App off-load ke thread terpisah.
+    Tetap dibungkus try/except supaya kegagalan simpan notifikasi TIDAK
+    PERNAH menggagalkan aksi utama yang sedang berjalan (pembayaran,
+    payout, dst)."""
+    try:
+        from .models import Notification
+        Notification.objects.create(user=user, title=title, message=message, url=url or "")
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "Gagal bikin notifikasi in-app buat user %s", getattr(user, "id", None)
+        )
+
+
+def notify_team(subject, message):
+    """Kirim notifikasi internal ke inbox tim (settings.TEAM_NOTIFICATION_EMAIL)
+    buat kejadian yang butuh tindakan cepat -- transaksi baru nunggu verifikasi,
+    pesan masuk, pengajuan refund. Dikirim di thread terpisah + fail_silently
+    biar SMTP yang lambat/error nggak pernah nge-block atau nggagalin aksi user
+    yang lagi jalan (checkout, kirim pesan, dll)."""
+    import threading
+    from django.conf import settings
+    from django.core.mail import send_mail
+
+    recipient = getattr(settings, "TEAM_NOTIFICATION_EMAIL", None)
+    if not recipient:
+        return
+
+    def _send():
+        try:
+            send_mail(
+                subject=f"[MarkUp] {subject}",
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[recipient],
+                fail_silently=True,
+            )
+        except Exception:
+            # Notifikasi internal -- kegagalan kirim gak boleh ngeganggu apa pun.
+            pass
+
+    threading.Thread(target=_send, daemon=True).start()

@@ -18,9 +18,11 @@ import {
   AlertCircle,
   MoreVertical,
 } from "lucide-react";
-import DashboardLayout from "@/component/user/DashboardLayout";
+import { toast } from "sonner";
+import Linkify from "@/component/Linkify";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { extractErrorMessage } from "@/lib/formErrors";
 
 const statusMeta = {
   completed: {
@@ -89,10 +91,12 @@ function mapProductDetail(raw) {
     title: raw.title,
     description: raw.description,
     imageClass: "from-[#4A2CA1] to-[#17A9D4]",
+    imageUrl: raw.image_url,
     sessions: raw.sessions?.map(mapSession),
     fileUrl: raw.file_url,
     resources: raw.resources,
     chapters: raw.chapters,
+    team: raw.team,
   };
 }
 
@@ -107,8 +111,11 @@ export default function ProductDetail() {
       fetchDetail();
   }, []);
 
-  async function fetchDetail() {
-    setLoading(true);
+  // showLoading=false dipakai buat refetch di belakang layar (mis. setelah
+  // pilih jadwal) -- kalau true, seluruh halaman ke-replace layar loading dan
+  // modal ikut ke-unmount, bikin tombol submit-nya keliatan "nyangkut".
+  async function fetchDetail(showLoading = true) {
+    if (showLoading) setLoading(true);
 
     try {
         const res = await apiRequest(
@@ -117,7 +124,7 @@ export default function ProductDetail() {
 
         setProduct(mapProductDetail(res));
     } finally {
-        setLoading(false);
+        if (showLoading) setLoading(false);
     }
 }
 
@@ -173,7 +180,7 @@ export default function ProductDetail() {
 
   if (loading) {
     return (
-      <DashboardLayout title="Detail Produk">
+      <>
         <Link
           href="/user/my-products"
           className="inline-flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit"
@@ -184,13 +191,13 @@ export default function ProductDetail() {
         <div className="text-center py-12">
           <p className="text-[#9CA3AF] text-[13px]">Memuat data produk...</p>
         </div>
-      </DashboardLayout>
+      </>
     );
   }
 
   if (!product) {
     return (
-      <DashboardLayout title="Detail Produk">
+      <>
         <Link
           href="/user/my-products"
           className="inline-flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit"
@@ -203,14 +210,19 @@ export default function ProductDetail() {
           ctaLabel="Lihat Semua Produk"
           ctaHref="/user/my-products"
         />
-      </DashboardLayout>
+      </>
     );
   }
 
   const hasSessions =
     product.type === "bootcamp" || product.type === "mentoring";
+  // Sesi yang jadwalnya udah lewat ikut kehitung progress juga, gak perlu
+  // nunggu admin/mentor nge-klik "Tandai Selesai" manual dulu -- itu cuma
+  // buat trigger pencairan payout mentor, beda urusan sama progres belajar
+  // yang dilihat peserta di sini.
+  const isSessionDone = (s) => s.status === "completed" || (s.startTime && new Date(s.startTime) < new Date());
   const completedCount = hasSessions
-    ? product.sessions.filter((s) => s.status === "completed").length
+    ? product.sessions.filter(isSessionDone).length
     : 0;
   const totalSessions = hasSessions ? product.sessions.length : 0;
   const progressPercent =
@@ -246,7 +258,28 @@ export default function ProductDetail() {
     if (session.mentorId) {
       setSlotsLoading(true);
       apiRequest(`/api/mentors/${session.mentorId}/availability/`, { auth: false })
-        .then((res) => setAvailableSlots(res?.availability || []))
+        .then((res) => {
+          const all = res?.availability || [];
+          // Batas urutan waktu: sesi ini harus SETELAH sesi sebelumnya yang
+          // udah dijadwalkan, dan SEBELUM sesi berikutnya yang udah dijadwalkan.
+          // Slot yang melanggar disembunyiin biar user gak salah pilih (backend
+          // juga tetap validasi ini sebagai pengaman).
+          const siblings = product?.sessions || [];
+          const earlier = siblings
+            .filter((s) => s.order < session.order && s.startTime)
+            .map((s) => new Date(s.startTime).getTime());
+          const later = siblings
+            .filter((s) => s.order > session.order && s.startTime)
+            .map((s) => new Date(s.startTime).getTime());
+          const minT = earlier.length ? Math.max(...earlier) : -Infinity;
+          const maxT = later.length ? Math.min(...later) : Infinity;
+          const filtered = all.filter((slot) => {
+            if (!slot.start_time) return true;
+            const t = new Date(slot.start_time).getTime();
+            return t > minT && t < maxT;
+          });
+          setAvailableSlots(filtered);
+        })
         .catch((err) => setSlotsError(err?.message || "Gagal memuat jadwal mentor."))
         .finally(() => setSlotsLoading(false));
     }
@@ -255,6 +288,7 @@ export default function ProductDetail() {
 
   const handleSubmitSchedule = async (e) => {
     e.preventDefault();
+    if (!selectedSlotId || scheduleSubmitting) return;
 
     setScheduleSubmitting(true);
 
@@ -270,9 +304,15 @@ export default function ProductDetail() {
         }
       );
 
-      await fetchDetail();
-
+      // Tampilin sukses langsung -- refetch detail dilakuin di belakang layar
+      // (gak di-await, gak nyalain loading layar penuh) biar modal gak
+      // ke-unmount & tombolnya gak nyangkut di "Menyimpan...".
       setScheduleSuccess(true);
+      fetchDetail(false).catch(() => {});
+    } catch (err) {
+      toast.error("Gagal Menyimpan Jadwal", {
+        description: extractErrorMessage(err, "Coba lagi sebentar."),
+      });
     } finally {
       setScheduleSubmitting(false);
     }
@@ -359,6 +399,14 @@ export default function ProductDetail() {
 
     return (
       <div className="flex items-center gap-2">
+        {/* Link Zoom mentoring dibuat otomatis menjelang sesi, jadi wajar kalau
+            masih kosong untuk jadwal yang jauh. Tanpa keterangan ini, peserta
+            cuma melihat baris tanpa tombol dan mengira ada yang error. */}
+        {!joinLink && (
+          <span className="text-[#9CA3AF] text-[12px] whitespace-nowrap">
+            Link tersedia menjelang sesi
+          </span>
+        )}
         {joinLink && (
           <a
             href={joinLink}
@@ -410,7 +458,7 @@ export default function ProductDetail() {
   };
 
   return (
-    <DashboardLayout title="Detail Produk">
+    <>
       <Link
         href="/user/my-products"
         className="inline-flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit"
@@ -421,9 +469,22 @@ export default function ProductDetail() {
 
       {/* Banner -- titik-tiga refund (LEVEL PRODUK, cuma 1) di pojok kanan atas */}
       <div
-        className={`relative rounded-[12px] overflow-hidden bg-gradient-to-br ${product.imageClass || ""} p-6 sm:p-8 flex flex-col gap-2`}
+        className={`relative rounded-[12px] overflow-hidden p-6 sm:p-8 flex flex-col gap-2 ${
+          product.imageUrl ? "bg-[#1A1128]" : `bg-gradient-to-br ${product.imageClass || ""}`
+        }`}
       >
-        <div className="flex items-start justify-between gap-3">
+        {product.imageUrl && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={product.imageUrl}
+              alt={product.title}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10" />
+          </>
+        )}
+        <div className="relative flex items-start justify-between gap-3">
           <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-white/20 text-white backdrop-blur-sm w-fit">
             {typeLabel}
           </span>
@@ -464,11 +525,11 @@ export default function ProductDetail() {
           )}
         </div>
 
-        <h2 className="text-white font-bold text-[20px] sm:text-[24px]">
+        <h2 className="relative text-white font-bold text-[20px] sm:text-[24px]">
           {product.title}
         </h2>
-        <p className="text-white/80 text-[13px] max-w-[600px]">
-          {product.description}
+        <p className="relative text-white/80 text-[13px] max-w-[600px] whitespace-pre-line">
+          <Linkify text={product.description} />
         </p>
       </div>
 
@@ -583,6 +644,60 @@ export default function ProductDetail() {
                 );
               })}
           </div>
+
+          {product.type === "bootcamp" && product.resources?.length > 0 && (
+            <motion.div
+              {...sectionReveal}
+              className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col gap-3"
+            >
+              <h3 className="text-white font-semibold text-[15px]">
+                Resource Eksklusif Paketmu
+              </h3>
+              <div className="flex flex-col gap-2">
+                {product.resources.map((res) => (
+                  <a
+                    key={res.id}
+                    href={res.file}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between gap-3 bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 hover:border-[#148F89]/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <FileText size={16} className="text-[#148F89] shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-white text-[13px] font-medium truncate">{res.title}</span>
+                        <span className="text-[#9CA3AF] text-[11px]">{res.resource_type_label}</span>
+                      </div>
+                    </div>
+                    <Download size={15} className="text-[#9CA3AF] shrink-0" />
+                  </a>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {product.type === "bootcamp" && product.team && (
+            <motion.div
+              {...sectionReveal}
+              className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col gap-3"
+            >
+              <h3 className="text-white font-semibold text-[15px] flex items-center gap-2">
+                <Users size={16} className="text-[#148F89]" /> {product.team.team_name}
+              </h3>
+              {product.team.teammates.length > 0 ? (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-[#9CA3AF] text-[12px]">Rekan setim:</p>
+                  <ul className="flex flex-col gap-1.5">
+                    {product.team.teammates.map((name, idx) => (
+                      <li key={idx} className="text-[#E2E8F0] text-[13px]">{name}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-[#9CA3AF] text-[12px]">Belum ada rekan setim lain.</p>
+              )}
+            </motion.div>
+          )}
         </>
       ) : (
         <>
@@ -672,7 +787,7 @@ export default function ProductDetail() {
             {...modalMotion}
             transition={{ duration: 0.18 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-[#170F26] w-full max-w-[420px] max-h-[85vh] overflow-y-auto rounded-[16px] border border-[#2D2342] shadow-2xl"
+            className="bg-[#170F26] w-full max-w-[420px] max-h-[85vh] flex flex-col overflow-hidden rounded-[16px] border border-[#2D2342] shadow-2xl"
           >
             {scheduleSuccess ? (
               <div className="p-8 flex flex-col items-center text-center gap-4">
@@ -685,9 +800,9 @@ export default function ProductDetail() {
                     {scheduleModal.isInitial ? "Dipilih" : "Diubah"}
                   </h3>
                   <p className="text-[#9CA3AF] text-[13px] mt-2 leading-relaxed">
-                    Jadwal langsung aktif — mentor emang udah bersedia di slot
-                    yang kamu pilih. Link sesinya bisa langsung kamu pakai pas
-                    waktunya tiba.
+                    Jadwal langsung aktif karena mentor memang sudah bersedia
+                    pada slot yang kamu pilih. Tautan sesinya bisa langsung kamu
+                    gunakan saat waktunya tiba.
                   </p>
                 </div>
                 <button
@@ -698,8 +813,13 @@ export default function ProductDetail() {
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSubmitSchedule}>
-                <div className="sticky top-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
+              // Daftar slot dikasih tinggi maksimal eksplisit (max-h-[40vh]) +
+              // overflow sendiri, jadi popup TOTAL selalu pendek dan tombol
+              // Konfirmasi (footer shrink-0) selalu kelihatan di mobile walau
+              // mentor ngisi ratusan slot. Pakai tinggi eksplisit, bukan flex-1,
+              // karena flex-1 di dalam max-h kadang gak reliable di browser HP.
+              <form onSubmit={handleSubmitSchedule} className="flex flex-col overflow-hidden">
+                <div className="shrink-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
                   <h3 className="text-white font-bold text-[16px]">
                     {scheduleModal.isInitial ? "Pilih Jadwal" : "Ganti Jadwal"}
                   </h3>
@@ -713,10 +833,13 @@ export default function ProductDetail() {
                   </button>
                 </div>
 
-                <div className="p-6 flex flex-col gap-3">
+                <div className="shrink-0 px-6 pt-5 pb-3">
                   <label className="text-[#E2E8F0] text-[13px] font-medium">
-                    Slot tersedia — {scheduleModal.session?.mentor}
+                    Slot tersedia dari {scheduleModal.session?.mentor}
                   </label>
+                </div>
+
+                <div className="overflow-y-auto max-h-[40vh] px-6 pb-2">
                   {slotsLoading ? (
                     <p className="text-[#9CA3AF] text-[12px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
                       Memuat jadwal mentor...
@@ -761,11 +884,13 @@ export default function ProductDetail() {
                       ))}
                     </div>
                   )}
+                </div>
 
+                <div className="shrink-0 px-6 py-4 border-t border-[#2D2342] bg-[#170F26]">
                   <button
                     type="submit"
                     disabled={!selectedSlotId || scheduleSubmitting}
-                    className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-1"
+                    className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {scheduleSubmitting ? "Menyimpan..." : "Konfirmasi Jadwal"}
                   </button>
@@ -830,7 +955,7 @@ export default function ProductDetail() {
                   <div className="p-6 flex flex-col gap-4">
                     <p className="flex items-start gap-2 text-[#F59E0B] text-[12px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3 leading-relaxed">
                       <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                      Refund ditutup — sesi berikutnya kurang dari 3 jam lagi.
+                      Refund ditutup karena sesi berikutnya kurang dari 3 jam lagi.
                       Coba ajukan lagi setelah sesi itu lewat.
                     </p>
                   </div>
@@ -879,6 +1004,6 @@ export default function ProductDetail() {
           </motion.div>
         </motion.div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

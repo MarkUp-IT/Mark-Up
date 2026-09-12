@@ -9,7 +9,6 @@ import {
   Loader2,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { toast } from "sonner";
@@ -136,7 +135,7 @@ export default function RefundRequests() {
   const approvedCount = requests.filter((r) => r.status === "approved").length;
 
   return (
-    <DashboardLayout title="Pengajuan Refund">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -157,17 +156,20 @@ export default function RefundRequests() {
           value={pendingCount}
           unit="pengajuan"
           variant="warning"
+          loading={loading}
         />
         <StatCard
           label="Disetujui"
           value={approvedCount}
           unit="pengajuan"
           variant="success"
+          loading={loading}
         />
         <StatCard
           label="Total Diajukan"
           value={requests.length}
           unit="pengajuan"
+          loading={loading}
         />
       </div>
 
@@ -210,7 +212,7 @@ export default function RefundRequests() {
             </button>
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState message="Nggak ada pengajuan refund di kategori ini." />
+          <EmptyState message="Tidak ada pengajuan refund pada kategori ini." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
             <div className="overflow-x-auto">
@@ -408,6 +410,6 @@ export default function RefundRequests() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

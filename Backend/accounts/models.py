@@ -115,6 +115,35 @@ class User(AbstractUser):
     def __str__(self):
         return self.fullname
 
+    # Field wajib biar student bisa checkout. (nama_field, label yang dilihat user)
+    #
+    # Label-nya ikut disimpan di sini supaya badge "profil belum lengkap" dan
+    # sorotan di halaman Pengaturan Akun memakai SATU daftar yang sama. Kalau
+    # daftarnya dipisah, keduanya bisa berbeda diam-diam: angka merah muncul
+    # tapi tidak ada satu pun kolom yang tersorot.
+    #
+    # LinkedIn & foto profil sengaja TIDAK diwajibkan -- keduanya bikin orang
+    # mandek di gerbang profil padahal bukan data yang dipakai buat transaksi.
+    # CV/portofolio juga tidak di sini: sekarang diminta saat daftar bootcamp
+    # (per pendaftaran, biar selalu versi terbaru), bukan sekali di profil.
+    PROFILE_REQUIRED_FIELDS = (
+        ("fullname", "Nama Lengkap"),
+        ("phone", "Nomor WhatsApp"),
+        ("institution", "Universitas / Institusi Asal"),
+        ("current_status", "Status Saat Ini"),
+    )
+
+    def missing_profile_fields(self):
+        """[{key, label}] untuk field wajib yang masih kosong."""
+        return [
+            {"key": key, "label": label}
+            for key, label in self.PROFILE_REQUIRED_FIELDS
+            if not (getattr(self, key, "") or "").strip()
+        ]
+
+    def is_profile_complete(self):
+        return not self.missing_profile_fields()
+
 
 class ContactMessageStatus(models.TextChoices):
     NEW = "new", "New"
@@ -167,3 +196,36 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"{self.action} {self.table_name} by {self.admin}"
+
+
+class Notification(models.Model):
+    """Notifikasi IN-APP per user, buat tombol lonceng di dashboard student
+    & mentor -- BEDA dari notify_team di accounts/utils.py (yang ngirim
+    email ke admin). Ini baris database yang muncul di daftar lonceng,
+    bukan email.
+
+    Sengaja model sederhana (gak ada "tipe" enum) -- title+message+url
+    cukup buat semua kasus pakai sekarang, dan nge-render notifikasi baru
+    gak perlu nunggu migrasi tiap kali ada event baru yang mau ditambah."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    # Link tujuan kalau notifikasi ini diklik -- path relatif FRONTEND
+    # (mis. "/user/transactions"), bukan URL API. Boleh kosong kalau
+    # notifikasinya cuma informasi, gak ada halaman spesifik yang dituju.
+    url = models.CharField(max_length=300, blank=True, default="")
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Notification"
+        verbose_name_plural = "Notifications"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "is_read"]),
+            models.Index(fields=["user", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.title} -> {self.user}"

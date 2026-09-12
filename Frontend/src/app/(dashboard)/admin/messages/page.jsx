@@ -2,7 +2,6 @@
 
 import { Eye, X, Mail } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
@@ -66,7 +65,7 @@ export default function ContactMessages() {
   const newCount = messages.filter((m) => m.status === "new").length;
 
   return (
-    <DashboardLayout title="Pesan Masuk">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -79,9 +78,9 @@ export default function ContactMessages() {
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total Pesan" value={messages.length} unit="pesan" />
-        <StatCard label="Belum Dibaca" value={newCount} unit="pesan" variant="warning" />
-        <StatCard label="Sudah Dibaca" value={messages.length - newCount} unit="pesan" variant="success" />
+        <StatCard label="Total Pesan" value={messages.length} unit="pesan" loading={loading} />
+        <StatCard label="Belum Dibaca" value={newCount} unit="pesan" variant="warning" loading={loading} />
+        <StatCard label="Sudah Dibaca" value={messages.length - newCount} unit="pesan" variant="success" loading={loading} />
       </div>
 
       <div className="flex flex-col gap-4">
@@ -184,6 +183,6 @@ export default function ContactMessages() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

@@ -4,7 +4,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 import uuid
 from django.db import models
 from accounts.models import User
-from mentors.models import MentorProfile
+from mentors.models import MentorProfile, Expertise
 
 class BaseModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
@@ -19,12 +19,38 @@ class ProductType(models.TextChoices):
     BOOTCAMP = "BOOTCAMP", "Bootcamp"
 
 
+class PaymentGatewayMode(models.TextChoices):
+    """Metode bayar mana yang ditawarkan buat SATU produk ini -- BEDA dari
+    transactions.IpaymuSetting.is_enabled (itu saklar MASTER buat seluruh
+    situs sekaligus, mis. dimatikan darurat kalau kredensial iPaymu rusak).
+
+    Urutan penentuan (lihat transactions/views.py:_ipaymu_allowed_for_product):
+      1. IpaymuSetting.is_enabled harus True dulu (master switch) -- kalau
+         mati, SEMUA produk otomatis jatuh ke manual, gak peduli field ini
+         diset apa. Ini yang menjaga situs tetap bisa jualan walau iPaymu
+         lagi bermasalah -- prinsip ini SENGAJA dipertahankan, jangan
+         dilonggarkan cuma demi field baru ini.
+      2. Baru kalau master-nya nyala, field per-produk ini yang menentukan:
+         AUTO ikut kondisi (1) apa adanya (QRIS, karena master lagi nyala),
+         MANUAL_ONLY memaksa transfer manual buat produk ini walau iPaymu
+         sehat & aktif di produk lain."""
+    AUTO = "AUTO", "Otomatis (ikut pengaturan iPaymu)"
+    MANUAL_ONLY = "MANUAL_ONLY", "Selalu Transfer Manual"
+
+
 class Product(BaseModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     type = models.CharField(
         max_length=20,
         choices=ProductType.choices,
         default=ProductType.MENTORING,
+    )
+    payment_gateway_mode = models.CharField(
+        max_length=20,
+        choices=PaymentGatewayMode.choices,
+        default=PaymentGatewayMode.AUTO,
+        help_text="Metode bayar buat produk ini -- lihat catatan di PaymentGatewayMode "
+                  "soal urutan penentuan bareng saklar master IpaymuSetting.is_enabled.",
     )
 
     class Meta:
@@ -44,7 +70,12 @@ class BaseProductDetail(BaseModel):
         default=""
     )
     published_at = models.DateTimeField(blank=True, null=True)
+    # image_url = URL eksternal (legacy / kalau admin mau paste link).
+    # image = file yang di-upload admin ke storage; URL-nya di-generate fresh
+    # tiap request di serializer (storage pakai presigned URL yang expired,
+    # jadi gak boleh disimpen mentah kayak image_url).
     image_url = models.URLField(blank=True, null=True)
+    image = models.ImageField(upload_to="product_images/%Y/%m/", blank=True, null=True)
     original_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     discount_percent = models.PositiveIntegerField(null=True, blank=True)
     sold_count = models.PositiveIntegerField(default=0)
@@ -78,6 +109,14 @@ class MentoringProduct(BaseProductDetail):
 
     session_count = models.PositiveIntegerField(default=1)
     duration_minutes = models.PositiveIntegerField(default=60)
+
+    expertise = models.ManyToManyField(
+        Expertise,
+        related_name="mentoring_products",
+        blank=True,
+        help_text="Kategori mentoring (BCC, BPC, Karir, dst) -- nentuin mentor mana aja "
+                   "yang boleh dipilih pembeli produk ini (harus overlap sama keahlian mentor).",
+    )
 
     class Meta:
         verbose_name = "Mentoring Product"
@@ -131,6 +170,48 @@ class BootcampProduct(BaseProductDetail):
         related_name="bootcamp_detail",
     )
     stock = models.PositiveIntegerField(default=0)
+    session_count = models.PositiveIntegerField(
+        default=1,
+        help_text="Jumlah sesi kelas dalam batch ini. Pas produk dibuat/di-update "
+                   "naik, otomatis nge-generate slot sesi kosong (programs.BootcampSession) "
+                   "sejumlah ini, tinggal diisi tanggal/mentor/link-nya di Kelola Pesanan.",
+    )
+    commitment_letter_max_words = models.PositiveIntegerField(
+        default=500,
+        help_text="Batas maksimal kata buat commitment/motivation letter pendaftar, "
+                   "ditampilkan sebagai informasi di halaman pendaftaran publik.",
+    )
+
+    # --- Apa yang harus diisi pendaftar ---------------------------------
+    # Dua-duanya bisa dinyalakan/dimatikan sendiri-sendiri: boleh keduanya,
+    # salah satu saja, atau tidak sama sekali. Default True supaya batch yang
+    # sudah jalan tidak berubah perilakunya begitu migrasi ini dipasang.
+    require_commitment_letter = models.BooleanField(
+        default=True,
+        help_text="Wajibkan unggah commitment/motivation letter (PDF). Matikan "
+                  "kalau sudah diganti pertanyaan isian.",
+    )
+    enable_registration_questions = models.BooleanField(
+        default=False,
+        help_text="Tampilkan pertanyaan isian di formulir pendaftaran. "
+                  "Pertanyaannya diatur di BootcampRegistrationQuestion.",
+    )
+
+    # --- Email hasil seleksi --------------------------------------------
+    # Kosong = pakai teks bawaan di _send_bootcamp_review_email. Sengaja
+    # begitu supaya bootcamp yang belum diatur tetap mengirim email yang benar,
+    # bukan email kosong.
+    email_accepted_subject = models.CharField(max_length=255, blank=True, default="")
+    email_accepted_body = models.TextField(
+        blank=True, default="",
+        help_text="Placeholder yang tersedia: {nama} {bootcamp} {paket} {total} "
+                  "{commitment_fee} {link_bayar} {catatan_admin}",
+    )
+    email_rejected_subject = models.CharField(max_length=255, blank=True, default="")
+    email_rejected_body = models.TextField(
+        blank=True, default="",
+        help_text="Placeholder yang tersedia: {nama} {bootcamp} {paket} {catatan_admin}",
+    )
 
     class Meta:
         verbose_name = "Bootcamp Product"
@@ -139,6 +220,853 @@ class BootcampProduct(BaseProductDetail):
 
     def __str__(self) -> str:
         return self.title
+
+
+class BootcampPackage(models.Model):
+    """Satu produk Bootcamp punya beberapa paket (Mentee/Basic/Premium/Elite)
+    dengan harga, benefit, dan ketentuan berbeda. Paket Mentee butuh seleksi &
+    ada commitment fee; paket lain langsung (tetap perlu ACC admin)."""
+
+    class PackageSlug(models.TextChoices):
+        MENTEE = "mentee", "Mentee"
+        BASIC = "basic", "Basic/Beginner"
+        PREMIUM = "premium", "Premium/Intermediate"
+        ELITE = "elite", "Elite/Advanced"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct,
+        on_delete=models.CASCADE,
+        related_name="packages",
+    )
+    # Dulu dibatasi choices=PackageSlug.choices, jadi satu bootcamp mentok 4
+    # paket dan admin gak bisa bikin jenis paket baru sama sekali. Sekarang
+    # bebas (di-generate otomatis dari nama), PackageSlug cuma dipakai buat
+    # nyeed 4 paket default. Aman diubah karena slug murni buat tampilan --
+    # gak ada logic yang ngecek nilainya (dicek langsung ke seluruh kode).
+    slug = models.CharField(max_length=50)
+    name = models.CharField(max_length=100)
+    price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    commitment_fee = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        help_text="Biaya komitmen yang dikembalikan di akhir program. Hanya "
+                   "paket Mentee yang punya (150k). Total bayar = price + commitment_fee.",
+    )
+    requires_selection = models.BooleanField(
+        default=False,
+        help_text="Kalau True: pendaftar wajib lolos seleksi (tes BCC) dulu sebelum "
+                   "boleh bayar. Kalau False: cukup di-ACC admin. Dinamis per paket, "
+                   "gak terikat ke paket 'Mentee' secara khusus -- admin bisa "
+                   "nyalain/matiin dari panel Kelola Pesanan Bootcamp.",
+    )
+    selection_quota = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Target jumlah pendaftar yang mau diterima lewat seleksi paket ini. "
+                   "Kosong = gak ada batas. Ini CUMA indikator progres di panel admin "
+                   "('12/30 diterima') -- gak pernah ngunci tombol Terima, sama kayak "
+                   "pola 'eligible' di fitur lain (skor tes, refund commitment fee): "
+                   "keputusan Terima/Tolak tetap manual sepenuhnya di tangan admin.",
+    )
+    quiz_duration_minutes = models.PositiveIntegerField(
+        default=30,
+        validators=[MinValueValidator(5), MaxValueValidator(180)],
+        help_text="Durasi tes BCC (menit) -- cuma relevan buat paket dengan requires_selection=True.",
+    )
+    quiz_passing_score_percent = models.PositiveIntegerField(
+        default=70,
+        validators=[MaxValueValidator(100)],
+        help_text="Ambang nilai lulus (%) tes BCC -- dipakai buat auto-flag lulus/tidak, "
+                   "keputusan akhir Terima/Tolak tetap manual oleh admin.",
+    )
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    registration_opens_at = models.DateTimeField(blank=True, null=True)
+    registration_closes_at = models.DateTimeField(blank=True, null=True)
+    payment_deadline_at = models.DateTimeField(
+        blank=True, null=True,
+        help_text="Batas waktu bayar buat pendaftar yang sudah Diterima (mis. jendela "
+                   "bayar Mentee di timeline). Kosong = gak ada batas waktu otomatis -- "
+                   "admin urus manual. Kalau lewat, tombol bayar terkunci sampai admin "
+                   "ubah keputusan/tenggat.",
+    )
+    min_attendance_sessions = models.PositiveIntegerField(
+        default=0,
+        help_text="Minimal jumlah sesi bootcamp berstatus selesai (per peserta) buat "
+                   "berhak dapat pengembalian commitment fee. 0 = gak ada syarat "
+                   "kehadiran. Cuma relevan buat paket yang punya commitment_fee > 0.",
+    )
+
+    # --- Pendaftaran tim (BEDA dari BootcampTeam/Team Pairing di bawah) ---
+    # Ini dibuat PENDAFTAR SENDIRI saat mendaftar, buat dapat harga kelompok.
+    # BootcampTeam itu dibuat ADMIN setelah diterima, buat benefit mentoring
+    # Team Pairing -- dua konsep yang sama sekali tidak berhubungan, sengaja
+    # dipisah biar tidak tercampur di kode maupun di kepala admin yang baca.
+    group_size = models.PositiveIntegerField(
+        default=0,
+        help_text="Jumlah orang per tim buat dapat harga kelompok. 0 = fitur tim "
+                   "dimatikan untuk paket ini.",
+    )
+    group_price = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Harga per orang kalau timnya sudah lengkap (group_size tercapai). "
+                   "Cuma dipakai kalau group_size > 0.",
+    )
+
+    # --- Ajak teman (diskon flat, BEDA dari ReferralCode/kode promo) ---
+    # ReferralCode itu satu kode yang sama dipakai siapa saja. Ini menyebut
+    # ORANG SPESIFIK yang diajak (dicek emailnya harus benar-benar terdaftar
+    # di bootcamp ini) -- lihat BootcampReferredInvitee.
+    referral_invite_enabled = models.BooleanField(
+        default=False,
+        help_text="Nyalakan diskon 'ajak teman' -- pendaftar menyebut email orang "
+                   "yang diajak, dapat potongan flat kalau minimal 1 email valid "
+                   "(sudah terdaftar di bootcamp ini & belum diklaim orang lain).",
+    )
+    referral_invite_discount_percent = models.PositiveIntegerField(
+        default=5,
+        validators=[MaxValueValidator(100)],
+        help_text="Persen potongan flat -- tidak menumpuk walau menyebut banyak "
+                   "email, cukup 1 yang valid untuk dapat potongan ini.",
+    )
+
+    # Benefit per paket (sesuai tabel "Class Scheme and Benefits" di PDF).
+    benefit_session_material = models.BooleanField(default=True)
+    benefit_record_incubation = models.BooleanField(default=False)
+    benefit_framework_template = models.BooleanField(default=False)
+    benefit_winning_deck = models.BooleanField(default=False)
+    benefit_mentoring_case = models.BooleanField(default=False)
+    benefit_career_coaching = models.BooleanField(default=False)
+    benefit_team_pairing = models.BooleanField(default=False)
+    benefit_networking = models.BooleanField(default=False)
+    benefit_ecertificate = models.BooleanField(default=True)
+
+    # Catatan buat yang baca nanti: 9 field di atas SENGAJA tetap kolom tetap,
+    # bukan tabel bebas. Tujuh di antaranya beneran ngunci fitur, bukan cuma
+    # tulisan di kartu paket:
+    #   record_incubation / framework_template / winning_deck -> hak unduh file
+    #     (dicocokin ke BootcampResourceType lewat getattr "benefit_<type>")
+    #   mentoring_case / career_coaching / networking -> sesi mana yang kelihatan
+    #     (BootcampSessionRequiredBenefit)
+    #   team_pairing -> boleh dimasukin tim atau nggak
+    # Kalau ini diganti jadi teks bebas, penguncian itu jebol tanpa error --
+    # makanya benefit tambahan yang bebas ditaruh di model terpisah di bawah.
+
+    class Meta:
+        verbose_name = "Bootcamp Package"
+        verbose_name_plural = "Bootcamp Packages"
+        ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bootcamp", "slug"],
+                name="unique_bootcamp_package_slug",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.bootcamp_id})"
+
+
+class BootcampPackageExtraBenefit(models.Model):
+    """Benefit tambahan bebas per paket, di luar 9 benefit bawaan.
+
+    Dibikin terpisah karena 9 benefit bawaan itu nyangkut ke penguncian fitur
+    (hak unduh file, visibilitas sesi, team pairing) -- gak bisa dijadiin teks
+    bebas tanpa ngerusak itu. Yang di sini murni buat ditampilin di kartu paket
+    (mis. "Akses Grup Alumni", "Sesi Bonus Review CV"), jadi admin bisa nambah
+    sebanyak apa pun tanpa perlu migrasi database.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    package = models.ForeignKey(
+        BootcampPackage, on_delete=models.CASCADE, related_name="extra_benefits",
+    )
+    label = models.CharField(max_length=120)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Bootcamp Package Extra Benefit"
+        verbose_name_plural = "Bootcamp Package Extra Benefits"
+        ordering = ["order", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.label} ({self.package_id})"
+
+
+# Nilai default 4 paket standar -- dipakai saat produk bootcamp dibuat, biar
+# admin gak perlu isi satu-satu. (session_material & ecertificate default True.)
+DEFAULT_BOOTCAMP_PACKAGES = [
+    {
+        "slug": "mentee", "name": "Mentee", "price": 210000, "commitment_fee": 150000,
+        "requires_selection": True, "order": 1,
+        "benefit_record_incubation": True, "benefit_framework_template": True,
+        "benefit_winning_deck": True, "benefit_mentoring_case": True,
+        "benefit_career_coaching": True, "benefit_team_pairing": True,
+        "benefit_networking": True,
+    },
+    {
+        "slug": "basic", "name": "Basic/Beginner", "price": 100000, "order": 2,
+    },
+    {
+        "slug": "premium", "name": "Premium/Intermediate", "price": 220000, "order": 3,
+        "benefit_record_incubation": True, "benefit_framework_template": True,
+    },
+    {
+        "slug": "elite", "name": "Elite/Advanced", "price": 240000, "order": 4,
+        "benefit_record_incubation": True, "benefit_framework_template": True,
+        "benefit_winning_deck": True,
+    },
+]
+
+
+def create_default_bootcamp_packages(bootcamp):
+    """Buat 4 paket standar untuk sebuah BootcampProduct kalau belum ada."""
+    for cfg in DEFAULT_BOOTCAMP_PACKAGES:
+        BootcampPackage.objects.get_or_create(
+            bootcamp=bootcamp, slug=cfg["slug"], defaults=cfg,
+        )
+
+
+class BootcampRequirementCategory(models.TextChoices):
+    GENERAL = "general", "Syarat Umum"
+    COMMITMENT_LETTER = "commitment_letter", "Struktur Commitment Letter"
+
+
+class BootcampRequirement(models.Model):
+    """Satu item checklist (ditampilkan sebagai daftar bernomor di halaman
+    pendaftaran bootcamp publik) -- diatur admin per batch, gantiin daftar
+    yang dulu hardcoded di frontend. Dipakai buat 2 hal beda (dibedain lewat
+    `category`): syarat umum (peserta gabungin buktinya jadi 1 PDF di
+    requirement_doc) dan poin struktur commitment letter (file terpisah di
+    commitment_letter) -- keduanya di BootcampRegistration. Daftar ini cuma
+    checklist informasional, gak ada validasi per-item di backend."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct,
+        on_delete=models.CASCADE,
+        related_name="requirements",
+    )
+    category = models.CharField(
+        max_length=20, choices=BootcampRequirementCategory.choices,
+        default=BootcampRequirementCategory.GENERAL,
+    )
+    text = models.CharField(max_length=500)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Bootcamp Requirement"
+        verbose_name_plural = "Bootcamp Requirements"
+        ordering = ["category", "order"]
+
+    def __str__(self) -> str:
+        return f"{self.text[:50]} ({self.bootcamp_id})"
+
+
+DEFAULT_BOOTCAMP_REQUIREMENTS = [
+    "Bukti upload Instastory poster",
+    "Bukti follow IG MarkUp & tag 5 teman di komentar feeds oprec, serta follow LinkedIn & TikTok MarkUp",
+    "Bukti upload twibbon",
+    "Bukti share poster ke 3 grup WhatsApp",
+    "Bukti kartu tanda pelajar/mahasiswa (student ID card)",
+]
+
+
+DEFAULT_COMMITMENT_LETTER_POINTS = [
+    "Personal Introduction & Background",
+    "Motivation for Joining the Bootcamp",
+    "Relevant Experiences & Achievements",
+    "Goals, Expectations & Skills to Develop",
+    "Contribution & Future Aspirations",
+]
+
+
+def create_default_bootcamp_requirements(bootcamp):
+    """Isi syarat pendaftaran & struktur commitment letter standar buat
+    BootcampProduct baru kalau belum ada -- admin bisa ubah/tambah/hapus
+    lagi lewat panel Kelola Pesanan Bootcamp, ini cuma starting point biar
+    gak kosong."""
+    if not BootcampRequirement.objects.filter(
+        bootcamp=bootcamp, category=BootcampRequirementCategory.GENERAL
+    ).exists():
+        for order, text in enumerate(DEFAULT_BOOTCAMP_REQUIREMENTS, start=1):
+            BootcampRequirement.objects.create(
+                bootcamp=bootcamp, category=BootcampRequirementCategory.GENERAL, text=text, order=order,
+            )
+
+    if not BootcampRequirement.objects.filter(
+        bootcamp=bootcamp, category=BootcampRequirementCategory.COMMITMENT_LETTER
+    ).exists():
+        for order, text in enumerate(DEFAULT_COMMITMENT_LETTER_POINTS, start=1):
+            BootcampRequirement.objects.create(
+                bootcamp=bootcamp, category=BootcampRequirementCategory.COMMITMENT_LETTER, text=text, order=order,
+            )
+
+
+class BootcampTimelineItem(models.Model):
+    """Milestone utama program bootcamp (bukan jadwal sesi kelas) --
+    ditampilkan sebagai garis waktu ringkas di halaman produk & pendaftaran.
+    Diisi manual oleh admin per batch bootcamp, beda-beda tiap batch."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct,
+        on_delete=models.CASCADE,
+        related_name="timeline_items",
+    )
+    title = models.CharField(max_length=255)
+    start_date = models.DateField()
+    end_date = models.DateField(
+        blank=True, null=True,
+        help_text="Kosongkan kalau cuma satu hari (mis. hari pengumuman).",
+    )
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Bootcamp Timeline Item"
+        verbose_name_plural = "Bootcamp Timeline Items"
+        ordering = ["order", "start_date"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.bootcamp_id})"
+
+
+class BootcampResourceType(models.TextChoices):
+    """Cuma benefit berbentuk FILE -- benefit berbentuk sesi (mentoring_case/
+    career_coaching/networking) ditegakkan lewat BootcampSession.required_benefit
+    di app programs, bukan lewat model ini. team_pairing sengaja belum
+    diaktifkan (bukan sekadar file/sesi, butuh fitur matching tim sendiri)."""
+    RECORD_INCUBATION = "record_incubation", "Record Incubation"
+    FRAMEWORK_TEMPLATE = "framework_template", "Framework Template"
+    WINNING_DECK = "winning_deck", "Winning Deck"
+
+
+class BootcampResource(models.Model):
+    """File/materi eksklusif per bootcamp, dikunci per paket lewat
+    BootcampPackage.benefit_<resource_type> -- diunggah admin, cuma bisa
+    diunduh peserta yang paketnya punya benefit itu (lihat _get_user_library
+    di views.py buat logic gate-nya)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct,
+        on_delete=models.CASCADE,
+        related_name="resources",
+    )
+    resource_type = models.CharField(
+        max_length=30, choices=BootcampResourceType.choices, blank=True, default="",
+        help_text="Sekarang cuma label kategori. Hak aksesnya ditentukan `packages`.",
+    )
+    for_all_packages = models.BooleanField(
+        default=True,
+        help_text="True = semua peserta bootcamp ini boleh mengunduh (tetap harus sudah "
+                   "bayar -- bukan publik). False = cuma paket di `packages`.",
+    )
+    packages = models.ManyToManyField(
+        BootcampPackage, blank=True, related_name="resources",
+        help_text="Dipakai cuma kalau for_all_packages=False.",
+    )
+    title = models.CharField(max_length=255)
+    file = models.FileField(upload_to="bootcamp_resources/%Y/%m/")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Resource"
+        verbose_name_plural = "Bootcamp Resources"
+        ordering = ["resource_type", "-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.get_resource_type_display()})"
+
+
+class BootcampRegistration(models.Model):
+    """Pendaftaran user ke sebuah paket bootcamp. Terpisah dari pembelian
+    (Transaction) -- user daftar dulu (upload 1 PDF gabungan syarat), baru
+    setelah diterima/di-ACC admin bisa lanjut bayar."""
+
+    class Status(models.TextChoices):
+        REGISTERED = "registered", "Menunggu Ditinjau"
+        ACCEPTED = "accepted", "Diterima"
+        REJECTED = "rejected", "Ditolak"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="bootcamp_registrations",
+    )
+    package = models.ForeignKey(
+        BootcampPackage, on_delete=models.CASCADE, related_name="registrations",
+    )
+    requirement_doc = models.FileField(
+        upload_to="bootcamp_registrations/%Y/%m/",
+        help_text="Satu PDF gabungan berisi bukti syarat pendaftaran (jumlah & isi diatur admin).",
+    )
+    commitment_letter = models.FileField(
+        upload_to="bootcamp_commitment_letters/%Y/%m/",
+        blank=True, null=True,
+        help_text="Commitment/motivation letter, diunggah sebagai SATU file PDF. Strukturnya "
+                   "diatur admin. Nullable karena ini requirement baru, pendaftaran lama (kalau ada) "
+                   "gak punya file ini; wajib diisi buat pendaftaran BARU (dicek di view, bukan di sini).",
+    )
+    cv = models.FileField(
+        upload_to="bootcamp_cv/%Y/%m/",
+        blank=True, null=True,
+        help_text="CV pendaftar. Pindah ke sini dari profil user -- dulu diunggah sekali di "
+                   "profil, sekarang diminta per pendaftaran biar selalu versi terbaru. "
+                   "Nullable di DB demi pendaftaran lama; wajib buat pendaftaran BARU (dicek di view).",
+    )
+    portfolio = models.FileField(
+        upload_to="bootcamp_portfolio/%Y/%m/",
+        blank=True, null=True,
+        help_text="Portofolio pendaftar -- OPSIONAL, beneran boleh kosong (beda dari cv/"
+                   "commitment_letter yang nullable cuma demi data lama).",
+    )
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.REGISTERED,
+    )
+    admin_notes = models.TextField(blank=True, default="")
+    # Tim pendaftaran mandiri (buat harga kelompok) -- lihat BootcampRegistrationGroup.
+    # SET_NULL: kalau tim dihapus, pendaftarannya sendiri tetap utuh, cuma
+    # kembali ke harga normal (dihitung ulang di endpoint bayar, bukan disimpan).
+    registration_group = models.ForeignKey(
+        "products.BootcampRegistrationGroup",
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="registrations",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Registration"
+        verbose_name_plural = "Bootcamp Registrations"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "package"],
+                name="unique_user_bootcamp_package_registration",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} -> {self.package} ({self.status})"
+
+
+class BootcampRegistrationQuestion(models.Model):
+    """Satu pertanyaan isian di formulir pendaftaran bootcamp.
+
+    Menggantikan peran commitment/motivation letter yang dulu harus ditulis
+    sendiri lalu diunggah sebagai PDF -- langkah itu bikin banyak calon
+    pendaftar mundur di tengah jalan. Keduanya sekarang bisa dipakai bersamaan,
+    salah satu saja, atau tidak sama sekali (lihat dua saklar di
+    BootcampProduct).
+
+    Diatur per bootcamp, jadi semua paket di batch itu mendapat pertanyaan yang
+    sama.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct,
+        on_delete=models.CASCADE,
+        related_name="registration_questions",
+    )
+    text = models.TextField(max_length=1000)
+    helper_text = models.CharField(
+        max_length=300, blank=True, default="",
+        help_text="Keterangan kecil di bawah pertanyaan, mis. contoh jawaban.",
+    )
+    is_required = models.BooleanField(default=True)
+    max_words = models.PositiveIntegerField(
+        default=0,
+        help_text="Batas kata jawaban. 0 = tanpa batas. Ditegakkan di server, "
+                  "bukan cuma ditampilkan di formulir.",
+    )
+    # Penanda EKSPLISIT, bukan aturan "daftar kosong berarti semua". Pertanyaan
+    # yang dibatasi tapi paketnya belum dipilih harus TIDAK muncul ke siapa pun,
+    # bukan malah terbuka ke semua -- itu kebalikan dari maksud admin. Pola yang
+    # sama dipakai di BootcampResource & programs.BootcampSession.
+    for_all_packages = models.BooleanField(
+        default=True,
+        help_text="True = ditanyakan ke semua pendaftar bootcamp ini. "
+                  "False = cuma paket yang terdaftar di `packages`.",
+    )
+    packages = models.ManyToManyField(
+        BootcampPackage, blank=True, related_name="registration_questions",
+        help_text="Dipakai cuma kalau for_all_packages=False.",
+    )
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Dimatikan = tidak muncul di formulir baru. Jawaban lama "
+                  "TETAP tersimpan dan tetap terbaca admin.",
+    )
+
+    class Meta:
+        verbose_name = "Bootcamp Registration Question"
+        verbose_name_plural = "Bootcamp Registration Questions"
+        ordering = ["order", "id"]
+
+    def __str__(self) -> str:
+        return self.text[:60]
+
+
+class BootcampRegistrationAnswer(models.Model):
+    """Jawaban seorang pendaftar untuk satu pertanyaan.
+
+    `question_text` sengaja DISALIN saat jawaban dibuat, tidak cuma mengandalkan
+    relasi ke pertanyaannya. Kalau admin mengubah kalimat pertanyaan atau
+    menghapusnya setelah orang menjawab, jawaban lama harus tetap bisa dibaca
+    apa adanya -- tanpa ini, jawaban lama akan terbaca menjawab pertanyaan yang
+    berbeda dari yang sebenarnya dilihat pendaftar saat itu.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    registration = models.ForeignKey(
+        "products.BootcampRegistration",
+        on_delete=models.CASCADE,
+        related_name="answers",
+    )
+    question = models.ForeignKey(
+        BootcampRegistrationQuestion,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="answers",
+    )
+    question_text = models.TextField(max_length=1000)
+    answer_text = models.TextField(blank=True, default="")
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Bootcamp Registration Answer"
+        verbose_name_plural = "Bootcamp Registration Answers"
+        ordering = ["order", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.question_text[:40]} -> {self.answer_text[:30]}"
+
+
+class BootcampRegistrationGroup(models.Model):
+    """Tim pendaftaran berbasis KETUA -- satu orang mendaftar sebagai ketua
+    sambil mengundang (group_size - 1) email anggota yang WAJIB sudah
+    punya akun Markup (lihat BootcampTeamInvite). Tim harus LENGKAP di
+    muka, tidak ada anggota yang menyusul belakangan. Ketua bayar SEKALI
+    untuk seluruh tim; begitu pembayarannya di-ACC admin, seluruh anggota
+    otomatis dibuatkan BootcampRegistration + akses produk sekaligus
+    (lihat _provision_team_members di transactions/views.py).
+
+    BEDA TOTAL dari BootcampTeam: itu dibuat ADMIN setelah pendaftar
+    diterima, buat benefit mentoring Team Pairing. Yang ini murni soal
+    HARGA & alur pendaftaran, tidak berhubungan sama sekali dengan
+    mentoring.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    package = models.ForeignKey(
+        BootcampPackage, on_delete=models.CASCADE, related_name="registration_groups",
+    )
+    leader_registration = models.OneToOneField(
+        "products.BootcampRegistration", on_delete=models.CASCADE, related_name="led_team_group",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Registration Group"
+        verbose_name_plural = "Bootcamp Registration Groups"
+
+    def __str__(self) -> str:
+        return f"Tim {self.leader_registration.user.fullname} ({self.package.name})"
+
+
+class BootcampTeamInvite(models.Model):
+    """Anggota yang diundang KETUA lewat email saat mendaftar tim. Cuma
+    catatan "niat" sampai pembayaran ketua di-ACC admin -- belum punya
+    BootcampRegistration sendiri sebelum itu. Emailnya harus cocok akun
+    yang SUDAH ADA (dicek pas submit, lewat tombol "Cek" di form, dan
+    dicek ULANG saat provisioning), bukan sekadar teks bebas.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    leader_registration = models.ForeignKey(
+        "products.BootcampRegistration", on_delete=models.CASCADE, related_name="team_invites",
+    )
+    invitee = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="+",
+        help_text="Akun yang diundang -- disimpan sebagai FK (bukan teks email) karena "
+                  "sudah tervalidasi ada akunnya pas ketua submit.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Team Invite"
+        verbose_name_plural = "Bootcamp Team Invites"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["leader_registration", "invitee"], name="unique_invitee_per_leader_registration",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.invitee} diundang oleh {self.leader_registration.user}"
+
+
+class BootcampReferredInvitee(models.Model):
+    """Satu email yang disebut pendaftar sebagai orang yang dia ajak --
+    BEDA dari ReferralCode (kode promo umum yang sama dipakai siapa saja).
+    Divalidasi terhadap pendaftar SUNGGUHAN di bootcamp yang sama, dan tiap
+    email cuma bisa diklaim SATU KALI (unique constraint di bawah) -- siapa
+    yang lebih dulu berhasil mencatatnya, dia yang dapat potongan; yang
+    menyusul akan ditolak saat submit, bukan diam-diam menimpa punya orang
+    lain.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct, on_delete=models.CASCADE, related_name="referred_invitees",
+    )
+    referrer_registration = models.ForeignKey(
+        BootcampRegistration, on_delete=models.CASCADE, related_name="referred_invitees",
+    )
+    invitee_email = models.EmailField()
+    invitee_registration = models.ForeignKey(
+        BootcampRegistration, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="referred_by",
+        help_text="Pendaftaran milik orang yang diajak -- dicatat buat ditelusuri admin, "
+                  "bukan cuma email mentahnya.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Referred Invitee"
+        verbose_name_plural = "Bootcamp Referred Invitees"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bootcamp", "invitee_email"], name="unique_invitee_per_bootcamp",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.invitee_email} diajak oleh {self.referrer_registration_id}"
+
+
+class QuizChoiceKey(models.TextChoices):
+    A = "a", "A"
+    B = "b", "B"
+    C = "c", "C"
+    D = "d", "D"
+
+
+class BootcampQuiz(models.Model):
+    """Satu tes dalam sebuah batch bootcamp.
+
+    Dulu tiap bootcamp cuma bisa punya SATU tes (soal langsung nempel ke
+    BootcampProduct, dan attempt-nya OneToOne ke pendaftaran). Sekarang admin
+    bisa bikin beberapa tes -- mis. "Tes Seleksi Awal", "Tes Tengah Program",
+    "Tes Akhir" -- dan tiap tes boleh ditautkan ke satu milestone timeline
+    biar peserta ngerti tes ini bagian tahap yang mana.
+
+    Durasi & skor kelulusan pindah ke sini (dulu per paket), karena sekarang
+    tiap tes bisa beda aturannya. Nilai di BootcampPackage tetap dipakai
+    sebagai default waktu bikin tes baru.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct, on_delete=models.CASCADE, related_name="quizzes",
+    )
+    title = models.CharField(max_length=150, default="Tes Seleksi BCC")
+    timeline_item = models.ForeignKey(
+        "BootcampTimelineItem",
+        on_delete=models.SET_NULL, blank=True, null=True, related_name="quizzes",
+        help_text="Opsional -- tes ini bagian dari milestone timeline yang mana. "
+                   "SET_NULL biar hapus milestone gak ikut ngapus tes & jawabannya.",
+    )
+    duration_minutes = models.PositiveIntegerField(
+        default=30, validators=[MinValueValidator(5), MaxValueValidator(180)],
+    )
+    passing_score_percent = models.PositiveIntegerField(
+        default=70, validators=[MaxValueValidator(100)],
+        help_text="Ambang lulus (%) buat auto-flag. Keputusan akhir Terima/Tolak "
+                   "tetap manual di tangan admin.",
+    )
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Kalau dimatiin, tes gak muncul ke peserta. Attempt yang sudah "
+                   "terlanjur dikerjakan tetap tersimpan.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Quiz"
+        verbose_name_plural = "Bootcamp Quizzes"
+        ordering = ["order", "created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.bootcamp_id})"
+
+
+class BootcampQuizQuestion(models.Model):
+    """Satu soal dalam sebuah tes -- sama persis buat semua pendaftar. Yang
+    diacak per attempt cuma URUTAN TAMPIL (lihat BootcampQuizAttempt.
+    question_order), bukan subset soalnya -- semua orang tetap dapet soal
+    yang sama."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    quiz = models.ForeignKey(
+        BootcampQuiz, on_delete=models.CASCADE, related_name="questions",
+        null=True, blank=True,
+    )
+    question_text = models.TextField()
+    choice_a = models.CharField(max_length=255)
+    choice_b = models.CharField(max_length=255)
+    choice_c = models.CharField(max_length=255)
+    choice_d = models.CharField(max_length=255)
+    correct_choice = models.CharField(max_length=1, choices=QuizChoiceKey.choices)
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Quiz Question"
+        verbose_name_plural = "Bootcamp Quiz Questions"
+        ordering = ["order"]
+
+    def __str__(self) -> str:
+        return f"{self.question_text[:50]} ({self.quiz_id})"
+
+
+class BootcampQuizAttempt(models.Model):
+    """Satu attempt per (pendaftaran, tes).
+
+    Dulu ini OneToOneField ke registration -- artinya satu pendaftaran cuma
+    boleh punya SATU attempt selamanya, jadi mustahil ada lebih dari satu tes.
+    Sekarang jadi ForeignKey + UniqueConstraint (registration, quiz): jaminan
+    "cuma 1 kali percobaan" TETAP ditegakkan database, tapi per tes, bukan per
+    pendaftaran. Jadi race condition dua klik nyaris bersamaan tetap aman.
+    started_at/deadline disimpan di DB (bukan Django cache) supaya jadi
+    sumber kebenaran timing yang server-authoritative -- cache LocMemCache
+    default (non-produksi) gak shared antar worker Gunicorn, jadi gak aman
+    dipakai buat hal krusial kayak ini."""
+
+    class Status(models.TextChoices):
+        IN_PROGRESS = "in_progress", "Sedang Dikerjakan"
+        SUBMITTED = "submitted", "Selesai Dikumpulkan"
+        EXPIRED = "expired", "Waktu Habis (Auto-submit)"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    registration = models.ForeignKey(
+        BootcampRegistration, on_delete=models.CASCADE, related_name="quiz_attempts",
+    )
+    quiz = models.ForeignKey(
+        BootcampQuiz, on_delete=models.CASCADE, related_name="attempts",
+        null=True, blank=True,
+    )
+    # Snapshot urutan tampil soal & pilihan per attempt ini, di-generate SEKALI
+    # saat mulai, dipakai lagi persis sama saat resume (biar konsisten &
+    # susah di-share antar pendaftar karena nomor soalnya beda-beda per orang):
+    # [{"question_id": "<uuid str>", "choice_display_order": ["c","a","d","b"]}, ...]
+    question_order = models.JSONField(default=list)
+    started_at = models.DateTimeField(auto_now_add=True)
+    deadline = models.DateTimeField(
+        help_text="started_at + package.quiz_duration_minutes, dihitung sekali "
+                   "saat attempt dibuat. Ini yang dipakai server buat cek expired, "
+                   "BUKAN countdown di client -- countdown di browser cuma tampilan.",
+    )
+    submitted_at = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.IN_PROGRESS,
+    )
+    score_percent = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True)
+    passed = models.BooleanField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Quiz Attempt"
+        verbose_name_plural = "Bootcamp Quiz Attempts"
+        ordering = ["-started_at"]
+        constraints = [
+            # Pengganti jaminan OneToOne yang lama: tetap dijaga database,
+            # tapi sekarang per tes.
+            models.UniqueConstraint(
+                fields=["registration", "quiz"],
+                name="unique_attempt_per_registration_quiz",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Quiz attempt {self.registration_id} ({self.status})"
+
+
+class BootcampQuizAnswer(models.Model):
+    """Jawaban per soal, disimpan incremental tiap kali user milih (bukan
+    cuma pas submit akhir) -- biar refresh/koneksi putus gak ngilangin
+    progress. selected_choice disimpan pakai KEY ASLI soal (a/b/c/d), BUKAN
+    posisi tampil yang diacak, jadi scoring tinggal dibandingin langsung ke
+    correct_choice tanpa perlu reverse-mapping urutan acak."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    attempt = models.ForeignKey(
+        BootcampQuizAttempt, on_delete=models.CASCADE, related_name="answers",
+    )
+    question = models.ForeignKey(
+        BootcampQuizQuestion, on_delete=models.CASCADE, related_name="answers",
+    )
+    selected_choice = models.CharField(max_length=1, choices=QuizChoiceKey.choices)
+    # auto_now: ke-update tiap kali user ganti jawaban soal ini -- dipakai
+    # admin buat lihat pola waktu pengerjaan (mis. semua soal dijawab dalam
+    # hitungan detik = indikasi mencurigakan), informational only, bukan blocker.
+    answered_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Quiz Answer"
+        verbose_name_plural = "Bootcamp Quiz Answers"
+        ordering = ["answered_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["attempt", "question"], name="unique_attempt_question_answer",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.attempt_id} -> {self.question_id} = {self.selected_choice}"
+
+
+class BootcampTeam(models.Model):
+    """Tim buat benefit Team Pairing -- dibuat & diisi manual oleh admin
+    (atau lewat tombol acak), per batch bootcamp."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bootcamp = models.ForeignKey(
+        BootcampProduct, on_delete=models.CASCADE, related_name="teams",
+    )
+    name = models.CharField(max_length=100)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Team"
+        verbose_name_plural = "Bootcamp Teams"
+        ordering = ["order", "created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.bootcamp_id})"
+
+
+class BootcampTeamMember(models.Model):
+    """Satu peserta di dalam satu tim -- OneToOneField ke UserLibrary
+    (bukan ke User langsung) supaya otomatis kegate: cuma peserta yang udah
+    beneran beli/lunas bootcamp ini yang bisa dimasukkin tim, dan satu
+    peserta cuma bisa ada di SATU tim per bootcamp (constraint di level DB,
+    bukan cuma dicek di kode)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    team = models.ForeignKey(
+        BootcampTeam, on_delete=models.CASCADE, related_name="members",
+    )
+    user_library = models.OneToOneField(
+        "UserLibrary", on_delete=models.CASCADE, related_name="team_membership",
+    )
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bootcamp Team Member"
+        verbose_name_plural = "Bootcamp Team Members"
+        ordering = ["joined_at"]
+
+    def __str__(self) -> str:
+        return f"{self.user_library} -> {self.team}"
 
 
 class Review(BaseModel):
@@ -167,6 +1095,10 @@ class Review(BaseModel):
         null=True,
     )
     is_hidden = models.BooleanField(default=False)
+    is_seen_by_admin = models.BooleanField(
+        default=False,
+        help_text="Ke-set True begitu admin buka halaman daftar ulasan -- dipakai buat badge notifikasi 'ulasan baru' di sidebar.",
+    )
 
     class Meta:
         constraints = [
@@ -187,6 +1119,20 @@ class UserLibrary(models.Model):
     product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE,
+        related_name="user_libraries",
+    )
+    # Cuma keisi buat produk BOOTCAMP yang dibeli lewat alur
+    # daftar->seleksi/ACC->bayar (BootcampRegistration) -- diisi otomatis di
+    # verify_transaction dari Transaction.bootcamp_registration.package.
+    # Null buat produk non-bootcamp atau pembelian bootcamp lewat checkout
+    # lama yang gak lewat alur paket. Dipakai buat nge-gate benefit per
+    # paket (resource/sesi eksklusif) -- lihat BootcampResource &
+    # BootcampSession.required_benefit.
+    package = models.ForeignKey(
+        BootcampPackage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="user_libraries",
     )
     purchased_at = models.DateTimeField(auto_now_add=True)
@@ -237,11 +1183,9 @@ class BootcampSession(models.Model):
     )
     order = models.PositiveIntegerField(default=1)
     title = models.CharField(max_length=255)
-    mentor = models.ForeignKey(
+    mentors = models.ManyToManyField(
         MentorProfile,
-        on_delete=models.CASCADE,
         related_name="bootcamp_sessions",
-        null=True,
         blank=True,
     )
     start_time = models.DateTimeField(blank=True, null=True)
@@ -301,6 +1245,28 @@ class MentoringSession(models.Model):
     zoom_link = models.URLField(blank=True)
     recording_url = models.URLField(blank=True)
 
+    # --- Otomatisasi Zoom -------------------------------------------------
+    # zoom_link tetap jadi muara akhirnya (dipakai serializer & frontend), baik
+    # link itu dibuat otomatis maupun ditempel manual admin. Field di bawah cuma
+    # jejak buat mengelola meeting-nya: siapa host-nya & ID-nya buat dihapus
+    # saat reschedule dan buat menarik rekaman.
+    zoom_account = models.ForeignKey(
+        "products.ZoomAccount",
+        on_delete=models.SET_NULL,
+        related_name="mentoring_sessions",
+        blank=True,
+        null=True,
+        help_text="Akun Zoom yang meng-host meeting ini. SET_NULL supaya "
+                  "menghapus akun tidak ikut menghapus riwayat sesi.",
+    )
+    zoom_meeting_id = models.CharField(max_length=32, blank=True, default="")
+    zoom_generated_at = models.DateTimeField(blank=True, null=True)
+    zoom_error = models.CharField(
+        max_length=500, blank=True, default="",
+        help_text="Alasan pembuatan link otomatis gagal (mis. semua akun sibuk "
+                  "di jam itu). Dikosongkan lagi begitu berhasil.",
+    )
+
     class Meta:
         verbose_name = "Mentoring Session"
         verbose_name_plural = "Mentoring Sessions"
@@ -308,6 +1274,55 @@ class MentoringSession(models.Model):
 
     def __str__(self) -> str:
         return f"{self.mentoring} - session {self.order}"
+
+
+class ZoomAccount(models.Model):
+    """Satu akun Zoom (Server-to-Server OAuth app) di kolam akun.
+
+    Kenapa banyak akun & kenapa di database, bukan .env:
+
+    1. Satu akun Zoom cuma bisa meng-host SATU meeting live dalam satu waktu.
+       Sesi mentoring yang jamnya beririsan karena itu harus dipecah ke akun
+       berbeda -- lihat pemilihan akun di management command generate_zoom_links.
+    2. Akunnya dirotasi berkala, jadi kredensial harus bisa diganti dari panel
+       admin tanpa redeploy.
+
+    Akun lama sebaiknya DINONAKTIFKAN, bukan dihapus, supaya sesi lama tetap
+    bisa ditelusuri host-nya siapa.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    label = models.CharField(
+        max_length=120,
+        help_text="Nama panggilan biar gampang dibedakan, mis. 'Akun Utama Agustus'.",
+    )
+    account_id = models.CharField(max_length=120)
+    client_id = models.CharField(max_length=120)
+    client_secret_encrypted = models.TextField(
+        help_text="Terenkripsi Fernet pakai ZOOM_CRED_KEY. JANGAN pernah "
+                  "dikirim balik ke frontend -- lihat _serialize_zoom_account.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Hanya akun aktif yang dipakai membuat meeting baru. Akun "
+                  "nonaktif tetap dipakai untuk menarik rekaman meeting lama.",
+    )
+    auto_record = models.BooleanField(
+        default=True,
+        help_text="Nyalakan cloud recording otomatis di tiap meeting yang "
+                  "dibuat akun ini. Butuh akun Zoom berbayar.",
+    )
+    last_check_at = models.DateTimeField(blank=True, null=True)
+    last_check_ok = models.BooleanField(blank=True, null=True)
+    last_check_note = models.CharField(max_length=500, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Zoom Account"
+        verbose_name_plural = "Zoom Accounts"
+        ordering = ["-is_active", "label"]
+
+    def __str__(self) -> str:
+        return self.label
 
 
 class RefundRequest(models.Model):
@@ -373,3 +1388,72 @@ class Certificate(models.Model):
 
     def __str__(self) -> str:
         return self.number
+
+
+class PromoPopupSetting(models.Model):
+    """Popup promo yang muncul di homepage (singleton, pk=1).
+
+    Dulu popup-nya nebak sendiri: ambil bootcamp aktif pertama yang stoknya
+    masih ada. Sekarang admin yang nentuin produk mana yang dipromosikan dan
+    jendela tayangnya kapan, jadi gak perlu ganti kode tiap ganti kampanye.
+    """
+
+    product = models.ForeignKey(
+        Product, on_delete=models.SET_NULL, blank=True, null=True,
+        related_name="promo_popups",
+        help_text="Produk yang dipromosikan. SET_NULL biar hapus produk gak "
+                   "ikut ngapus setelan popup-nya.",
+    )
+    is_active = models.BooleanField(
+        default=False,
+        help_text="Saklar utama. Kalau dimatiin, popup gak tampil sama sekali "
+                   "walau tanggalnya masih berlaku.",
+    )
+    starts_at = models.DateTimeField(
+        blank=True, null=True,
+        help_text="Kosong = langsung tayang begitu diaktifkan.",
+    )
+    ends_at = models.DateTimeField(
+        blank=True, null=True,
+        help_text="Kosong = tayang terus sampai dimatiin manual.",
+    )
+    headline = models.CharField(
+        max_length=150, blank=True, default="",
+        help_text="Judul di popup. Kosong = pakai judul produknya.",
+    )
+    cta_label = models.CharField(
+        max_length=60, blank=True, default="Daftar Sekarang",
+        help_text="Tulisan di tombol.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Promo Popup Setting"
+        verbose_name_plural = "Promo Popup Settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def is_live(self):
+        """Tayang cuma kalau saklarnya nyala, produknya ada, DAN sekarang masih
+        di dalam jendela tanggalnya. Dicek di server, bukan di browser, biar
+        jadwalnya gak bisa diakalin dari sisi klien."""
+        from django.utils import timezone as _tz
+
+        if not self.is_active or not self.product_id:
+            return False
+        now = _tz.now()
+        if self.starts_at and now < self.starts_at:
+            return False
+        if self.ends_at and now > self.ends_at:
+            return False
+        return True
+
+    def __str__(self) -> str:
+        return f"Popup: {self.product_id or 'belum diatur'} (aktif={self.is_active})"

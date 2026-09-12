@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
+import Linkify from "@/component/Linkify";
+import BootcampTimeline from "@/component/BootcampTimeline";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { SearchX, FileText, Check, LogIn } from "lucide-react";
@@ -79,6 +80,7 @@ export default function ProdukPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [selectedTimeline, setSelectedTimeline] = useState([]);
 
   const shouldReduceMotion = useReducedMotion();
 
@@ -87,15 +89,33 @@ export default function ProdukPage() {
   const [error, setError] = useState(null);
 
   const router = useRouter();
-  const handleBuyClick = (productId) => {
+  const handleBuyClick = (productId, type) => {
     const token = getAccessToken();
     if (!token) {
       setShowLoginModal(true);
       return;
     }
-    router.push(`/checkout/${productId}`);
+    // Bootcamp lewat alur pendaftaran (pilih paket + upload syarat + seleksi/ACC),
+    // bukan checkout langsung seperti produk lain.
+    if (type === "BOOTCAMP") {
+      router.push(`/bootcamp/${productId}/register`);
+    } else {
+      router.push(`/checkout/${productId}`);
+    }
   };
-  
+
+  // Timeline utama cuma relevan buat Bootcamp -- di-fetch begitu modal detail
+  // produk bootcamp dibuka, bukan di-preload semua produk sekaligus.
+  useEffect(() => {
+    if (!selectedProduct || selectedProduct.type !== "BOOTCAMP") {
+      setSelectedTimeline([]);
+      return;
+    }
+    api
+      .get(`/api/products/${selectedProduct.id}/timeline/`, { auth: false })
+      .then((res) => setSelectedTimeline(res?.timeline || []))
+      .catch(() => setSelectedTimeline([]));
+  }, [selectedProduct]);
 
   useEffect(() => {
     async function fetchProducts() {
@@ -157,7 +177,6 @@ export default function ProdukPage() {
         />
       </div>
 
-      <Navbar />
 
       <div className="main-content flex flex-col items-center mt-28 md:mt-36 mb-24 relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6">
         {/* HERO SECTION */}
@@ -228,19 +247,23 @@ export default function ProdukPage() {
           <p className="text-red-400 text-sm mb-6">{error}</p>
         )}
 
-        {/* COUNTER */}
-        <div className="w-full max-w-[1050px] flex justify-start mb-6">
-          <p className="text-[#A19DAB] text-[11px] md:text-sm">
-            Menampilkan{" "}
-            <span className="text-[#00C6D1] font-bold text-sm md:text-base">
-              {filteredProducts.length}
-            </span>{" "}
-            produk
-          </p>
-        </div>
+        {/* COUNTER -- disembunyiin selagi loading/error biar nggak sempet
+            kebaca "Menampilkan 0 produk" padahal datanya belum selesai
+            di-fetch, bukan beneran kosong. */}
+        {!loading && !error && (
+          <div className="w-full max-w-[1050px] flex justify-start mb-6">
+            <p className="text-[#A19DAB] text-[11px] md:text-sm">
+              Menampilkan{" "}
+              <span className="text-[#00C6D1] font-bold text-sm md:text-base">
+                {filteredProducts.length}
+              </span>{" "}
+              produk
+            </p>
+          </div>
+        )}
 
         {/* RENDER GROUP SECTIONS -- atau empty state kalau search sama sekali nggak match apapun */}
-        {searchQuery !== "" && filteredProducts.length === 0 ? (
+        {!loading && !error && (searchQuery !== "" && filteredProducts.length === 0 ? (
           <div className="w-full max-w-[1050px] flex flex-col items-center justify-center gap-3 text-center py-16 px-6 border border-dashed border-[#3A3545] rounded-md md:rounded-lg bg-[#1A1625]/40">
             <SearchX size={32} className="text-[#A19DAB]" />
             <p className="text-[#A19DAB] text-sm max-w-[320px]">
@@ -274,10 +297,11 @@ export default function ProdukPage() {
                     <AnimatePresence>
                       {sectionProducts.length > 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6 w-full">
-                          {sectionProducts.map((product) => (
+                          {sectionProducts.map((product, index) => (
                             <ProductCard
                               key={product.id}
                               data={product}
+                              index={index}
                               onClick={() => setSelectedProduct(product)}
                               reduceMotion={shouldReduceMotion}
                             />
@@ -303,7 +327,7 @@ export default function ProdukPage() {
               );
             })}
           </div>
-        )}
+        ))}
       </div>
 
       <Footer />
@@ -383,7 +407,21 @@ export default function ProdukPage() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar text-sm text-gray-300 leading-relaxed mb-6">
-                  <p className="mb-4">{selectedProduct.desc}</p>
+                  <p className="mb-4 whitespace-pre-line">
+                    <Linkify text={selectedProduct.desc} />
+                  </p>
+
+                  {/* --- BOOTCAMP: timeline utama ringkas --- */}
+                  {selectedProduct.type === "BOOTCAMP" && selectedTimeline.length > 0 && (
+                    <>
+                      <p className="text-white font-semibold text-xs uppercase tracking-wide mb-2">
+                        Timeline Utama
+                      </p>
+                      <div className="mb-5">
+                        <BootcampTimeline items={selectedTimeline} compact />
+                      </div>
+                    </>
+                  )}
 
                   {/* --- MODUL: satu file PDF --- */}
                   {selectedProduct.type === "MODULE" && selectedProduct.filePdfUrl && (
@@ -406,7 +444,7 @@ export default function ProdukPage() {
                   {selectedProduct.type === "MENTORING" && selectedProduct.highlights?.length > 0 && (
                     <>
                       <p className="text-white font-semibold text-xs uppercase tracking-wide mb-2">
-                        {selectedProduct.sessionCount}x Sesi Mentoring — Yang Kamu Dapatkan
+                        {selectedProduct.sessionCount}x Sesi Mentoring: Yang Kamu Dapatkan
                       </p>
                       <ul className="flex flex-col gap-2">
                         {selectedProduct.highlights.map((point, idx) => (
@@ -421,10 +459,10 @@ export default function ProdukPage() {
                 </div>
 
                 <button
-                  onClick={() => handleBuyClick(selectedProduct.id)}
+                  onClick={() => handleBuyClick(selectedProduct.id, selectedProduct.type)}
                   className={`w-full bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold py-3 rounded-full transition-colors mt-auto text-center shrink-0 ${focusRing}`}
                 >
-                  Beli Sekarang
+                  {selectedProduct.type === "BOOTCAMP" ? "Daftar Bootcamp" : "Beli Sekarang"}
                 </button>
               </div>
             </motion.div>
@@ -521,7 +559,7 @@ export default function ProdukPage() {
 }
 
 // --- KOMPONEN PRODUCT CARD ---
-function ProductCard({ data, onClick, reduceMotion }) {
+function ProductCard({ data, index = 0, onClick, reduceMotion }) {
   let tagStyle = "";
   let priceColor = "";
 
@@ -565,6 +603,8 @@ function ProductCard({ data, onClick, reduceMotion }) {
             src={data.image}
             alt={data.title}
             className="w-full h-full object-cover"
+            loading={index < 3 ? "eager" : "lazy"}
+            decoding="async"
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-[#4A2CA1] to-[#17A9D4] flex items-center justify-center p-4">
@@ -616,11 +656,9 @@ function ProductCard({ data, onClick, reduceMotion }) {
           >
             {formatRupiah(data.price)}
           </p>
-          {data.soldCount > 0 && (
-            <p className="text-gray-500 text-[9px] md:text-[10px]">
-              {data.soldCount} Terjual
-            </p>
-          )}
+          {/* Jumlah terjual SEMENTARA disembunyikan atas permintaan. Datanya
+              tetap ditarik & tetap ada di dashboard admin -- ini murni soal
+              tampilan publik, tinggal dibuka lagi kalau mau ditampilkan. */}
         </div>
       </div>
     </motion.div>

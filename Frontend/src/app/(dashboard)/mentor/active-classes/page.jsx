@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
-import DashboardLayout from "@/component/mentor/DashboardLayout";
 import EmptyState from "@/component/mentor/EmptyState";
 import { apiRequest } from "@/lib/api";
 
@@ -119,7 +118,7 @@ export default function MentorDashboard() {
   const mentoringList = isRiwayat ? pastMentoring : showMentoring ? activeMentoring : [];
 
   return (
-    <DashboardLayout title="Active Classes">
+    <>
       <motion.div
         {...sectionReveal}
         className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6"
@@ -134,37 +133,39 @@ export default function MentorDashboard() {
             </p>
           </div>
 
-          <div className="inline-flex items-center gap-1 bg-[#170F26] border border-[#2D2342] rounded-[10px] p-1 w-fit overflow-x-auto no-scrollbar">
-            {FILTERS.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveFilter(tab)}
-                className={`px-5 py-2 rounded-[8px] text-[13px] font-medium whitespace-nowrap transition-colors ${focusRing} ${
-                  activeFilter === tab
-                    ? "bg-[#2D1B4E] text-white shadow-sm"
-                    : "text-[#9CA3AF] hover:text-white"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
+          <div className="max-w-full overflow-x-auto no-scrollbar">
+            <div className="inline-flex items-center gap-1 bg-[#170F26] border border-[#2D2342] rounded-[10px] p-1">
+              {FILTERS.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveFilter(tab)}
+                  className={`px-5 py-2 rounded-[8px] text-[13px] font-medium whitespace-nowrap transition-colors ${focusRing} ${
+                    activeFilter === tab
+                      ? "bg-[#2D1B4E] text-white shadow-sm"
+                      : "text-[#9CA3AF] hover:text-white"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 shrink-0">
-          <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-4 sm:px-6 py-5 flex flex-col items-center justify-center min-w-[95px] sm:min-w-[120px]">
-            <p className="text-[#148F89] font-bold text-[30px] sm:text-[34px] leading-none">
-              {activeBootcamp.length}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 shrink-0">
+          <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-3 sm:px-6 py-4 sm:py-5 flex flex-col items-center justify-center min-w-0 sm:min-w-[120px]">
+            <p className="text-[#148F89] font-bold text-[26px] sm:text-[34px] leading-none">
+              {loading ? "-" : activeBootcamp.length}
             </p>
-            <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center whitespace-nowrap">
+            <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center leading-tight">
               Bootcamp Aktif
             </p>
           </div>
-          <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-4 sm:px-6 py-5 flex flex-col items-center justify-center min-w-[95px] sm:min-w-[120px]">
-            <p className="text-[#148F89] font-bold text-[30px] sm:text-[34px] leading-none">
-              {activeMentoring.length}
+          <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] px-3 sm:px-6 py-4 sm:py-5 flex flex-col items-center justify-center min-w-0 sm:min-w-[120px]">
+            <p className="text-[#148F89] font-bold text-[26px] sm:text-[34px] leading-none">
+              {loading ? "-" : activeMentoring.length}
             </p>
-            <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center whitespace-nowrap">
+            <p className="text-[#9CA3AF] text-[11px] sm:text-[12px] mt-2 text-center leading-tight">
               Mentoring Aktif
             </p>
           </div>
@@ -173,7 +174,7 @@ export default function MentorDashboard() {
 
       {isRiwayat && (
         <motion.p {...sectionReveal} className="text-[#6B7280] text-[13px]">
-          Kelas yang udah selesai. Klik kartunya buat lihat rekaman tiap sesi.
+          Kelas yang sudah selesai. Tekan kartunya untuk melihat rekaman tiap sesi.
         </motion.p>
       )}
 
@@ -232,7 +233,7 @@ export default function MentorDashboard() {
                 <motion.div key={item.id} {...cardReveal(index)} className="h-full">
                   <ClassCard
                     id={`mentoring-${item.id}`}
-                    title={`${item.title} — ${item.menteeName}`}
+                    title={`${item.title} · ${item.menteeName}`}
                     description={`${item.completedSessions}/${item.totalSessions} sesi selesai`}
                     imageClass="from-[#4C1D95] to-[#CA8A04]"
                     isCompleted={item.completedSessions >= item.totalSessions}
@@ -244,6 +245,6 @@ export default function MentorDashboard() {
           )}
         </motion.div>
       )}
-    </DashboardLayout>
+    </>
   );
 }
