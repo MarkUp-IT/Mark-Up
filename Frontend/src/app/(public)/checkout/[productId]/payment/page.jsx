@@ -122,7 +122,7 @@ function CheckoutPaymentPageInner() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await apiRequest("/api/transactions/ipaymu/available/", { auth: false });
+        const res = await apiRequest(`/api/transactions/ipaymu/available/?product_id=${params.productId}`, { auth: false });
         if (!cancelled && res?.enabled) setIpaymuEnabled(true);
       } catch {
         // Diam saja -- kalau gagal dicek, anggap gak tersedia, fallback ke transfer manual.
@@ -131,7 +131,7 @@ function CheckoutPaymentPageInner() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [params.productId]);
 
   useEffect(() => {
     // Timer reservasi cuma relevan buat jalur manual (nahan slot/stok

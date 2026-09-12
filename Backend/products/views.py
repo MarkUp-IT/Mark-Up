@@ -47,6 +47,7 @@ from .models import (
     MentoringSession,
     Product,
     ProductType,
+    PaymentGatewayMode,
     RefundRequest,
     Review,
     UserLibrary,
@@ -110,6 +111,7 @@ def _format_product_response(product, detail):
         "image_url": _get_product_image_url(detail),
         "registration_link": detail.registration_link,
         "is_active": detail.is_active,
+        "payment_gateway_mode": product.payment_gateway_mode,
     }
 
     if getattr(detail, "file_pdf_url", None) is not None:
@@ -225,6 +227,7 @@ def _serialize_product_item(p):
         "id": str(p.id),
         "type": p.type,
         "created_at": p.created_at.isoformat() if getattr(p, "created_at", None) else None,
+        "payment_gateway_mode": p.payment_gateway_mode,
     }
     detail = None
     if p.type == ProductType.MENTORING:
@@ -1124,6 +1127,18 @@ def update_product(request, product_id):
 	requested_type = request_data.get("type")
 	if requested_type and requested_type != product.type:
 		return JsonResponse({"errors": {"type": ["Tidak dapat mengubah tipe produk."]}}, status=400)
+
+	# payment_gateway_mode ada di Product (base model), BUKAN di detail_form
+	# di bawah (yang cuma nyentuh model detail per-tipe) -- makanya ditangani
+	# terpisah di sini, sebelum detail_form divalidasi.
+	if "payment_gateway_mode" in request_data:
+		mode = request_data["payment_gateway_mode"]
+		if mode not in PaymentGatewayMode.values:
+			return JsonResponse(
+				{"errors": {"payment_gateway_mode": ["Nilai tidak dikenali."]}}, status=400
+			)
+		product.payment_gateway_mode = mode
+		product.save(update_fields=["payment_gateway_mode"])
 
 	product_type = product.type
 	detail_attr = _get_detail_attr(product_type)
@@ -3660,9 +3675,15 @@ def create_bootcamp_payment(request, registration_id):
     if request_data is None:
         return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
+    package = registration.package
+    bootcamp_product = package.bootcamp
+    commitment_fee_amount = package.commitment_fee
+
     # payment_gateway OPT-IN -- perlakuan & alasannya persis sama seperti di
     # transactions.views.checkout_product: gak dikirim = jalur manual apa
-    # adanya seperti sebelum iPaymu ada.
+    # adanya seperti sebelum iPaymu ada. iPaymu cuma boleh kalau
+    # _ipaymu_allowed_for_product juga True (saklar master DAN bootcamp ini
+    # gak dipaksa MANUAL_ONLY -- lihat products.models.PaymentGatewayMode).
     payment_gateway = (request_data.get("payment_gateway") or PaymentGateway.MANUAL).upper()
     if payment_gateway not in (PaymentGateway.MANUAL, PaymentGateway.IPAYMU):
         return JsonResponse({"detail": "payment_gateway tidak dikenali."}, status=400)
@@ -3678,14 +3699,12 @@ def create_bootcamp_payment(request, registration_id):
         if proof_file.size > MAX_PAYMENT_PROOF_SIZE:
             return JsonResponse({"detail": "Ukuran file maksimal 5MB."}, status=400)
     else:
-        if not IpaymuSetting.get_solo().is_enabled:
-            return JsonResponse(
-                {"detail": "Pembayaran iPaymu belum aktif, gunakan transfer bank manual."}, status=400
-            )
+        from transactions.views import _ipaymu_allowed_for_product
 
-    package = registration.package
-    bootcamp_product = package.bootcamp
-    commitment_fee_amount = package.commitment_fee
+        if not _ipaymu_allowed_for_product(bootcamp_product.product):
+            return JsonResponse(
+                {"detail": "Pembayaran iPaymu belum aktif untuk bootcamp ini, gunakan transfer bank manual."}, status=400
+            )
 
     # Harga tim: cuma berlaku kalau pendaftaran ini KETUA tim (`led_team_group`
     # ada). Tim wajib lengkap sejak daftar (tidak ada status "menyusul" --

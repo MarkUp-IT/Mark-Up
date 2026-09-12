@@ -19,12 +19,38 @@ class ProductType(models.TextChoices):
     BOOTCAMP = "BOOTCAMP", "Bootcamp"
 
 
+class PaymentGatewayMode(models.TextChoices):
+    """Metode bayar mana yang ditawarkan buat SATU produk ini -- BEDA dari
+    transactions.IpaymuSetting.is_enabled (itu saklar MASTER buat seluruh
+    situs sekaligus, mis. dimatikan darurat kalau kredensial iPaymu rusak).
+
+    Urutan penentuan (lihat transactions/views.py:_ipaymu_allowed_for_product):
+      1. IpaymuSetting.is_enabled harus True dulu (master switch) -- kalau
+         mati, SEMUA produk otomatis jatuh ke manual, gak peduli field ini
+         diset apa. Ini yang menjaga situs tetap bisa jualan walau iPaymu
+         lagi bermasalah -- prinsip ini SENGAJA dipertahankan, jangan
+         dilonggarkan cuma demi field baru ini.
+      2. Baru kalau master-nya nyala, field per-produk ini yang menentukan:
+         AUTO ikut kondisi (1) apa adanya (QRIS, karena master lagi nyala),
+         MANUAL_ONLY memaksa transfer manual buat produk ini walau iPaymu
+         sehat & aktif di produk lain."""
+    AUTO = "AUTO", "Otomatis (ikut pengaturan iPaymu)"
+    MANUAL_ONLY = "MANUAL_ONLY", "Selalu Transfer Manual"
+
+
 class Product(BaseModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     type = models.CharField(
         max_length=20,
         choices=ProductType.choices,
         default=ProductType.MENTORING,
+    )
+    payment_gateway_mode = models.CharField(
+        max_length=20,
+        choices=PaymentGatewayMode.choices,
+        default=PaymentGatewayMode.AUTO,
+        help_text="Metode bayar buat produk ini -- lihat catatan di PaymentGatewayMode "
+                  "soal urutan penentuan bareng saklar master IpaymuSetting.is_enabled.",
     )
 
     class Meta:
