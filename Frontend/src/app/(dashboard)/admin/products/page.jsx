@@ -95,6 +95,7 @@ export default function Products() {
     duration_minutes: 60,
     stock: "",
     is_active: true,
+    payment_gateway_mode: "AUTO",
     expertise: [],
   });
 
@@ -843,6 +844,7 @@ export default function Products() {
                                 duration_minutes: item.duration_minutes ?? 60,
                                 stock: item.stock ?? "",
                                 is_active: item.is_active,
+                                payment_gateway_mode: item.payment_gateway_mode ?? "AUTO",
                                 expertise: item.expertise ?? [],
                               });
                               setEditImage({ key: "", preview: item.image_url || "", uploading: false });
@@ -1339,6 +1341,36 @@ export default function Products() {
               />
             </div>
           </div>
+
+          <div className="flex flex-col gap-2">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Metode Pembayaran
+            </p>
+            <div className="relative w-full">
+              <select
+                value={editFormData.payment_gateway_mode || "AUTO"}
+                onChange={(e) =>
+                  setEditFormData((prev) => ({
+                    ...prev,
+                    payment_gateway_mode: e.target.value,
+                  }))
+                }
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              >
+                <option value="AUTO">Otomatis (ikut pengaturan iPaymu)</option>
+                <option value="MANUAL_ONLY">Selalu Transfer Manual</option>
+              </select>
+              <ChevronDown
+                size={18}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
+              />
+            </div>
+            <p className="text-[#94A3B8] text-[11px]">
+              &quot;Otomatis&quot; ikut saklar iPaymu di menu Transaksi -- pembeli lihat QRIS kalau
+              iPaymu lagi aktif, otomatis balik ke manual kalau iPaymu mati. &quot;Selalu Transfer
+              Manual&quot; memaksa produk ini tetap manual apa pun kondisi iPaymu-nya.
+            </p>
+          </div>
         </div>
 
         <div className="mt-auto p-6 bg-white border-t border-[#E2E8F0] flex gap-3">
@@ -1566,6 +1598,7 @@ export default function Products() {
                 duration_minutes: viewProduct.duration_minutes ?? 60,
                 stock: viewProduct.stock ?? "",
                 is_active: viewProduct.is_active,
+                payment_gateway_mode: viewProduct.payment_gateway_mode ?? "AUTO",
                 expertise: viewProduct.expertise ?? [],
               });
               setEditImage({ key: "", preview: viewProduct.image_url || "", uploading: false });

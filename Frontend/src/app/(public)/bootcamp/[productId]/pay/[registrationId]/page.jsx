@@ -70,7 +70,7 @@ export default function BootcampPaymentPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await apiRequest("/api/transactions/ipaymu/available/", { auth: false });
+        const res = await apiRequest(`/api/transactions/ipaymu/available/?product_id=${productId}`, { auth: false });
         if (!cancelled && res?.enabled) setIpaymuEnabled(true);
       } catch {
         // Diam saja -- fallback ke transfer manual.
@@ -79,7 +79,7 @@ export default function BootcampPaymentPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [productId]);
 
   const handleCopyBank = () => {
     navigator.clipboard.writeText(bankInfo.account.replace(/\s/g, ""));

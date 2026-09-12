@@ -21,6 +21,7 @@ from .models import (
 from products.models import (
     Product,
     ProductType,
+    PaymentGatewayMode,
     UserLibrary,
     MentoringSession,
     BootcampSession,
@@ -1012,13 +1013,22 @@ def checkout_product(request):
     # payment_gateway OPT-IN -- kalau gak dikirim (persis perilaku frontend
     # yang sudah jalan sekarang), sama sekali gak ada yang berubah di bawah
     # ini, tetap jalur manual seperti biasa. iPaymu cuma aktif kalau field
-    # ini eksplisit "IPAYMU" DAN admin sudah menyalakan IpaymuSetting.is_enabled.
+    # ini eksplisit "IPAYMU" DAN _ipaymu_allowed_for_product(product) True
+    # (saklar master IpaymuSetting.is_enabled DAN produk ini gak dipaksa
+    # MANUAL_ONLY -- lihat products.models.PaymentGatewayMode).
     payment_gateway = (request_data.get("payment_gateway") or PaymentGateway.MANUAL).upper()
     if payment_gateway not in (PaymentGateway.MANUAL, PaymentGateway.IPAYMU):
         return JsonResponse({"detail": "payment_gateway tidak dikenali."}, status=400)
 
     if not product_id:
         return JsonResponse({"detail": "product_id diperlukan."}, status=400)
+
+    try:
+        product = Product.objects.select_related(
+            "mentoring_detail", "module_detail", "bootcamp_detail"
+        ).get(id=product_id)
+    except Product.DoesNotExist:
+        return JsonResponse({"detail": "Produk tidak ditemukan."}, status=404)
 
     if payment_gateway == PaymentGateway.MANUAL:
         if not proof_file:
@@ -1028,17 +1038,10 @@ def checkout_product(request):
         if err:
             return JsonResponse({"detail": err}, status=400)
     else:
-        if not IpaymuSetting.get_solo().is_enabled:
+        if not _ipaymu_allowed_for_product(product):
             return JsonResponse(
-                {"detail": "Pembayaran iPaymu belum aktif, gunakan transfer bank manual."}, status=400
+                {"detail": "Pembayaran iPaymu belum aktif untuk produk ini, gunakan transfer bank manual."}, status=400
             )
-
-    try:
-        product = Product.objects.select_related(
-            "mentoring_detail", "module_detail", "bootcamp_detail"
-        ).get(id=product_id)
-    except Product.DoesNotExist:
-        return JsonResponse({"detail": "Produk tidak ditemukan."}, status=404)
 
     # Bootcamp WAJIB lewat jalur pendaftaran sendiri (daftar -> diseleksi/
     # di-ACC -> baru bayar), bukan checkout langsung -- endpoint ini gak
@@ -1339,6 +1342,13 @@ def create_ipaymu_session(request, transaction_id):
     if txn.payment_status != PaymentStatus.PENDING:
         return JsonResponse({"detail": "Transaksi ini sudah tidak menunggu pembayaran."}, status=400)
 
+    # Lapis kedua (bukan cuma dicek di checkout_product) -- jaga-jaga kalau
+    # admin ngubah produk ini jadi MANUAL_ONLY SETELAH transaksinya kepalanjur
+    # dibuat gateway=IPAYMU, atau ada jalur lain yang lolos dari cek pertama.
+    item_pertama = txn.items.select_related("product").first()
+    if item_pertama and not _ipaymu_allowed_for_product(item_pertama.product):
+        return JsonResponse({"detail": "Pembayaran iPaymu belum aktif untuk produk ini."}, status=400)
+
     setting = IpaymuSetting.get_solo()
     if not setting.is_enabled:
         return JsonResponse({"detail": "Pembayaran iPaymu belum aktif."}, status=400)
@@ -1397,6 +1407,11 @@ def create_ipaymu_qris(request, transaction_id):
     if txn.payment_status != PaymentStatus.PENDING:
         return JsonResponse({"detail": "Transaksi ini sudah tidak menunggu pembayaran."}, status=400)
 
+    # Lapis kedua, sama alasannya kayak create_ipaymu_session.
+    item_pertama = txn.items.select_related("product").first()
+    if item_pertama and not _ipaymu_allowed_for_product(item_pertama.product):
+        return JsonResponse({"detail": "Pembayaran iPaymu belum aktif untuk produk ini."}, status=400)
+
     setting = IpaymuSetting.get_solo()
     if not setting.is_enabled:
         return JsonResponse({"detail": "Pembayaran iPaymu belum aktif."}, status=400)
@@ -1440,14 +1455,40 @@ def create_ipaymu_qris(request, transaction_id):
     )
 
 
+def _ipaymu_allowed_for_product(product):
+    """True kalau iPaymu boleh ditawarkan buat SATU produk ini -- gabungan
+    saklar MASTER (IpaymuSetting.is_enabled) + mode per-produk (lihat
+    catatan lengkap di products.models.PaymentGatewayMode). `product` boleh
+    None (dipanggil tanpa konteks produk tertentu) -- di titik itu cuma
+    saklar master yang dicek, sama seperti perilaku lama sebelum field ini
+    ada."""
+    if not IpaymuSetting.get_solo().is_enabled:
+        return False
+    if product is None:
+        return True
+    mode = getattr(product, "payment_gateway_mode", PaymentGatewayMode.AUTO)
+    return mode != PaymentGatewayMode.MANUAL_ONLY
+
+
 def is_ipaymu_available(request):
     """PUBLIK, tanpa login -- dipakai halaman checkout buat tau apakah
     pemilih metode iPaymu perlu ditampilkan sama sekali. Sengaja gak
-    membocorkan detail lain (VA, mode sandbox/production, dst)."""
+    membocorkan detail lain (VA, mode sandbox/production, dst).
+
+    `?product_id=` OPSIONAL -- kalau dikirim, hasilnya juga memperhitungkan
+    payment_gateway_mode produk itu (mis. produk yang dipaksa MANUAL_ONLY
+    balik False walau saklar master nyala). Tanpa product_id, cuma saklar
+    master yang dicek -- ini yang bikin endpoint ini tetap backward-compatible
+    buat pemanggil yang belum tahu konteks produk mana."""
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])
 
-    return JsonResponse({"enabled": IpaymuSetting.get_solo().is_enabled}, status=200)
+    product = None
+    product_id = request.GET.get("product_id")
+    if product_id:
+        product = Product.objects.filter(id=product_id).only("id", "payment_gateway_mode").first()
+
+    return JsonResponse({"enabled": _ipaymu_allowed_for_product(product)}, status=200)
 
 
 @csrf_exempt
