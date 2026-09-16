@@ -17,6 +17,7 @@ import {
   RotateCcw,
   AlertCircle,
   MoreVertical,
+  MessageCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import Linkify from "@/component/Linkify";
@@ -644,6 +645,28 @@ export default function ProductDetail() {
                 );
               })}
           </div>
+
+          {product.type === "bootcamp" && product.community_link && (
+            <motion.div
+              {...sectionReveal}
+              className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col gap-3"
+            >
+              <h3 className="text-white font-semibold text-[15px] flex items-center gap-2">
+                <MessageCircle size={16} className="text-[#148F89]" /> Grup Komunitas
+              </h3>
+              <p className="text-[#9CA3AF] text-[13px]">
+                Gabung buat diskusi, info kelas, dan kenalan sama peserta lain.
+              </p>
+              <a
+                href={product.community_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 bg-[#148F89] text-white text-[13px] font-semibold px-5 py-2.5 rounded-full hover:bg-[#117a75] transition-colors w-fit"
+              >
+                Gabung Grup WhatsApp
+              </a>
+            </motion.div>
+          )}
 
           {product.type === "bootcamp" && product.resources?.length > 0 && (
             <motion.div

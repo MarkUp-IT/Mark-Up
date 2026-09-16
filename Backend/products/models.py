@@ -182,6 +182,22 @@ class BootcampProduct(BaseProductDetail):
                    "ditampilkan sebagai informasi di halaman pendaftaran publik.",
     )
 
+    # --- Setelah dibeli -------------------------------------------------
+    community_link = models.URLField(
+        blank=True, default="",
+        help_text="Link grup WhatsApp komunitas peserta. Ditampilkan begitu peserta "
+                   "submit pembayaran (belum perlu nunggu ACC admin) dan di halaman "
+                   "detail bootcamp mereka di Produk Saya. Kosongkan kalau belum ada "
+                   "grupnya -- ajakannya otomatis gak ditampilkan.",
+    )
+    owned_description = models.TextField(
+        blank=True, default="",
+        help_text="Deskripsi yang ditampilkan ke peserta yang SUDAH BELI, di halaman "
+                   "detail bootcamp mereka -- BEDA dari `description` di atas yang "
+                   "tampil di /produk (katalog publik). Kosongkan buat pakai "
+                   "deskripsi publik yang sama seperti sekarang.",
+    )
+
     # --- Apa yang harus diisi pendaftar ---------------------------------
     # Dua-duanya bisa dinyalakan/dimatikan sendiri-sendiri: boleh keduanya,
     # salah satu saja, atau tidak sama sekali. Default True supaya batch yang

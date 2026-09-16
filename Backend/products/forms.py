@@ -22,4 +22,5 @@ class BootcampProductForm(ModelForm):
         model = BootcampProduct
         fields = ["title", "description", "explanation", "published_at",
                   "image_url", "original_price", "discount_percent", "registration_link",
-                  "is_active", "stock", "session_count"]
+                  "is_active", "stock", "session_count",
+                  "community_link", "owned_description"]

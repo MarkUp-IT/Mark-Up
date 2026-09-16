@@ -266,6 +266,8 @@ def _serialize_product_item(p):
             )
         if p.type == ProductType.BOOTCAMP:
             item["session_count"] = detail.session_count
+            item["community_link"] = detail.community_link
+            item["owned_description"] = detail.owned_description
 
     return item
 
@@ -494,7 +496,12 @@ def get_my_product_detail(request, product_id):
             {
                 "type": "bootcamp",
                 "title": detail.title,
-                "description": detail.description,
+                # Deskripsi khusus buat yang SUDAH BELI -- beda dari `description`
+                # publik yang tampil di /produk. Kosong = fallback ke deskripsi
+                # publik yang sama (bootcamp lama yang belum diisi admin gak
+                # berubah tampilannya).
+                "description": detail.owned_description or detail.description,
+                "community_link": detail.community_link,
                 "image_url": _get_product_image_url(detail),
                 "sessions": [_serialize_bootcamp_session(session) for session in sessions],
                 "resources": _serialize_unlocked_bootcamp_resources(user_library),
@@ -1964,6 +1971,7 @@ def _serialize_registration(reg, for_admin=False):
         "payment_deadline_passed": payment_deadline_passed,
         "bootcamp_id": str(reg.package.bootcamp_id),
         "bootcamp_title": reg.package.bootcamp.title,
+        "bootcamp_community_link": reg.package.bootcamp.community_link,
         "quizzes": quizzes,
         "payment": payment,
     }
@@ -3714,14 +3722,30 @@ def create_bootcamp_payment(request, registration_id):
     # anggota lain gak pernah lewat endpoint ini sama sekali, mereka
     # diprovisikan otomatis begitu pembayaran ketua ini di-ACC admin (lihat
     # _provision_team_members di transactions/views.py).
-    sub_total = package.price
-    if getattr(registration, "led_team_group", None) is not None and package.group_price is not None:
-        sub_total = package.group_price * package.group_size
-        commitment_fee_amount = commitment_fee_amount * package.group_size
+    #
+    # `per_head_price` dipakai buat ngitung diskon kode referral SEBELUM
+    # dikali jumlah anggota (lihat di bawah) -- bukan cuma buat sub_total.
+    is_team_leader = (
+        getattr(registration, "led_team_group", None) is not None
+        and package.group_price is not None
+    )
+    headcount = package.group_size if is_team_leader else 1
+    per_head_price = package.group_price if is_team_leader else package.price
+    sub_total = per_head_price * headcount
+    if is_team_leader:
+        commitment_fee_amount = commitment_fee_amount * headcount
 
     # Kode referral -- dipotong CUMA dari harga paket, commitment fee gak ikut
     # didiskon karena duit itu bukan pendapatan (dikembalikan penuh ke peserta
     # di akhir program), jadi mendiskonnya sama aja bikin selisih kas pas refund.
+    #
+    # PENTING: dihitung per_head_price DULU baru dikali headcount (bukan
+    # dihitung sekali dari sub_total gabungan tim) -- supaya persen maupun
+    # potongan tetap PROPORSIONAL per kepala, dan max_discount (batas atas
+    # nominal) ikut berlaku PER ORANG, bukan dibagi rata buat satu tim
+    # sekaligus. Tanpa ini, kode dengan max_discount kecil jadi jauh lebih
+    # kecil manfaatnya buat tim besar dibanding kalau tiap anggota daftar
+    # sendiri-sendiri -- padahal niatnya sama-sama dapat diskon yang sama.
     voucher_code = (request_data.get("referral_code") or "").strip()
     referral_code = None
     discount_amount = Decimal("0")
@@ -3736,7 +3760,9 @@ def create_bootcamp_payment(request, registration_id):
                 {"detail": "Kode referral tidak berlaku, sudah tidak aktif, atau sudah pernah kamu pakai."},
                 status=400,
             )
-        discount_amount = referral_code.compute_discount(sub_total)
+        discount_amount = (
+            referral_code.compute_discount(per_head_price) * headcount
+        ).quantize(Decimal("0.01"))
 
     # Ajak teman -- BEDA dari kode referral di atas (itu satu kode buat siapa
     # saja; ini menyebut ORANG SPESIFIK). Sejak promonya dipindah ke form
