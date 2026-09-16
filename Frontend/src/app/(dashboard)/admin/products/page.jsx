@@ -82,6 +82,8 @@ export default function Products() {
       file_pdf_url: "",
       stock: "",
       expertise: [],
+      community_link: "",
+      owned_description: "",
     });
 
     const [editFormData, setEditFormData] = useState({
@@ -97,6 +99,8 @@ export default function Products() {
     is_active: true,
     payment_gateway_mode: "AUTO",
     expertise: [],
+    community_link: "",
+    owned_description: "",
   });
 
   const [expertiseOptions, setExpertiseOptions] = useState([]);
@@ -384,28 +388,78 @@ export default function Products() {
     }
     if (category === "Bootcamp") {
       return (
-        <div className="flex flex-col gap-2 w-full">
-          <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-            Jumlah Sesi
-          </p>
-          <input
-            type="number"
-            min="1"
-            value={data.session_count}
-            onChange={(e) =>
-              setData((prev) => ({
-                ...prev,
-                session_count: e.target.value,
-              }))
-            }
-            className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
-          />
-          <p className="text-[#94A3B8] text-[11px]">
-            Sistem otomatis menyiapkan slot sesi kosong sejumlah ini di Kelola
-            Pesanan Bootcamp, tinggal diisi tanggal, mentor, dan tautannya. Jika
-            angkanya dinaikkan saat mengedit, slot baru akan ditambahkan; jika
-            diturunkan, slot yang sudah ada tidak ikut terhapus.
-          </p>
+        <div className="flex flex-col gap-4 w-full">
+          <div className="flex flex-col gap-2 w-full">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Jumlah Sesi
+            </p>
+            <input
+              type="number"
+              min="1"
+              value={data.session_count}
+              onChange={(e) =>
+                setData((prev) => ({
+                  ...prev,
+                  session_count: e.target.value,
+                }))
+              }
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+            />
+            <p className="text-[#94A3B8] text-[11px]">
+              Sistem otomatis menyiapkan slot sesi kosong sejumlah ini di Kelola
+              Pesanan Bootcamp, tinggal diisi tanggal, mentor, dan tautannya. Jika
+              angkanya dinaikkan saat mengedit, slot baru akan ditambahkan; jika
+              diturunkan, slot yang sudah ada tidak ikut terhapus.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2 w-full">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Link Grup Komunitas (WhatsApp)
+            </p>
+            <input
+              type="url"
+              placeholder="https://chat.whatsapp.com/..."
+              value={data.community_link}
+              onChange={(e) =>
+                setData((prev) => ({
+                  ...prev,
+                  community_link: e.target.value,
+                }))
+              }
+              className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+            />
+            <p className="text-[#94A3B8] text-[11px]">
+              Ditampilkan sebagai ajakan gabung begitu peserta submit pembayaran
+              (gak perlu nunggu ACC admin), dan di halaman detail bootcamp mereka
+              di Produk Saya. Kosongkan kalau belum ada grupnya -- ajakannya
+              otomatis gak muncul.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2 w-full">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Deskripsi Setelah Dibeli (opsional)
+            </p>
+            <textarea
+              rows={4}
+              placeholder="Kosongkan buat pakai deskripsi publik yang sama seperti di /produk"
+              value={data.owned_description}
+              onChange={(e) =>
+                setData((prev) => ({
+                  ...prev,
+                  owned_description: e.target.value,
+                }))
+              }
+              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3 outline-none focus:border-[#148F89] transition-all text-[#1E293B] resize-none"
+            />
+            <p className="text-[#94A3B8] text-[11px]">
+              Ditampilkan ke peserta yang SUDAH BELI, menggantikan deskripsi
+              publik di halaman detail bootcamp mereka di Produk Saya -- bisa
+              beda dari deskripsi katalog /produk. Kosongkan buat pakai deskripsi
+              publik yang sama seperti sekarang.
+            </p>
+          </div>
         </div>
       );
     }
@@ -846,6 +900,8 @@ export default function Products() {
                                 is_active: item.is_active,
                                 payment_gateway_mode: item.payment_gateway_mode ?? "AUTO",
                                 expertise: item.expertise ?? [],
+                                community_link: item.community_link ?? "",
+                                owned_description: item.owned_description ?? "",
                               });
                               setEditImage({ key: "", preview: item.image_url || "", uploading: false });
                               setIsEditOpen(true);
@@ -1600,6 +1656,8 @@ export default function Products() {
                 is_active: viewProduct.is_active,
                 payment_gateway_mode: viewProduct.payment_gateway_mode ?? "AUTO",
                 expertise: viewProduct.expertise ?? [],
+                community_link: viewProduct.community_link ?? "",
+                owned_description: viewProduct.owned_description ?? "",
               });
               setEditImage({ key: "", preview: viewProduct.image_url || "", uploading: false });
               setIsEditOpen(true);

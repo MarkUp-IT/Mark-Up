@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Landmark, Copy, CheckCircle2, AlertCircle, Upload, FileText, Trash2, Clock, AlertTriangle, Users } from "lucide-react";
+import { Landmark, Copy, CheckCircle2, AlertCircle, Upload, FileText, Trash2, Clock, AlertTriangle, Users, MessageCircle } from "lucide-react";
 import { apiRequest, apiRequestRaw, getAccessToken } from "@/lib/api";
 import { useBankInfo } from "@/lib/bankInfo";
 import { toast } from "sonner";
@@ -280,6 +280,30 @@ export default function BootcampPaymentPage() {
               <div className={`flex items-center gap-2.5 rounded-[10px] px-4 py-3 border text-[13px] font-semibold ${PAYMENT_STATUS_META[payment.status]?.cls || ""}`}>
                 <Clock size={15} className="shrink-0" />
                 {PAYMENT_STATUS_META[payment.status]?.label || payment.status}
+              </div>
+            )}
+
+            {/* Ajakan gabung grup komunitas -- muncul langsung begitu
+                pembayaran disubmit (PENDING atau PAID, gak perlu nunggu ACC
+                admin), asal admin sudah isi link-nya di produk bootcamp ini. */}
+            {payment && registration.bootcamp_community_link && (
+              <div className="bg-[#170F26] border border-[#148F89]/30 rounded-[12px] p-6 flex flex-col items-center gap-3 text-center">
+                <MessageCircle size={28} className="text-[#148F89]" />
+                <p className="text-white font-semibold text-[14px]">
+                  Yuk, Gabung Grup Komunitas!
+                </p>
+                <p className="text-[#9CA3AF] text-[13px]">
+                  Biar gak ketinggalan info kelas dan bisa kenalan sama peserta
+                  lain, gabung ke grup WhatsApp komunitas bootcamp ini.
+                </p>
+                <a
+                  href={registration.bootcamp_community_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-[#148F89] text-white text-[13px] font-semibold px-5 py-2.5 rounded-full hover:bg-[#117a75] transition-colors"
+                >
+                  Gabung Sekarang
+                </a>
               </div>
             )}
 
