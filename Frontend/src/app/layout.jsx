@@ -26,6 +26,25 @@ const inter = Inter({
   weight: ["200", "300", "400", "500", "600", "700", "800"],
 });
 
+// Matiin Full Route Cache Next.js buat SELURUH app. Tanpa ini, halaman yang
+// isinya 100% "use client" (gak ada data server) dianggap Next.js statis dan
+// di-prerender sekali lalu di-cache s-maxage=1 tahun -- termasuk kalau yang
+// kebetulan ke-capture pas prerender itu state <Suspense> loading.jsx-nya
+// (bukan konten asli), itu ikut ke-cache selama itu juga dan disajikan ke
+// SEMUA orang (termasuk bot/crawler yang gak jalanin JS) sampai revalidasi
+// alami berikutnya -- yang kalau trafiknya sepi bisa lama banget. Ini
+// kejadian beneran: dari luar keliatan cuma spinner "Memuat halaman..." doang
+// di seluruh halaman (/, /products, /checkout/.../payment, /login), padahal
+// via browser normal (JS jalan) kelihatan baik-baik saja. Konsekuensinya
+// bukan cuma soal SEO -- tim verifikasi payment gateway yang script-nya gak
+// eksekusi JS bisa nyangka situsnya belum jadi.
+//
+// force-dynamic bikin SETIAP request selalu di-render ulang di server (gak
+// ada yang disajikan dari cache lama) -- korbanin sedikit TTFB, tapi jaminan
+// kontennya SELALU yang terbaru & lengkap buat siapa pun yang buka, manusia
+// ataupun alat otomatis.
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
