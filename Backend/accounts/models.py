@@ -198,6 +198,43 @@ class AuditLog(models.Model):
         return f"{self.action} {self.table_name} by {self.admin}"
 
 
+class BroadcastFilterType(models.TextChoices):
+    ALL = "ALL", "Semua User"
+    ROLE = "ROLE", "Per Role"
+    BOUGHT_PRODUCT = "BOUGHT_PRODUCT", "Sudah Beli Produk Ini"
+    BOOTCAMP_REGISTERED = "BOOTCAMP_REGISTERED", "Sudah Daftar Bootcamp Ini"
+    MANUAL = "MANUAL", "Daftar Email Manual"
+
+
+class BroadcastEmail(models.Model):
+    """Catatan (log) tiap kali admin ngirim email massal lewat panel
+    Kirim Email -- BUKAN antrian kirim (pengiriman aslinya langsung di
+    fungsi yang bikin baris ini, lihat send_broadcast_email di views.py).
+    Baris ini murni buat jejak audit: siapa ngirim apa, ke berapa orang,
+    kapan -- biar gak ada yang nanya "email itu beneran kekirim gak sih"
+    tanpa histori yang bisa dicek balik."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    admin = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="broadcast_emails")
+    subject = models.CharField(max_length=255)
+    message = models.TextField()
+    filter_type = models.CharField(max_length=30, choices=BroadcastFilterType.choices)
+    # Ringkasan yang enak dibaca manusia buat filter yang dipakai (mis.
+    # "Role: Mentee" atau "Sudah beli: 101 Career Mentoring") -- disimpan
+    # sebagai teks jadi, bukan disusun ulang dari filter_params tiap kali
+    # ditampilkan (produk/bootcamp yang dipakai bisa saja sudah dihapus).
+    filter_summary = models.CharField(max_length=255, blank=True, default="")
+    recipient_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Broadcast Email"
+        verbose_name_plural = "Broadcast Emails"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.subject} -> {self.recipient_count} penerima"
+
+
 class Notification(models.Model):
     """Notifikasi IN-APP per user, buat tombol lonceng di dashboard student
     & mentor -- BEDA dari notify_team di accounts/utils.py (yang ngirim

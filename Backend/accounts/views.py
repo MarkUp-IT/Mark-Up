@@ -11,7 +11,7 @@ from .forms import RegisterForm, UpdateProfileForm
 from mark_up.imaging import compress_or_original, is_real_image, MAX_DIM_AVATAR
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import User, UserRole, UserStatus, ContactMessage, ContactMessageStatus, AuditAction
+from .models import User, UserRole, UserStatus, ContactMessage, ContactMessageStatus, AuditAction, BroadcastEmail, BroadcastFilterType
 from .decorators import jwt_required, role_required
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
@@ -1426,3 +1426,194 @@ def mark_notifications_read(request):
 		return JsonResponse({"detail": "Sertakan 'id' atau 'all'."}, status=400)
 
 	return JsonResponse({"detail": "Ditandai sudah dibaca.", "jumlah": jumlah}, status=200)
+
+
+def _resolve_broadcast_recipients(filter_type, params):
+	"""Balikin QuerySet User sesuai filter -- dipakai BARENG oleh endpoint
+	preview (cuma hitung/contoh) dan endpoint kirim beneran, supaya dua-duanya
+	GAK PERNAH ketuker hasilnya (preview bilang 50 orang, pas kirim ternyata
+	80 -- itu yang mau dihindari)."""
+	if filter_type == BroadcastFilterType.ALL:
+		return User.objects.all()
+
+	if filter_type == BroadcastFilterType.ROLE:
+		role = (params.get("role") or "").upper()
+		if role not in UserRole.values:
+			return User.objects.none()
+		return User.objects.filter(role=role)
+
+	if filter_type == BroadcastFilterType.BOUGHT_PRODUCT:
+		product_id = params.get("product_id")
+		if not product_id:
+			return User.objects.none()
+		return User.objects.filter(product_libraries__product_id=product_id).distinct()
+
+	if filter_type == BroadcastFilterType.BOOTCAMP_REGISTERED:
+		bootcamp_id = params.get("bootcamp_id")
+		if not bootcamp_id:
+			return User.objects.none()
+		from products.models import BootcampRegistration
+
+		regs = BootcampRegistration.objects.filter(package__bootcamp_id=bootcamp_id)
+		status = params.get("status")
+		if status:
+			regs = regs.filter(status=status)
+		return User.objects.filter(id__in=regs.values("user_id")).distinct()
+
+	if filter_type == BroadcastFilterType.MANUAL:
+		raw = params.get("emails") or []
+		emails = [e.strip().lower() for e in raw if isinstance(e, str) and e.strip()]
+		if not emails:
+			return User.objects.none()
+		return User.objects.filter(email__in=emails)
+
+	return User.objects.none()
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def preview_broadcast_recipients(request):
+	"""Hitung berapa orang bakal kena kirim SEBELUM beneran dikirim --
+	admin bisa mastiin filternya bener dulu, gak langsung nembak ke semua
+	orang begitu klik kirim."""
+	if request.method != "POST":
+		return HttpResponseNotAllowed(["POST"])
+
+	data = get_request_data(request)
+	if data is None:
+		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+	filter_type = (data.get("filter_type") or "").upper()
+	if filter_type not in BroadcastFilterType.values:
+		return JsonResponse({"detail": "filter_type tidak dikenali."}, status=400)
+
+	users = _resolve_broadcast_recipients(filter_type, data.get("filter_params") or {})
+	count = users.count()
+	sample = list(users.order_by("email").values_list("email", flat=True)[:10])
+
+	return JsonResponse({"count": count, "sample_emails": sample}, status=200)
+
+
+# Batas jumlah penerima per pengiriman -- pagar pengaman biar admin gak
+# nembak email ke ribuan orang sekaligus cuma gara-gara salah pilih
+# filter (mis. lupa isi product_id, keliru pilih "Semua User"). Kalau
+# beneran butuh lebih banyak, bisa dikirim bertahap.
+BROADCAST_MAX_RECIPIENTS = 300
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def send_broadcast_email(request):
+	"""Kirim email ke banyak (atau satu) penerima sekaligus, sesuai filter.
+	Dikirim SINKRON (bukan send_mail_async/thread) -- pelajaran dari kejadian
+	nyata: skrip sekali-jalan yang mancarin thread lalu langsung exit bikin
+	thread pengirimnya ikut mati sebelum sempat connect ke Brevo, emailnya
+	gak ada yang beneran nyampe walau kelihatan 'berhasil' dipanggil. Di sini
+	aman dikirim sinkron karena prosesnya (gunicorn worker) hidup terus,
+	bukan proses sekali-jalan -- tinggal jaga jumlah penerima gak kebesaran
+	(lihat BROADCAST_MAX_RECIPIENTS) biar gak kelamaan nyampe timeout worker."""
+	if request.method != "POST":
+		return HttpResponseNotAllowed(["POST"])
+
+	if is_rate_limited(f"rl:broadcast-email:admin:{request.user.id}", limit=10, window_seconds=3600):
+		return JsonResponse(
+			{"detail": "Terlalu banyak pengiriman broadcast dalam 1 jam terakhir. Coba lagi nanti."},
+			status=429,
+		)
+
+	data = get_request_data(request)
+	if data is None:
+		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+	filter_type = (data.get("filter_type") or "").upper()
+	if filter_type not in BroadcastFilterType.values:
+		return JsonResponse({"detail": "filter_type tidak dikenali."}, status=400)
+
+	subject = (data.get("subject") or "").strip()
+	message = (data.get("message") or "").strip()
+	if not subject or not message:
+		return JsonResponse({"detail": "Subjek dan isi pesan wajib diisi."}, status=400)
+
+	filter_params = data.get("filter_params") or {}
+	filter_summary = (data.get("filter_summary") or "").strip()
+
+	users = list(
+		_resolve_broadcast_recipients(filter_type, filter_params)
+		.exclude(email="")
+		.values_list("email", flat=True)
+		.distinct()
+	)
+	if not users:
+		return JsonResponse({"detail": "Gak ada penerima yang cocok dengan filter ini."}, status=400)
+	if len(users) > BROADCAST_MAX_RECIPIENTS:
+		return JsonResponse(
+			{"detail": (
+				f"Penerima ({len(users)} orang) melebihi batas {BROADCAST_MAX_RECIPIENTS} sekali kirim. "
+				"Persempit filternya, atau kirim bertahap."
+			)},
+			status=400,
+		)
+
+	from django.conf import settings as dj_settings
+	from django.core.mail import send_mail as dj_send_mail
+
+	terkirim, gagal = 0, 0
+	for email in users:
+		try:
+			n = dj_send_mail(
+				subject=subject, message=message,
+				from_email=dj_settings.DEFAULT_FROM_EMAIL,
+				recipient_list=[email], fail_silently=True,
+			)
+			if n >= 1:
+				terkirim += 1
+			else:
+				gagal += 1
+		except Exception:
+			logger.exception("Broadcast email gagal ke %s", email)
+			gagal += 1
+
+	BroadcastEmail.objects.create(
+		admin=request.user, subject=subject, message=message,
+		filter_type=filter_type, filter_summary=filter_summary,
+		recipient_count=terkirim,
+	)
+	log_audit(
+		request, AuditAction.CREATE, "broadcast_emails",
+		new_data={"subject": subject, "filter_type": filter_type, "recipient_count": terkirim},
+	)
+
+	return JsonResponse(
+		{
+			"detail": f"Email terkirim ke {terkirim} penerima." + (f" ({gagal} gagal)" if gagal else ""),
+			"sent_count": terkirim,
+			"failed_count": gagal,
+		},
+		status=200,
+	)
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_broadcast_history(request):
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	logs = BroadcastEmail.objects.select_related("admin").order_by("-created_at")[:100]
+	return JsonResponse(
+		{
+			"broadcasts": [
+				{
+					"id": str(b.id),
+					"admin_name": b.admin.fullname if b.admin else "(dihapus)",
+					"subject": b.subject,
+					"filter_type": b.filter_type,
+					"filter_summary": b.filter_summary,
+					"recipient_count": b.recipient_count,
+					"created_at": b.created_at.isoformat(),
+				}
+				for b in logs
+			]
+		},
+		status=200,
+	)
