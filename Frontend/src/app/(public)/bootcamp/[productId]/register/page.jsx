@@ -51,6 +51,7 @@ function BootcampRegisterPageInner() {
 
   const [loading, setLoading] = useState(true);
   const [myRegs, setMyRegs] = useState([]);
+  const [myInvitations, setMyInvitations] = useState([]);
   const [selectedPackageId, setSelectedPackageId] = useState("");
   const [file, setFile] = useState(null);
   const [commitmentLetterFile, setCommitmentLetterFile] = useState(null);
@@ -162,6 +163,7 @@ function BootcampRegisterPageInner() {
       if (getAccessToken()) {
         const regRes = await apiRequest("/api/products/bootcamp-registrations/me/");
         setMyRegs((regRes?.registrations || []).filter((r) => r.bootcamp_id === productId));
+        setMyInvitations((regRes?.invitations || []).filter((i) => i.bootcamp_id === productId));
       }
     } catch (err) {
       console.error(err);
@@ -327,6 +329,50 @@ function BootcampRegisterPageInner() {
               <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5">
                 <h2 className="font-bold text-[15px] mb-4">Timeline Utama</h2>
                 <BootcampTimeline items={timeline} />
+              </div>
+            )}
+
+            {/* Status kalau kamu DIUNDANG ketua tim lain -- belum punya
+                registrasi sendiri (baru dibuatkan begitu ketua bayar & di-ACC
+                admin, lihat _provision_team_members), jadi TANPA kartu ini
+                gak ada apa pun yang ditampilkan buat anggota tim, cuma form
+                pendaftaran kosong seolah mereka belum pernah diundang. */}
+            {myInvitations.length > 0 && (
+              <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-3">
+                <h2 className="font-bold text-[15px]">Kamu Diundang ke Tim</h2>
+                {myInvitations.map((inv) => {
+                  const meta = STATUS_META[inv.leader_status] || STATUS_META.registered;
+                  return (
+                    <div key={inv.id} className="flex flex-col gap-2.5 border-b border-[#2D2342] last:border-0 pb-3 last:pb-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex flex-col">
+                          <span className="text-[14px] font-semibold">Paket {inv.package_name}</span>
+                          <span className="text-[#9CA3AF] text-[12px]">
+                            Diundang oleh {inv.leader_name}
+                          </span>
+                        </div>
+                        <span className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border whitespace-nowrap ${meta.cls}`}>
+                          {meta.label}
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2 px-3 py-2 rounded-[8px] text-[12px] font-medium border bg-[#148F89]/10 text-[#148F89] border-[#148F89]/30">
+                        <Users size={14} className="shrink-0 mt-0.5" />
+                        <span>
+                          Kamu gak perlu bayar apa pun sendiri -- {inv.leader_name} yang membayar
+                          buat seluruh tim.{" "}
+                          {inv.leader_status === "registered" &&
+                            "Timnya masih menunggu ditinjau admin."}
+                          {inv.leader_status === "accepted" && inv.leader_payment_status !== "PAID" &&
+                            "Tim kamu sudah DITERIMA, tinggal menunggu ketua menyelesaikan pembayaran."}
+                          {inv.leader_status === "accepted" && inv.leader_payment_status === "PAID" &&
+                            "Pembayaran ketua sudah lunas -- akses kamu akan aktif sebentar lagi."}
+                          {inv.leader_status === "rejected" &&
+                            "Sayangnya tim ini tidak diterima. Kamu tetap bisa daftar sendiri kalau mau."}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
