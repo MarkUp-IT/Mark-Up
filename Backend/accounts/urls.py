@@ -31,6 +31,9 @@ from .views import (
     get_student_sidebar_badges,
     get_notifications,
     mark_notifications_read,
+    preview_broadcast_recipients,
+    send_broadcast_email,
+    get_broadcast_history,
 )
 
 urlpatterns = [
@@ -63,6 +66,9 @@ urlpatterns = [
     path("me/sidebar-badges/", get_student_sidebar_badges, name="api_student_sidebar_badges"),
     path("me/notifications/", get_notifications, name="api_notifications_list"),
     path("me/notifications/mark-read/", mark_notifications_read, name="api_notifications_mark_read"),
+    path("broadcast-email/preview/", preview_broadcast_recipients, name="api_broadcast_email_preview"),
+    path("broadcast-email/send/", send_broadcast_email, name="api_broadcast_email_send"),
+    path("broadcast-email/history/", get_broadcast_history, name="api_broadcast_email_history"),
     # Laporan error yang terjadi di browser pengguna -- tanpa login, lihat
     # report_client_error di views.py untuk alasan & pembatasnya.
     path("client-error/", report_client_error, name="api_report_client_error"),

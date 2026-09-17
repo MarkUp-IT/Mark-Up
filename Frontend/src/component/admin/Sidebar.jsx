@@ -27,6 +27,7 @@ import {
   LogOut,
   X,
   Undo2,
+  Send,
 } from "lucide-react";
 
 const menuList = [
@@ -58,6 +59,7 @@ const otherMenuList = [
   { name: "Sertifikat", url: "/admin/certificates", icon: Award },
   { name: "Ulasan", url: "/admin/feedbacks", icon: MessageSquare, badgeKey: "reviews" },
   { name: "Pesan Masuk", url: "/admin/messages", icon: Inbox, badgeKey: "messages" },
+  { name: "Kirim Email", url: "/admin/broadcast-email", icon: Send },
   { name: "Audit Trail", url: "/admin/audit-trail", icon: History },
 ];
 
