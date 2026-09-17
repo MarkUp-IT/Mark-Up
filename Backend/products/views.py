@@ -2164,6 +2164,30 @@ def register_bootcamp(request):
             {"detail": "Kamu sudah mendaftar untuk paket ini."}, status=400
         )
 
+    # Ditolak kalau user ini sudah jadi ANGGOTA TIM yang diundang ketua lain di
+    # bootcamp yang SAMA (belum diprovisikan sendiri -- makanya query di atas,
+    # yang cek BootcampRegistration miliknya sendiri, gak nangkep kasus ini).
+    # Tanpa cek ini, anggota yang bingung ("kok saya gak lihat status apa-apa
+    # di web?" -- lihat catatan di get_my_bootcamp_registrations) bisa gak
+    # sengaja daftar & BAYAR SENDIRI, padahal ketuanya sudah/akan membayar
+    # buat seluruh tim termasuk dia -- berakhir bayar dua kali buat satu orang.
+    # Dikecualikan kalau ketuanya REJECTED -- itu artinya undangannya sudah
+    # gak berlaku, dia bebas daftar sendiri.
+    undangan_aktif = BootcampTeamInvite.objects.filter(
+        invitee=request.user, leader_registration__package__bootcamp=package.bootcamp,
+    ).exclude(leader_registration__status=BootcampRegistration.Status.REJECTED).select_related(
+        "leader_registration__user"
+    ).first()
+    if undangan_aktif:
+        return JsonResponse(
+            {"detail": (
+                f"Kamu sudah diundang {undangan_aktif.leader_registration.user.fullname} "
+                f"untuk gabung timnya di bootcamp ini -- gak perlu daftar sendiri. "
+                f"Begitu ketua tim membayar dan di-ACC admin, kamu otomatis dapat akses."
+            )},
+            status=400,
+        )
+
     bootcamp = package.bootcamp
 
     # --- Isian yang wajib menurut pengaturan bootcamp ini ---------------
@@ -2364,8 +2388,43 @@ def get_my_bootcamp_registrations(request):
         .prefetch_related("payment_transactions")
         .order_by("-created_at")
     )
+    reg_bootcamp_ids = {r.package.bootcamp_id for r in regs}
+
+    # Anggota tim yang DIUNDANG (bukan ketua) sebelumnya gak punya cara SAMA
+    # SEKALI buat cek status timnya sendiri -- BootcampRegistration baru
+    # dibuatkan buat mereka setelah ketua BAYAR & di-ACC admin (lihat
+    # _provision_team_members di transactions/views.py), jadi sampai titik
+    # itu list `regs` di atas kosong buat mereka, dan halaman pendaftaran
+    # cuma nampilin form kosong seolah mereka belum pernah diundang sama
+    # sekali. Sengaja DIKECUALIKAN kalau anggota ini SUDAH punya registrasi
+    # sendiri di bootcamp yang sama (baik karena sudah diprovisikan lewat tim,
+    # atau -- kasus langka -- sempat daftar sendiri terpisah) supaya gak
+    # dobel ditampilkan di dua tempat.
+    invites = (
+        BootcampTeamInvite.objects.filter(invitee=request.user)
+        .exclude(leader_registration__package__bootcamp_id__in=reg_bootcamp_ids)
+        .select_related("leader_registration__user", "leader_registration__package__bootcamp")
+    )
+    invitations = []
+    for inv in invites:
+        leader_reg = inv.leader_registration
+        leader_txn = leader_reg.payment_transactions.order_by("-created_at").first()
+        invitations.append({
+            "id": str(inv.id),
+            "leader_name": leader_reg.user.fullname,
+            "package_name": leader_reg.package.name,
+            "bootcamp_id": str(leader_reg.package.bootcamp_id),
+            "bootcamp_title": leader_reg.package.bootcamp.title,
+            "leader_status": leader_reg.status,
+            "leader_payment_status": leader_txn.payment_status if leader_txn else None,
+        })
+
     return JsonResponse(
-        {"registrations": [_serialize_registration(r) for r in regs]}, status=200
+        {
+            "registrations": [_serialize_registration(r) for r in regs],
+            "invitations": invitations,
+        },
+        status=200,
     )
 
 
