@@ -2453,12 +2453,29 @@ def review_bootcamp_registration(request, registration_id):
 def _send_bootcamp_review_email(reg):
     """Email ke PENDAFTAR sendiri (bukan cuma notify_team ke admin) begitu
     statusnya diputuskan -- sebelumnya cuma admin yang dapat notifikasi,
-    pendaftar harus buka web sendiri buat tau hasilnya."""
+    pendaftar harus buka web sendiri buat tau hasilnya.
+
+    Kalau `reg` ini KETUA TIM, anggota yang diundang (BootcampTeamInvite)
+    juga dikabari di titik yang sama -- lihat _send_team_member_review_email
+    di bawah. Sebelumnya cuma ketua yang dapat email; anggota lain gak tau
+    hasil seleksi timnya sama sekali kecuali buka web sendiri."""
     package = reg.package
     bootcamp_title = package.bootcamp.title
 
     bootcamp = package.bootcamp
-    total = package.price + package.commitment_fee
+
+    # Harga TIM -- logikanya sama persis kayak create_bootcamp_payment
+    # (transactions/views.py): kalau `reg` ini ketua tim, yang harus dibayar
+    # BUKAN harga solo tapi harga per kepala dikali jumlah anggota. Sebelumnya
+    # email ini SELALU pakai package.price solo apa pun status timnya, jadi
+    # ketua tim dikabari suruh bayar harga SATU ORANG padahal yang benar
+    # harga SELURUH TIM -- itulah sumber laporan "udah daftar tim kok masih
+    # kena harga solo".
+    grup = getattr(reg, "led_team_group", None)
+    is_team_leader = grup is not None and package.group_price is not None
+    headcount = package.group_size if is_team_leader else 1
+    per_head_price = package.group_price if is_team_leader else package.price
+    total = per_head_price * headcount + package.commitment_fee * headcount
     pay_link = f"{settings.FRONTEND_BASE_URL}/bootcamp/{package.bootcamp_id}/pay/{reg.id}"
 
     # Nilai yang boleh dipakai admin di templatenya. Semua sudah jadi teks siap
@@ -2496,17 +2513,26 @@ def _send_bootcamp_review_email(reg):
                 bootcamp.email_accepted_body,
             )
             send_mail_async(subject=subject, message=message, recipient_list=[reg.user.email])
+            _send_team_member_review_email(reg, is_team_leader)
             return
 
         commitment_line = (
             f" (termasuk commitment fee Rp{package.commitment_fee:,.0f} yang dikembalikan penuh di akhir program)"
             if package.commitment_fee > 0 else ""
         )
+        # Ketegasan "buat SELURUH tim" sengaja ditambahkan pas is_team_leader
+        # -- tanpa ini, angka totalnya bisa disalahartikan sebagai harga per
+        # orang (padahal itu sudah gabungan seluruh anggota).
+        team_line = (
+            f" untuk seluruh tim ({headcount} orang, Rp{per_head_price:,.0f}/orang)"
+            if is_team_leader else ""
+        )
         subject = f"Pendaftaran Bootcamp Diterima -- {bootcamp_title}"
         message = (
             f"Halo {reg.user.fullname},\n\n"
             f"Selamat! Pendaftaran kamu untuk paket {package.name} di {bootcamp_title} DITERIMA.\n\n"
-            f"Langkah selanjutnya, lakukan pembayaran sebesar Rp{total:,.0f}{commitment_line} lewat tautan berikut:\n{pay_link}\n\n"
+            f"Langkah selanjutnya, lakukan pembayaran sebesar Rp{total:,.0f}{team_line}{commitment_line} "
+            f"lewat tautan berikut:\n{pay_link}\n\n"
             "Setelah bukti transfer kamu unggah, tim admin akan memverifikasi dalam waktu 1x24 jam.\n\n"
             "Sampai jumpa di kelas!"
         )
@@ -2518,6 +2544,7 @@ def _send_bootcamp_review_email(reg):
                 bootcamp.email_rejected_body,
             )
             send_mail_async(subject=subject, message=message, recipient_list=[reg.user.email])
+            _send_team_member_review_email(reg, is_team_leader)
             return
 
         subject = f"Update Pendaftaran Bootcamp -- {bootcamp_title}"
@@ -2535,6 +2562,53 @@ def _send_bootcamp_review_email(reg):
         message=message,
         recipient_list=[reg.user.email],
     )
+    _send_team_member_review_email(reg, is_team_leader)
+
+
+def _send_team_member_review_email(reg, is_team_leader):
+    """Kabari ANGGOTA TIM yang diundang (bukan cuma ketua) begitu hasil
+    seleksi ketuanya diputuskan -- sebelumnya cuma ketua yang dapat email,
+    anggota lain gak tau apa-apa kecuali ketuanya cerita sendiri. No-op kalau
+    `reg` bukan ketua tim (registrasi solo tidak punya anggota buat dikabari).
+
+    Isi emailnya SENGAJA beda dari email ketua: anggota TIDAK PERNAH diminta
+    bayar apa pun (ketua yang bayar buat semua), jadi gak ada link_bayar atau
+    angka total di sini -- cuma kabar status timnya."""
+    if not is_team_leader:
+        return
+
+    package = reg.package
+    bootcamp_title = package.bootcamp.title
+    invites = BootcampTeamInvite.objects.filter(leader_registration=reg).select_related("invitee")
+
+    if reg.status == BootcampRegistration.Status.ACCEPTED:
+        subject = f"Tim Kamu Diterima -- {bootcamp_title}"
+        body_template = (
+            "Halo {nama},\n\n"
+            f"Kabar baik! Tim yang kamu ikuti (diajak oleh {reg.user.fullname}) untuk paket "
+            f"{package.name} di {bootcamp_title} DITERIMA.\n\n"
+            f"Kamu tidak perlu bayar apa pun sendiri -- {reg.user.fullname} (ketua tim) yang akan "
+            "menyelesaikan pembayaran untuk seluruh anggota sekaligus. Begitu pembayarannya "
+            "dikonfirmasi admin, kamu otomatis dapat akses penuh ke kelas ini tanpa perlu langkah "
+            "tambahan apa pun dari kamu.\n\n"
+            "Sampai jumpa di kelas!"
+        )
+    else:
+        subject = f"Update Pendaftaran Tim -- {bootcamp_title}"
+        body_template = (
+            "Halo {nama},\n\n"
+            f"Mohon maaf, tim yang kamu ikuti (diajak oleh {reg.user.fullname}) untuk paket "
+            f"{package.name} di {bootcamp_title} belum bisa kami terima kali ini.\n\n"
+            "Terima kasih sudah mendaftar di MARK-UP."
+        )
+
+    for invite in invites:
+        anggota = invite.invitee
+        send_mail_async(
+            subject=subject,
+            message=body_template.format(nama=anggota.fullname),
+            recipient_list=[anggota.email],
+        )
 
 
 # ---------- Timeline utama program (milestone, bukan jadwal sesi kelas) ----------
