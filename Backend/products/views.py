@@ -1124,6 +1124,30 @@ def update_refund_request(request, refund_id):
         old_data={"status": old_status}, new_data={"status": refund.status},
     )
 
+    # Sebelumnya pengaju refund SAMA SEKALI gak dikabari hasil keputusannya
+    # (cuma admin yang tahu lewat log audit) -- dia harus buka dashboard
+    # sendiri buat tahu disetujui/ditolak. Sama pentingnya kayak notifikasi
+    # pembayaran lunas/ditolak.
+    produk_detail = _get_product_detail(refund.user_library.product)
+    judul_produk = produk_detail.title if produk_detail else "-"
+    if decision == "approved":
+        notify_user(
+            refund.user_library.user,
+            "Refund Disetujui",
+            f"Pengajuan refund kamu untuk \"{judul_produk}\" DISETUJUI. "
+            "Akses produknya sudah dicabut."
+            + (f" Catatan admin: {refund.admin_notes}" if refund.admin_notes else ""),
+            url="/user/transactions",
+        )
+    else:
+        notify_user(
+            refund.user_library.user,
+            "Refund Ditolak",
+            f"Pengajuan refund kamu untuk \"{judul_produk}\" belum bisa kami setujui."
+            + (f" Alasan: {refund.admin_notes}" if refund.admin_notes else " Hubungi tim support kami untuk info lebih lanjut."),
+            url="/user/my-products",
+        )
+
     return JsonResponse(_serialize_refund_request(refund), status=200)
 
 
