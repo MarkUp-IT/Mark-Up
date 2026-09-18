@@ -1637,6 +1637,12 @@ def get_broadcast_history(request):
 					"id": str(b.id),
 					"admin_name": b.admin.fullname if b.admin else "(dihapus)",
 					"subject": b.subject,
+					# Isi lengkap ikut dikirim di sini (bukan endpoint detail
+					# terpisah) -- daftarnya dibatasi 100 baris & admin-only,
+					# jadi ukuran payload-nya gak jadi masalah, dan ini lebih
+					# simpel daripada bikin round-trip tambahan pas admin
+					# klik satu baris buat lihat isinya.
+					"message": b.message,
 					"filter_type": b.filter_type,
 					"filter_summary": b.filter_summary,
 					"recipient_count": b.recipient_count,

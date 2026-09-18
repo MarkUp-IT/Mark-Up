@@ -1,6 +1,6 @@
 "use client";
 
-import { Send, Users, ChevronDown, AlertTriangle, X, History } from "lucide-react";
+import { Send, Users, ChevronDown, AlertTriangle, X, History, Eye } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
@@ -56,6 +56,7 @@ export default function BroadcastEmailPage() {
 
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [viewingBroadcast, setViewingBroadcast] = useState(null);
 
   const bootcampProducts = products.filter((p) => p.type === "BOOTCAMP");
 
@@ -351,6 +352,7 @@ export default function BroadcastEmailPage() {
                     <th className="px-6 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider uppercase" style={{ width: "110px" }}>PENERIMA</th>
                     <th className="px-6 py-3.5 font-bold text-[#64748B] text-[11px] tracking-wider uppercase" style={{ width: "140px" }}>ADMIN</th>
                     <th className="px-6 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider uppercase" style={{ width: "150px" }}>TANGGAL</th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] text-[11px] tracking-wider uppercase" style={{ width: "70px" }}>ISI</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0]">
@@ -361,6 +363,15 @@ export default function BroadcastEmailPage() {
                       <td className="px-6 py-4 align-top text-center text-[#1E293B] font-semibold">{b.recipient_count}</td>
                       <td className="px-6 py-4 align-top text-[#64748B] text-[12.5px]">{b.admin_name}</td>
                       <td className="px-6 py-4 align-top text-center text-[#64748B] text-[12px] whitespace-nowrap">{formatDate(b.created_at)}</td>
+                      <td className="px-6 py-4 align-top text-center">
+                        <button
+                          onClick={() => setViewingBroadcast(b)}
+                          className="text-[#94A3B8] hover:text-[#148F89] transition-colors p-2 rounded-full hover:bg-[#148F89]/10"
+                          title="Lihat isi email"
+                        >
+                          <Eye size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -369,6 +380,40 @@ export default function BroadcastEmailPage() {
           </div>
         )}
       </div>
+
+      {viewingBroadcast && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setViewingBroadcast(null)} />
+          <div style={{ width: "520px", maxWidth: "100%", maxHeight: "85vh" }} className="relative bg-white overflow-y-auto rounded-[12px] shadow-2xl z-10">
+            <div className="px-6 py-5 border-b border-[#E2E8F0] flex justify-between items-start gap-3">
+              <div className="min-w-0">
+                <p className="text-[#1E293B] font-bold text-[17px] break-words">{viewingBroadcast.subject}</p>
+                <p className="text-[#64748B] text-[12px] mt-1">
+                  {formatDate(viewingBroadcast.created_at)} &middot; dikirim {viewingBroadcast.admin_name} &middot;{" "}
+                  {viewingBroadcast.recipient_count} penerima
+                </p>
+              </div>
+              <button onClick={() => setViewingBroadcast(null)} className="shrink-0 p-2 text-[#94A3B8] hover:text-[#0F172A] hover:bg-[#F1F5F9] rounded-full transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-6 flex flex-col gap-4">
+              <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3">
+                <p className="text-[#64748B] text-[11px] uppercase font-bold tracking-wider mb-1">Filter Penerima</p>
+                <p className="text-[#334155] text-[13px]">
+                  {viewingBroadcast.filter_summary || FILTER_LABELS[viewingBroadcast.filter_type]}
+                </p>
+              </div>
+              <div>
+                <p className="text-[#64748B] text-[11px] uppercase font-bold tracking-wider mb-1.5">Isi Email</p>
+                <p className="text-[#334155] text-[13.5px] leading-relaxed whitespace-pre-line">
+                  {viewingBroadcast.message}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
