@@ -306,9 +306,9 @@ function BootcampPaymentPageInner() {
                 <p className="text-white font-semibold text-[14px]">
                   Yuk, Gabung Grup Komunitas!
                 </p>
-                <p className="text-[#9CA3AF] text-[13px]">
-                  Biar gak ketinggalan info kelas dan bisa kenalan sama peserta
-                  lain, gabung ke grup WhatsApp komunitas bootcamp ini.
+                <p className="text-[#9CA3AF] text-[13px] whitespace-pre-line">
+                  {registration.bootcamp_community_message ||
+                    "Biar gak ketinggalan info kelas dan bisa kenalan sama peserta lain, gabung ke grup WhatsApp komunitas bootcamp ini."}
                 </p>
                 <a
                   href={registration.bootcamp_community_link}

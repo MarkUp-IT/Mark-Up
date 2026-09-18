@@ -268,6 +268,7 @@ def _serialize_product_item(p):
             item["session_count"] = detail.session_count
             item["community_link"] = detail.community_link
             item["owned_description"] = detail.owned_description
+            item["community_message"] = detail.community_message
 
     return item
 
@@ -543,6 +544,7 @@ def get_my_product_detail(request, product_id):
                 # berubah tampilannya).
                 "description": detail.owned_description or detail.description,
                 "community_link": detail.community_link,
+                "community_message": detail.community_message,
                 "image_url": _get_product_image_url(detail),
                 "sessions": [_serialize_bootcamp_session(session) for session in sessions],
                 "resources": _serialize_unlocked_bootcamp_resources(user_library),
@@ -2013,6 +2015,7 @@ def _serialize_registration(reg, for_admin=False):
         "bootcamp_id": str(reg.package.bootcamp_id),
         "bootcamp_title": reg.package.bootcamp.title,
         "bootcamp_community_link": reg.package.bootcamp.community_link,
+        "bootcamp_community_message": reg.package.bootcamp.community_message,
         "quizzes": quizzes,
         "payment": payment,
     }

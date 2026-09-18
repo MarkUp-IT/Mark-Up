@@ -84,6 +84,7 @@ export default function Products() {
       expertise: [],
       community_link: "",
       owned_description: "",
+      community_message: "",
     });
 
     const [editFormData, setEditFormData] = useState({
@@ -101,6 +102,7 @@ export default function Products() {
     expertise: [],
     community_link: "",
     owned_description: "",
+    community_message: "",
   });
 
   const [expertiseOptions, setExpertiseOptions] = useState([]);
@@ -458,6 +460,29 @@ export default function Products() {
               publik di halaman detail bootcamp mereka di Produk Saya -- bisa
               beda dari deskripsi katalog /produk. Kosongkan buat pakai deskripsi
               publik yang sama seperti sekarang.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2 w-full">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Teks Ajakan Gabung Grup (opsional)
+            </p>
+            <textarea
+              rows={3}
+              placeholder="Kosongkan buat pakai teks bawaan"
+              value={data.community_message}
+              onChange={(e) =>
+                setData((prev) => ({
+                  ...prev,
+                  community_message: e.target.value,
+                }))
+              }
+              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3 outline-none focus:border-[#148F89] transition-all text-[#1E293B] resize-none"
+            />
+            <p className="text-[#94A3B8] text-[11px]">
+              Teks yang tampil berdampingan dengan tombol gabung grup WhatsApp
+              (di kartu setelah submit pembayaran, dan di halaman Produk Saya).
+              Kosongkan buat pakai teks bawaan.
             </p>
           </div>
         </div>
@@ -902,6 +927,7 @@ export default function Products() {
                                 expertise: item.expertise ?? [],
                                 community_link: item.community_link ?? "",
                                 owned_description: item.owned_description ?? "",
+                                community_message: item.community_message ?? "",
                               });
                               setEditImage({ key: "", preview: item.image_url || "", uploading: false });
                               setIsEditOpen(true);
@@ -1658,6 +1684,7 @@ export default function Products() {
                 expertise: viewProduct.expertise ?? [],
                 community_link: viewProduct.community_link ?? "",
                 owned_description: viewProduct.owned_description ?? "",
+                community_message: viewProduct.community_message ?? "",
               });
               setEditImage({ key: "", preview: viewProduct.image_url || "", uploading: false });
               setIsEditOpen(true);
