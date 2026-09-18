@@ -654,8 +654,9 @@ export default function ProductDetail() {
               <h3 className="text-white font-semibold text-[15px] flex items-center gap-2">
                 <MessageCircle size={16} className="text-[#148F89]" /> Grup Komunitas
               </h3>
-              <p className="text-[#9CA3AF] text-[13px]">
-                Gabung buat diskusi, info kelas, dan kenalan sama peserta lain.
+              <p className="text-[#9CA3AF] text-[13px] whitespace-pre-line">
+                {product.community_message ||
+                  "Gabung buat diskusi, info kelas, dan kenalan sama peserta lain."}
               </p>
               <a
                 href={product.community_link}

@@ -197,6 +197,12 @@ class BootcampProduct(BaseProductDetail):
                    "tampil di /produk (katalog publik). Kosongkan buat pakai "
                    "deskripsi publik yang sama seperti sekarang.",
     )
+    community_message = models.TextField(
+        blank=True, default="",
+        help_text="Teks ajakan yang ditampilkan berdampingan dengan tombol gabung "
+                   "grup WhatsApp (di kartu setelah submit pembayaran, dan di halaman "
+                   "Produk Saya). Kosongkan buat pakai teks bawaan.",
+    )
 
     # --- Apa yang harus diisi pendaftar ---------------------------------
     # Dua-duanya bisa dinyalakan/dimatikan sendiri-sendiri: boleh keduanya,
