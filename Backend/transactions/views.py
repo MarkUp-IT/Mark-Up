@@ -534,6 +534,7 @@ def toggle_commitment_fee_refund(request, transaction_id):
     if txn.payment_status != PaymentStatus.PAID:
         return JsonResponse({"detail": "Transaksi ini belum lunas."}, status=400)
 
+    baru_ditandai_refund = txn.commitment_fee_refunded_at is None
     txn.commitment_fee_refunded_at = None if txn.commitment_fee_refunded_at else timezone.now()
     txn.save(update_fields=["commitment_fee_refunded_at"])
 
@@ -541,6 +542,23 @@ def toggle_commitment_fee_refund(request, transaction_id):
         request, AuditAction.UPDATE, "transactions", object_id=txn.id,
         new_data={"commitment_fee_refunded_at": str(txn.commitment_fee_refunded_at)},
     )
+
+    # Cuma notif pas BARU ditandai dikembalikan -- uang beneran balik ke
+    # buyer, layak dikabari kayak "Refund Disetujui". Kebalikannya (admin
+    # batal-tandai, mis. buat koreksi salah klik) sengaja diam-diam, sama
+    # kayak koreksi administratif lain di platform ini.
+    if baru_ditandai_refund and txn.commitment_fee_refunded_at:
+        bootcamp_title = (
+            txn.bootcamp_registration.package.bootcamp.title
+            if txn.bootcamp_registration_id else "-"
+        )
+        notify_user(
+            txn.user,
+            "Commitment Fee Dikembalikan",
+            f"Commitment fee kamu sebesar Rp {txn.commitment_fee_amount:,.0f}".replace(",", ".")
+            + f" untuk \"{bootcamp_title}\" sudah kami kembalikan.",
+            url="/user/transactions",
+        )
 
     return JsonResponse(
         {"detail": "Status pengembalian commitment fee diperbarui.",

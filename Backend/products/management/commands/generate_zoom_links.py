@@ -16,6 +16,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from accounts.utils import notify_user
 from mark_up.zoom import create_meeting
 from products.models import MentoringSession, ZoomAccount
 
@@ -139,6 +140,25 @@ class Command(BaseCommand):
             ])
             self.stdout.write(self.style.SUCCESS(f"  [OK] {label} -> {akun.label}"))
             berhasil += 1
+
+            # Sesi ini dibuat OTOMATIS lewat cron, di luar aksi user mana pun --
+            # tanpa notifikasi, peserta/mentor bisa gak sadar link-nya udah ada
+            # sampai mepet jadwal (link dibuat cuma H-lead_hours sebelum mulai).
+            mulai_str = timezone.localtime(mulai).strftime("%d %B %Y, %H:%M")
+            notify_user(
+                sesi.user_library.user,
+                "Link Zoom Sesi Mentoring Siap",
+                f"Link Zoom buat sesi mentoring \"{sesi.mentoring.title}\" (Sesi {sesi.order}) "
+                f"pada {mulai_str} WIB sudah siap.",
+                url="/user/my-products",
+            )
+            notify_user(
+                sesi.mentor.user,
+                "Link Zoom Sesi Mentoring Siap",
+                f"Link Zoom buat sesi mentoring bareng {sesi.user_library.user.fullname} "
+                f"(\"{sesi.mentoring.title}\", Sesi {sesi.order}) pada {mulai_str} WIB sudah siap.",
+                url="/mentor/mentoring-schedule",
+            )
 
         self.stdout.write(f"\nSelesai. Berhasil: {berhasil}, gagal/bentrok: {gagal}.")
         if not execute:

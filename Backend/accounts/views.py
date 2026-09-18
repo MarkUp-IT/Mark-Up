@@ -6,7 +6,7 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, AccountDeletionTokenGenerator, get_client_ip, is_rate_limited, notify_team, notify_admins, send_mail_async
+from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, AccountDeletionTokenGenerator, get_client_ip, is_rate_limited, notify_team, notify_admins, notify_user, send_mail_async
 from .forms import RegisterForm, UpdateProfileForm
 from mark_up.imaging import compress_or_original, is_real_image, MAX_DIM_AVATAR
 from rest_framework_simplejwt.exceptions import TokenError
@@ -537,6 +537,9 @@ def update_user(request, user_id):
 		mentor_profile.mentoring_fee_percent_override = override
 		mentor_profile.save(update_fields=["mentoring_fee_percent_override"])
 
+	role_changed = old_data["role"] != user.role
+	status_changed = old_data["status"] != user.status
+
 	user.save()
 
 	log_audit(
@@ -547,6 +550,26 @@ def update_user(request, user_id):
 		old_data=old_data,
 		new_data={"role": user.role, "status": user.status},
 	)
+
+	if role_changed:
+		role_label = {"ADMIN": "Admin", "MENTOR": "Mentor", "STUDENT": "Mentee"}.get(user.role, user.role)
+		role_dashboard = {"ADMIN": "/admin", "MENTOR": "/mentor/active-classes", "STUDENT": "/user/my-products"}
+		notify_user(
+			user,
+			"Role Akun Diubah",
+			f"Role akun kamu diubah jadi {role_label} oleh admin.",
+			url=role_dashboard.get(user.role, "/login"),
+		)
+	# Nonaktif sengaja TIDAK dinotif -- kalau status INACTIVE bikin user gak
+	# bisa login, notifikasi in-app-nya gak akan pernah kebaca. Aktif-lagi
+	# tetap layak dikabari, karena begitu login lagi dia bisa langsung lihat.
+	if status_changed and user.status == UserStatus.ACTIVE:
+		notify_user(
+			user,
+			"Akun Diaktifkan Kembali",
+			"Akun kamu sudah diaktifkan kembali oleh admin dan bisa dipakai normal.",
+			url="/login",
+		)
 
 	return JsonResponse({"detail": "User berhasil diperbarui.", "user": _serialize_user_row(user, request)}, status=200)
 

@@ -711,7 +711,8 @@ def schedule_my_product_session(request, session_id):
 
     now = timezone.now()
     cutoff = now + timedelta(hours=3)
-    if session.status == MentoringSession.SessionStatus.SCHEDULED:
+    is_reschedule = session.status == MentoringSession.SessionStatus.SCHEDULED
+    if is_reschedule:
         if session.start_time and session.start_time <= cutoff:
             return JsonResponse({"detail": "Reschedule tidak boleh dalam waktu 3 jam sebelum sesi."}, status=400)
         if session.availability_slot and session.availability_slot != slot:
@@ -747,6 +748,19 @@ def schedule_my_product_session(request, session_id):
     # dengan jadwal baru.
     if jadwal_bergeser and session.zoom_meeting_id:
         _lepas_meeting_zoom(session)
+
+    # Mentor perlu tahu ada sesi baru/berubah jadwal masuk ke kalendernya --
+    # beda dari notifikasi "Booking Baru" yang sudah ada (itu dipicu pas
+    # checkout produk, bukan pas slot spesifik ini dipilih/diubah).
+    notify_user(
+        session.mentor.user,
+        "Jadwal Sesi Mentoring Diubah" if is_reschedule else "Jadwal Sesi Mentoring Baru",
+        f"{session.user_library.user.fullname} "
+        + ("mengubah jadwal" if is_reschedule else "menjadwalkan")
+        + f" sesi mentoring \"{session.mentoring.title if session.mentoring else '-'}\" "
+        f"(Sesi {session.order}) ke {timezone.localtime(slot.start_time).strftime('%d %B %Y, %H:%M')} WIB.",
+        url="/mentor/mentoring-schedule",
+    )
 
     return JsonResponse(_serialize_mentoring_session(session), status=200)
 
@@ -1373,6 +1387,14 @@ def issue_certificate(request):
     log_audit(
         request, AuditAction.CREATE, "certificates", object_id=cert.id,
         new_data={"number": cert.number, "type": cert.type, "recipient": recipient.fullname},
+    )
+
+    notify_user(
+        recipient,
+        "Sertifikat Terbit",
+        f"Sertifikat kamu untuk \"{product.title if product else '-'}\" (No. {cert.number}) sudah terbit "
+        "dan bisa diunduh sekarang.",
+        url="/mentor/certificates" if recipient.role == UserRole.MENTOR else "/user/certificates",
     )
 
     return JsonResponse(
