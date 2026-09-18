@@ -1470,6 +1470,7 @@ def _resolve_broadcast_recipients(filter_type, params):
 	return User.objects.none()
 
 
+@csrf_exempt
 @jwt_required
 @role_required(UserRole.ADMIN)
 def preview_broadcast_recipients(request):
@@ -1501,6 +1502,7 @@ def preview_broadcast_recipients(request):
 BROADCAST_MAX_RECIPIENTS = 300
 
 
+@csrf_exempt
 @jwt_required
 @role_required(UserRole.ADMIN)
 def send_broadcast_email(request):
