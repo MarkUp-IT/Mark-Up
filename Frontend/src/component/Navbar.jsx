@@ -236,7 +236,12 @@ export default function Navbar({ variant = "glass" }) {
         <div className="hidden sm:block w-24 h-8 rounded-full bg-white/10 animate-pulse" />
       ) : isLoggedIn ? (
         <>
-          <NotificationBell />
+          {/* Navbar publik ini bisa dilihat user role APA PUN yang lagi
+              browsing halaman publik (bukan cuma student) -- historyUrl
+              diturunkan dari dashboardHref (sudah role-aware dari backend),
+              biar mentor/admin yang kebetulan mampir ke halaman publik gak
+              diarahkan ke /user/notifications yang gak bisa mereka akses. */}
+          <NotificationBell historyUrl={`${(profile.dashboardHref || "/user").split("/").slice(0, 2).join("/")}/notifications`} />
           {profileButton}
         </>
       ) : (

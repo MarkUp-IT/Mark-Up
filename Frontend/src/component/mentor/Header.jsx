@@ -28,7 +28,7 @@ export default function Header({
 
       {/* User Profile -- struktur & ukuran sama persis kayak Header user */}
       <div className="flex flex-row gap-2 sm:gap-4 items-center shrink-0 pl-3">
-        <NotificationBell />
+        <NotificationBell theme="dark" historyUrl="/mentor/notifications" />
         <div className="hidden sm:flex flex-col text-right">
           <p className="font-semibold text-white text-[13px]">{profileName}</p>
           <p className="text-[11px] text-[#9CA3AF]">{email}</p>

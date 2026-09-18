@@ -31,7 +31,7 @@ from programs.models import BootcampSession as BootcampSessionTemplate
 from django.utils.dateparse import parse_date
 from accounts.decorators import jwt_required, role_required
 from accounts.models import UserRole, AuditAction
-from accounts.utils import log_audit, notify_team, notify_user, is_rate_limited
+from accounts.utils import log_audit, notify_team, notify_admins, notify_user, is_rate_limited
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Sum, Case, When, F, DecimalField
@@ -319,7 +319,8 @@ def _mark_transaction_paid(transaction_id):
         notify_user(
             txn.user,
             "Pembayaran Lunas",
-            f"Pembayaran kamu untuk \"{', '.join(judul_produk) or txn.id}\" sudah dikonfirmasi. "
+            f"Pembayaran kamu sebesar Rp {txn.grand_total:,.0f}".replace(",", ".")
+            + f" untuk \"{', '.join(judul_produk) or txn.id}\" sudah dikonfirmasi. "
             f"Akses produknya sudah terbuka sekarang.",
             url="/user/transactions",
         )
@@ -426,10 +427,16 @@ def verify_transaction(request, transaction_id):
         # BEDA dari pembatalan sendiri oleh pembeli (cancel_transaction) atau
         # kedaluwarsa reservasi iPaymu, yang keduanya sengaja diam-diam
         # (pembeli sendiri yang minta, atau memang gak sempat bayar).
+        judul_produk = []
+        for item in txn.items.select_related("product").all():
+            detail = _get_checkout_detail(item.product)
+            if detail is not None and getattr(detail, "title", None):
+                judul_produk.append(detail.title)
         notify_user(
             txn.user,
             "Pembayaran Ditolak",
-            f"Pembayaran kamu untuk transaksi {txn.id} ditolak oleh tim kami."
+            f"Pembayaran kamu sebesar Rp {txn.grand_total:,.0f}".replace(",", ".")
+            + f" untuk \"{', '.join(judul_produk) or txn.id}\" ditolak oleh tim kami."
             + (f" Alasan: {txn.notes}" if txn.notes else " Hubungi tim support kami untuk info lebih lanjut."),
             url="/user/transactions",
         )
@@ -1223,6 +1230,12 @@ def checkout_product(request):
             f"Total: Rp {txn.grand_total}\n\n"
             f"Cek & verifikasi di dashboard admin -> Transaksi.",
         )
+        notify_admins(
+            f"Transaksi Baru Menunggu Verifikasi -- {product_title}",
+            f"{request.user.fullname} ({request.user.email}) bayar sebesar "
+            f"Rp {txn.grand_total:,.0f}".replace(",", ".") + f" (ID: {txn.id}).",
+            url="/admin/transactions",
+        )
 
     return JsonResponse(
         {
@@ -1561,6 +1574,13 @@ def ipaymu_webhook(request):
                     f"Metode: {via}/{channel}\n\n"
                     f"Akses produk sudah terbuka otomatis, gak perlu ACC manual.",
                 )
+                notify_admins(
+                    f"Pembayaran iPaymu Diterima ({txn.id})",
+                    f"{txn.user.fullname} ({txn.user.email}) lunas otomatis lewat iPaymu "
+                    f"sebesar Rp {txn.grand_total:,.0f}".replace(",", ".") + f" via {via}/{channel}. "
+                    "Akses produk sudah terbuka otomatis, gak perlu ACC manual.",
+                    url="/admin/transactions",
+                )
             elif txn.payment_status == PaymentStatus.EXPIRED:
                 # Kasus langka tapi serius: pembeli BENERAN bayar di iPaymu,
                 # tapi baru sampai SETELAH reservasinya kami lepas duluan
@@ -1582,6 +1602,13 @@ def ipaymu_webhook(request):
                     f"Uangnya sudah masuk -- mohon dicek manual apakah slot/stoknya masih bisa "
                     f"dikasih ke pembeli ini, atau perlu diproses refund kalau sudah terlanjur "
                     f"diambil orang lain.",
+                )
+                notify_admins(
+                    f"[PERLU CEK MANUAL] Pembayaran iPaymu Terlambat ({txn.id})",
+                    f"{txn.user.fullname} ({txn.user.email}) sudah BAYAR (Rp {txn.grand_total:,.0f}"
+                    .replace(",", ".") + f") lewat iPaymu, tapi reservasi slot/stoknya sudah kami "
+                    f"lepas duluan (lewat {RESERVATION_MINUTES} menit). Mohon dicek manual.",
+                    url="/admin/transactions",
                 )
         elif status_code == "-2":
             _release_transaction(reference_id, PaymentStatus.EXPIRED)
