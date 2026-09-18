@@ -28,6 +28,7 @@ import {
   X,
   Undo2,
   Send,
+  Table2,
 } from "lucide-react";
 
 const menuList = [
@@ -55,6 +56,7 @@ const financeMenuList = [
 ];
 
 const otherMenuList = [
+  { name: "Eksplorasi Data", url: "/admin/data-explorer", icon: Table2 },
   { name: "Manajemen User", url: "/admin/user-management", icon: UserCog },
   { name: "Sertifikat", url: "/admin/certificates", icon: Award },
   { name: "Ulasan", url: "/admin/feedbacks", icon: MessageSquare, badgeKey: "reviews" },
