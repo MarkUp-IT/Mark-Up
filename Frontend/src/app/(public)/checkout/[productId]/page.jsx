@@ -341,18 +341,20 @@ function CheckoutDetailPageInner() {
           phone: data.user?.phone || "",
         });
 
+        // Harus sama persis sama field wajib di backend
+        // (User.PROFILE_REQUIRED_FIELDS) -- LinkedIn & foto profil SENGAJA
+        // tidak diwajibkan di sana, jadi jangan diwajibkan di sini juga.
+        // Sebelumnya field ini nambahin syarat sendiri (LinkedIn + foto)
+        // yang gak pernah dicek backend, jadi checkout ke-block padahal
+        // pembelian sendiri sebenarnya udah boleh jalan.
         const REQUIRED_FIELDS = {
           phone: "Nomor WhatsApp",
           institution: "Institusi",
           current_status: "Status Saat Ini",
-          linkedin_url: "LinkedIn",
         };
         const missingFields = Object.entries(REQUIRED_FIELDS)
           .filter(([field]) => !data.user?.[field]?.trim())
           .map(([, label]) => label);
-        if (!data.user?.profile_image) {
-          missingFields.push("Foto Profil");
-        }
 
         if (missingFields.length > 0) {
           toast.error("Lengkapi Profil Kamu Terlebih Dahulu", {
