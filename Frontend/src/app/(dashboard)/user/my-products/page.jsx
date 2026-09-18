@@ -24,7 +24,15 @@ const EMPTY_PRODUCTS = {
   bootcamp: [],
   mentoring: [],
   modul: [],
+  pending_bootcamp_payments: [],
 };
+
+const formatIDR = (val) =>
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(Number(val));
 
 // Card produk yang dipakai bareng buat Bootcamp/Mentoring/Modul. Titik-tiga
 // refund/ganti-jadwal SENGAJA nggak ada lagi di sini -- itu aksi yang lebih
@@ -388,6 +396,44 @@ export default function MyProducts() {
         <motion.p {...sectionReveal} className="text-[#6B7280] text-[13px]">
           Produk yang sudah selesai. Tekan kartunya untuk melihat rekaman tiap sesi.
         </motion.p>
+      )}
+
+      {/* Pendaftaran bootcamp yang sudah DITERIMA tapi belum dibayar.
+          Sebelum ini gak muncul di mana pun (UserLibrary baru ada setelah
+          lunas), jadi pendaftar yang lolos seleksi ngeliat halaman ini kosong
+          dan ngira gak ada opsi bayar sama sekali. */}
+      {!loading && !loadError && (data.pending_bootcamp_payments || []).length > 0 && (
+        <motion.div {...sectionReveal} className="flex flex-col gap-3">
+          {data.pending_bootcamp_payments.map((p) => (
+            <div
+              key={p.registration_id}
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-[12px] border border-[#F59E0B]/40 bg-[#F59E0B]/10 p-5"
+            >
+              <div className="flex flex-col gap-1 min-w-0">
+                <p className="text-[#F59E0B] text-[12px] font-bold uppercase tracking-wider">
+                  Menunggu Pembayaran
+                </p>
+                <p className="text-white font-semibold text-[15px]">
+                  {p.bootcamp_title} &middot; Paket {p.package_name}
+                </p>
+                <p className="text-[#9CA3AF] text-[13px]">
+                  Pendaftaran kamu sudah DITERIMA. Selesaikan pembayaran sebesar{" "}
+                  <span className="text-white font-semibold">
+                    {formatIDR(p.total)}
+                  </span>
+                  {p.is_team_leader ? ` (untuk ${p.headcount} orang, kamu ketua tim)` : ""}{" "}
+                  untuk mengaktifkan akses kelasmu.
+                </p>
+              </div>
+              <Link
+                href={`/bootcamp/${p.bootcamp_id}/pay/${p.registration_id}`}
+                className="shrink-0 rounded-[8px] bg-[#148F89] px-5 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#117A75] text-center"
+              >
+                Bayar Sekarang
+              </Link>
+            </div>
+          ))}
+        </motion.div>
       )}
 
       {!loading && !loadError && (showBootcamp || isRiwayat) && (

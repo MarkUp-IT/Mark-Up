@@ -1361,8 +1361,36 @@ def get_student_sidebar_badges(request):
 		if is_completed and library.product_id not in reviewed_product_ids:
 			needs_rating += 1
 
+	# Pendaftaran bootcamp yang sudah DITERIMA tapi belum dibayar -- sebelum
+	# ini gak kehitung di badge mana pun, jadi pendaftar yang lolos seleksi
+	# gak punya petunjuk apa pun di dashboard bahwa dia masih punya tagihan
+	# (Produk Saya & Transaksi dua-duanya masih kosong sampai dia bayar).
+	# Anggota tim yang diundang sengaja TIDAK dihitung: yang bayar ketuanya.
+	from products.models import BootcampRegistration
+
+	perlu_bayar = 0
+	regs_accepted = BootcampRegistration.objects.filter(
+		user=request.user, status=BootcampRegistration.Status.ACCEPTED,
+	).select_related("package").prefetch_related("payment_transactions")
+	for reg in regs_accepted:
+		deadline = reg.package.payment_deadline_at
+		if deadline and timezone.now() > deadline:
+			continue
+		sudah_ada = any(
+			t.payment_status in (PaymentStatus.PENDING, PaymentStatus.PAID)
+			for t in reg.payment_transactions.all()
+		)
+		if not sudah_ada:
+			perlu_bayar += 1
+
 	data = {
-		"my_products": needs_rating,
+		# Dipisah supaya halaman Produk Saya bisa nampilin kartu "selesaikan
+		# pembayaran" khusus buat kasus ini, bukan cuma angka di sidebar.
+		"bootcamp_payment": perlu_bayar,
+		# Ikut dijumlahin ke badge Produk Saya supaya titik notifikasinya
+		# BENERAN kelihatan di sidebar -- percuma dihitung kalau gak nongol
+		# di mana pun (itu justru masalah yang mau dibenerin di sini).
+		"my_products": needs_rating + perlu_bayar,
 		# Yang dibatalkan SENDIRI oleh pembeli (tombol Batalkan Pembayaran di
 		# transaksi IPAYMU) sengaja gak dihitung -- badge ini nandain "perlu
 		# ditindaklanjuti pembeli", bukan riwayat batal yang pembeli sendiri
