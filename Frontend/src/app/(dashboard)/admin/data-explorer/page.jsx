@@ -125,10 +125,18 @@ function expandBootcampTeamMembers(registrations) {
   for (const reg of registrations) {
     if (reg.team?.role !== "leader") continue;
     for (const member of reg.team.members || []) {
-      // Kalau anggota ini SUDAH diprovisi (sudah punya baris sendiri --
-      // ketuanya sudah bayar & di-ACC), jangan digandakan.
+      // Jangan digandakan kalau anggota ini SUDAH punya BootcampRegistration
+      // sendiri di BOOTCAMP YANG SAMA -- entah karena sudah diprovisi lewat
+      // tim ini, ATAU (kasus yang sama persis dijaga backend di
+      // _provision_team_members, Backend/transactions/views.py sekitar
+      // baris 189: `BootcampRegistration.objects.filter(user=anggota,
+      // package__bootcamp=bootcamp).exists()`) karena dia sempat daftar
+      // sendiri (paket lain) di bootcamp itu sebelum ketuanya dibayar-ACC.
+      // Provisioning-nya di-skip backend buat kasus itu, jadi dia TETAP
+      // gak akan pernah punya baris role:"member" -- cek relasi tim aja
+      // gak cukup, harus dicek ke SEMUA baris bootcamp yang sama.
       const sudahAda = registrations.some(
-        (r) => r.team?.role === "member" && r.team?.leader_email === reg.user_email && r.user_email === member.email
+        (r) => r.bootcamp_id === reg.bootcamp_id && r.user_email === member.email
       );
       if (sudahAda) continue;
 
