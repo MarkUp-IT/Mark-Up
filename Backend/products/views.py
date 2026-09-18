@@ -58,7 +58,7 @@ from .models import (
 )
 from accounts.decorators import jwt_required, role_required
 from accounts.models import User, UserRole, AuditAction
-from accounts.utils import log_audit, notify_team, get_client_ip, is_rate_limited, send_mail_async
+from accounts.utils import log_audit, notify_team, notify_user, get_client_ip, is_rate_limited, send_mail_async
 from django.db.models import Q
 from mentors.models import MentorAvailability
 from transactions.models import (
@@ -465,12 +465,53 @@ def get_my_products(request):
         bootcamp_items = []
         mentoring_items = []
 
+    # Pendaftaran bootcamp yang sudah DITERIMA tapi belum dibayar. Ini BUKAN
+    # UserLibrary (itu baru ada setelah lunas), makanya dulu gak muncul di
+    # mana pun -- pendaftar yang lolos seleksi ngeliat halaman ini kosong
+    # melompong dan ngira sistemnya rusak / gak ada opsi bayar. Dikirim
+    # terpisah supaya frontend bisa nampilin kartu "selesaikan pembayaran"
+    # di atas daftar produk.
+    pending_payments = []
+    if filter_value in ("semua", "bootcamp"):
+        regs_accepted = (
+            BootcampRegistration.objects.filter(
+                user=request.user, status=BootcampRegistration.Status.ACCEPTED,
+            )
+            .select_related("package__bootcamp")
+            .prefetch_related("payment_transactions")
+        )
+        for reg in regs_accepted:
+            deadline = reg.package.payment_deadline_at
+            if deadline and timezone.now() > deadline:
+                continue
+            if any(
+                t.payment_status in (PaymentStatus.PENDING, PaymentStatus.PAID)
+                for t in reg.payment_transactions.all()
+            ):
+                continue
+            grup = getattr(reg, "led_team_group", None)
+            is_leader = grup is not None and reg.package.group_price is not None
+            headcount = reg.package.group_size if is_leader else 1
+            per_head = reg.package.group_price if is_leader else reg.package.price
+            total = per_head * headcount + reg.package.commitment_fee * headcount
+            pending_payments.append({
+                "registration_id": str(reg.id),
+                "bootcamp_id": str(reg.package.bootcamp_id),
+                "bootcamp_title": reg.package.bootcamp.title,
+                "package_name": reg.package.name,
+                "total": str(total),
+                "is_team_leader": is_leader,
+                "headcount": headcount,
+                "payment_deadline_at": deadline.isoformat() if deadline else None,
+            })
+
     return JsonResponse(
         {
             "stats": stats,
             "bootcamp": bootcamp_items,
             "mentoring": mentoring_items,
             "modul": modul_items,
+            "pending_bootcamp_payments": pending_payments,
         },
         status=200,
     )
@@ -2495,6 +2536,7 @@ def review_bootcamp_registration(request, registration_id):
 
     if keputusan_berubah:
         _send_bootcamp_review_email(reg)
+        _notify_bootcamp_review_in_app(reg)
 
     return JsonResponse(
         {
@@ -2622,6 +2664,70 @@ def _send_bootcamp_review_email(reg):
         recipient_list=[reg.user.email],
     )
     _send_team_member_review_email(reg, is_team_leader)
+
+
+def _notify_bootcamp_review_in_app(reg):
+    """Notifikasi IN-APP (lonceng dashboard) begitu hasil seleksi diputuskan.
+
+    KENAPA perlu, padahal emailnya sudah dikirim: pendaftar yang DITERIMA tapi
+    belum bayar itu TIDAK PUNYA JEJAK APA PUN di dashboard-nya -- Produk Saya
+    kosong (UserLibrary baru dibuat setelah lunas), Transaksi kosong (belum
+    ada transaksi sama sekali), dan badge sidebar semuanya 0. Jadi begitu dia
+    login, gak ada satu pun petunjuk bahwa dia punya tagihan yang nunggu
+    dibayar -- satu-satunya jalan ke halaman bayar cuma lewat halaman
+    pendaftaran bootcamp publik yang harus dicari sendiri. Ini beneran bikin
+    peserta bingung (dilaporkan langsung oleh peserta: "udah keterima tapi di
+    web gak ada opsi bayarnya").
+
+    Notifikasi ini yang nutup celah itu: lonceng langsung nyala pas login,
+    isinya link langsung ke halaman bayar."""
+    package = reg.package
+    bootcamp = package.bootcamp
+    pay_url = f"/bootcamp/{package.bootcamp_id}/pay/{reg.id}"
+
+    if reg.status == BootcampRegistration.Status.ACCEPTED:
+        notify_user(
+            reg.user,
+            f"Pendaftaran Diterima -- {bootcamp.title}",
+            f"Selamat! Pendaftaran kamu untuk paket {package.name} DITERIMA. "
+            "Klik notifikasi ini untuk menyelesaikan pembayaran.",
+            url=pay_url,
+        )
+    else:
+        notify_user(
+            reg.user,
+            f"Update Pendaftaran -- {bootcamp.title}",
+            f"Mohon maaf, pendaftaran kamu untuk paket {package.name} belum bisa "
+            "kami terima kali ini.",
+            url=f"/bootcamp/{package.bootcamp_id}/register",
+        )
+
+    # Anggota tim yang diundang juga dikabari -- mereka gak punya registrasi
+    # sendiri sampai ketua bayar, jadi dashboard mereka LEBIH kosong lagi.
+    # Sengaja TANPA link bayar: yang bayar ketua, bukan mereka.
+    grup = getattr(reg, "led_team_group", None)
+    if grup is None:
+        return
+
+    diterima = reg.status == BootcampRegistration.Status.ACCEPTED
+    for invite in BootcampTeamInvite.objects.filter(leader_registration=reg).select_related("invitee"):
+        if diterima:
+            notify_user(
+                invite.invitee,
+                f"Tim Kamu Diterima -- {bootcamp.title}",
+                f"Tim yang kamu ikuti (diajak {reg.user.fullname}) DITERIMA. Kamu gak "
+                "perlu bayar sendiri -- ketua tim yang membayar untuk semua anggota. "
+                "Begitu pembayarannya dikonfirmasi, akses kamu otomatis aktif.",
+                url=f"/bootcamp/{package.bootcamp_id}/register",
+            )
+        else:
+            notify_user(
+                invite.invitee,
+                f"Update Pendaftaran Tim -- {bootcamp.title}",
+                f"Mohon maaf, tim yang kamu ikuti (diajak {reg.user.fullname}) belum "
+                "bisa kami terima kali ini.",
+                url=f"/bootcamp/{package.bootcamp_id}/register",
+            )
 
 
 def _send_team_member_review_email(reg, is_team_leader):

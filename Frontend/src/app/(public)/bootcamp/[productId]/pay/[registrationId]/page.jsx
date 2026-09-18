@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useRequireLogin } from "@/lib/useRequireLogin";
 import { Landmark, Copy, CheckCircle2, AlertCircle, Upload, FileText, Trash2, Clock, AlertTriangle, Users, MessageCircle } from "lucide-react";
 import { apiRequest, apiRequestRaw, getAccessToken } from "@/lib/api";
 import { useBankInfo } from "@/lib/bankInfo";
@@ -24,9 +25,18 @@ const PAYMENT_STATUS_META = {
   FAILED: { label: "Ditolak, Bisa Coba Lagi", cls: "bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/30" },
 };
 
-export default function BootcampPaymentPage() {
+function BootcampPaymentPageInner() {
   const params = useParams();
   const { productId, registrationId } = params;
+
+  // Wajib login. Sebelum ini halaman langsung nembak API tanpa cek token --
+  // pendaftar yang klik tautan bayar dari EMAIL (di browser/HP yang belum
+  // login) cuma dapat pesan "Sesi berakhir, silakan login kembali" sebagai
+  // error merah, tanpa tombol atau arahan apa pun. Dilaporkan langsung oleh
+  // peserta: dikira sesi pembayarannya yang kedaluwarsa, padahal cuma belum
+  // login. Sekarang dilempar ke /login?next=... jadi habis login balik lagi
+  // ke halaman ini otomatis.
+  const allowed = useRequireLogin();
 
   const [registration, setRegistration] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -62,9 +72,13 @@ export default function BootcampPaymentPage() {
   };
 
   useEffect(() => {
+    // Jangan nembak API kalau belum login -- useRequireLogin lagi proses
+    // lempar ke /login, dan request yang keburu jalan cuma bakal balik 401
+    // lalu nampilin error "Sesi berakhir" yang bikin salah paham.
+    if (!allowed) return;
     fetchRegistration();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registrationId]);
+  }, [registrationId, allowed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -467,5 +481,15 @@ export default function BootcampPaymentPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// useRequireLogin pakai useSearchParams, jadi wajib ada Suspense di atasnya
+// (pola yang sama dengan halaman checkout produk).
+export default function BootcampPaymentPage() {
+  return (
+    <Suspense fallback={<div className="w-full min-h-screen bg-[#0F081C]" />}>
+      <BootcampPaymentPageInner />
+    </Suspense>
   );
 }
