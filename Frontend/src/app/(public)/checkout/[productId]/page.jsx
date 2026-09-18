@@ -348,6 +348,7 @@ function CheckoutDetailPageInner() {
         // yang gak pernah dicek backend, jadi checkout ke-block padahal
         // pembelian sendiri sebenarnya udah boleh jalan.
         const REQUIRED_FIELDS = {
+          fullname: "Nama Lengkap",
           phone: "Nomor WhatsApp",
           institution: "Institusi",
           current_status: "Status Saat Ini",
