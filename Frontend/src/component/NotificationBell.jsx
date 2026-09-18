@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, CheckCheck } from "lucide-react";
+import { Bell, CheckCheck, ListChecks } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import GlassShine from "@/component/GlassShine";
 
@@ -17,14 +17,62 @@ function formatRelatif(iso) {
   return `${Math.floor(detik / 86400)} hari lalu`;
 }
 
+/** Tanggal & jam LENGKAP (bukan cuma relatif) -- ditampilkan berdampingan
+ * di tiap baris notifikasi, biar jelas kapan persisnya kejadian itu terjadi
+ * begitu notifikasinya udah beberapa hari/minggu, bukan cuma "X hari lalu". */
+function formatLengkap(iso) {
+  return new Date(iso).toLocaleString("id-ID", {
+    day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+  }) + " WIB";
+}
+
+const THEMES = {
+  dark: {
+    dropdownBg: "bg-[#170F26]/95",
+    border: "border-white/20",
+    headerBorder: "border-white/10",
+    title: "text-white",
+    action: "text-[#9CA3AF] hover:text-white",
+    itemHover: "hover:bg-white/10",
+    itemTitle: "text-white",
+    itemMsg: "text-[#9CA3AF]",
+    itemTime: "text-[#6B7280]",
+    empty: "text-[#9CA3AF]",
+    bellIcon: "text-white",
+    bellHover: "hover:bg-white/10",
+    footerBorder: "border-white/10",
+  },
+  light: {
+    dropdownBg: "bg-white",
+    border: "border-[#E2E8F0]",
+    headerBorder: "border-[#E2E8F0]",
+    title: "text-[#0F172A]",
+    action: "text-[#64748B] hover:text-[#0F172A]",
+    itemHover: "hover:bg-[#F8FAFC]",
+    itemTitle: "text-[#1E293B]",
+    itemMsg: "text-[#64748B]",
+    itemTime: "text-[#94A3B8]",
+    empty: "text-[#94A3B8]",
+    bellIcon: "text-[#475569]",
+    bellHover: "hover:bg-[#F1F5F9]",
+    footerBorder: "border-[#E2E8F0]",
+  },
+};
+
 /**
  * Tombol lonceng notifikasi -- dipakai di Navbar (role user, tampil ke mana
- * pun selagi login) dan mentor/Header (role mentor, khusus dashboard).
- * Polling ringan tiap 45 detik buat angka badge; daftarnya sendiri baru
- * ditarik ulang begitu dropdown dibuka, biar gak nge-fetch isi lengkap
+ * pun selagi login), mentor/Header (role mentor), dan admin/Header (role
+ * admin). Polling ringan tiap 45 detik buat angka badge; daftarnya sendiri
+ * baru ditarik ulang begitu dropdown dibuka, biar gak nge-fetch isi lengkap
  * terus-terusan padahal jarang dibuka.
+ *
+ * `theme` nentuin warna dropdown ("dark" buat dashboard student/mentor yang
+ * gelap, "light" buat dashboard admin yang putih). `historyUrl` nentuin
+ * tujuan tombol "Lihat semua notifikasi" di footer -- beda per role karena
+ * tiap role punya halaman histori sendiri (/user, /mentor, /admin).
  */
-export default function NotificationBell() {
+export default function NotificationBell({ theme = "dark", historyUrl }) {
+  const t = THEMES[theme] || THEMES.dark;
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
@@ -107,9 +155,9 @@ export default function NotificationBell() {
       <button
         onClick={handleToggle}
         aria-label="Notifikasi"
-        className="relative flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/10 transition-colors"
+        className={`relative flex items-center justify-center w-9 h-9 rounded-full transition-colors ${t.bellHover}`}
       >
-        <Bell size={18} className="text-white" />
+        <Bell size={18} className={t.bellIcon} />
         {unreadCount > 0 && (
           <span className="absolute top-0.5 right-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-[#EF4444] text-white text-[9px] font-bold flex items-center justify-center leading-none">
             {unreadCount > 9 ? "9+" : unreadCount}
@@ -124,24 +172,24 @@ export default function NotificationBell() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-[120%] mt-2 w-[320px] max-w-[90vw] rounded-[14px] border border-white/20 shadow-2xl z-[100] overflow-hidden"
+            className={`absolute right-0 top-[120%] mt-2 w-[340px] max-w-[90vw] rounded-[14px] border ${t.border} shadow-2xl z-[100] overflow-hidden`}
           >
             {/* backdrop-blur-md TETAP dipasang buat browser yang dukung (efek
-                progresif), TAPI latarnya sengaja dibikin pekat (bg-[#170F26]/95,
-                bukan bg-white/10) -- gak boleh gantungin keterbacaan SEMATA ke
-                blur yang kerjanya gak konsisten di semua browser/device. Kalau
-                blur-nya nyala, hasilnya kaca gelap; kalau device-nya gak dukung,
-                tetap keliatan rapi & kebaca (cuma gak nge-blur konten di belakang). */}
-            <div className="absolute inset-0 bg-[#170F26]/95 backdrop-blur-md" />
-            <GlassShine borderRadius={14} />
+                progresif), TAPI latarnya sengaja dibikin pekat (bukan /10) --
+                gak boleh gantungin keterbacaan SEMATA ke blur yang kerjanya
+                gak konsisten di semua browser/device. Kalau blur-nya nyala,
+                hasilnya kaca; kalau device-nya gak dukung, tetap keliatan
+                rapi & kebaca (cuma gak nge-blur konten di belakang). */}
+            <div className={`absolute inset-0 ${t.dropdownBg} backdrop-blur-md`} />
+            {theme === "dark" && <GlassShine borderRadius={14} />}
             <div className="relative z-10">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                <p className="text-white font-bold text-[13.5px]">Notifikasi</p>
+              <div className={`flex items-center justify-between px-4 py-3 border-b ${t.headerBorder}`}>
+                <p className={`font-bold text-[13.5px] ${t.title}`}>Notifikasi</p>
                 {unreadCount > 0 && (
                   <button
                     onClick={handleMarkAllRead}
                     disabled={loading}
-                    className="flex items-center gap-1 text-[11px] text-[#9CA3AF] hover:text-white transition-colors disabled:opacity-50"
+                    className={`flex items-center gap-1 text-[11px] transition-colors disabled:opacity-50 ${t.action}`}
                   >
                     <CheckCheck size={13} />
                     Tandai semua dibaca
@@ -151,7 +199,7 @@ export default function NotificationBell() {
 
               <div className="max-h-[360px] overflow-y-auto p-2">
                 {items.length === 0 ? (
-                  <p className="px-2 py-8 text-center text-[#9CA3AF] text-[12.5px]">
+                  <p className={`px-2 py-8 text-center text-[12.5px] ${t.empty}`}>
                     Belum ada notifikasi.
                   </p>
                 ) : (
@@ -159,7 +207,7 @@ export default function NotificationBell() {
                     <button
                       key={n.id}
                       onClick={() => handleClickItem(n)}
-                      className={`w-full text-left px-4 py-3 rounded-[10px] hover:bg-white/10 transition-colors flex gap-2.5 ${
+                      className={`w-full text-left px-4 py-3 rounded-[10px] transition-colors flex gap-2.5 ${t.itemHover} ${
                         n.is_read ? "opacity-60" : ""
                       }`}
                     >
@@ -169,18 +217,31 @@ export default function NotificationBell() {
                         }`}
                       />
                       <div className="flex flex-col gap-0.5 min-w-0">
-                        <p className="text-white text-[12.5px] font-semibold truncate">{n.title}</p>
-                        <p className="text-[#9CA3AF] text-[11.5px] leading-relaxed line-clamp-2">
+                        <p className={`text-[12.5px] font-semibold truncate ${t.itemTitle}`}>{n.title}</p>
+                        <p className={`text-[11.5px] leading-relaxed line-clamp-3 ${t.itemMsg}`}>
                           {n.message}
                         </p>
-                        <p className="text-[#6B7280] text-[10.5px] mt-0.5">
-                          {formatRelatif(n.created_at)}
+                        <p className={`text-[10.5px] mt-0.5 ${t.itemTime}`} title={formatLengkap(n.created_at)}>
+                          {formatRelatif(n.created_at)} &middot; {formatLengkap(n.created_at)}
                         </p>
                       </div>
                     </button>
                   ))
                 )}
               </div>
+
+              {historyUrl && (
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    router.push(historyUrl);
+                  }}
+                  className={`w-full flex items-center justify-center gap-1.5 px-4 py-2.5 border-t text-[11.5px] font-semibold transition-colors ${t.footerBorder} ${t.action}`}
+                >
+                  <ListChecks size={13} />
+                  Lihat semua notifikasi
+                </button>
+              )}
             </div>
           </motion.div>
         )}

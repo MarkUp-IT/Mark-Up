@@ -173,6 +173,30 @@ def notify_user(user, title, message, url=""):
         )
 
 
+def notify_admins(title, message, url=""):
+    """Bikin notifikasi IN-APP (lonceng dashboard admin) buat SEMUA admin
+    aktif sekaligus -- pasangan notify_team di atas yang ngirim EMAIL. Dua-
+    duanya dipanggil BARENG di titik yang sama (transaksi/refund/pendaftaran
+    baru dst): email buat kabar cepat ke inbox, baris Notification ini buat
+    riwayat yang tetap ada & bisa ditandai dibaca di dashboard -- admin baru
+    yang login besoknya masih bisa lihat kejadian yang kelewat, beda dari
+    email yang gampang tenggelam.
+
+    Di-loop per admin (bukan satu baris "bersama") karena Notification.user
+    adalah FK wajib ke SATU user -- polanya sama kayak notifikasi anggota
+    tim di products.views._notify_bootcamp_review_in_app."""
+    try:
+        from .models import Notification, User, UserRole
+        admin_ids = User.objects.filter(role=UserRole.ADMIN, is_active=True).values_list("id", flat=True)
+        Notification.objects.bulk_create([
+            Notification(user_id=admin_id, title=title, message=message, url=url or "")
+            for admin_id in admin_ids
+        ])
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Gagal bikin notifikasi in-app buat admin: %s", title)
+
+
 def notify_team(subject, message):
     """Kirim notifikasi internal ke inbox tim (settings.TEAM_NOTIFICATION_EMAIL)
     buat kejadian yang butuh tindakan cepat -- transaksi baru nunggu verifikasi,

@@ -58,7 +58,7 @@ from .models import (
 )
 from accounts.decorators import jwt_required, role_required
 from accounts.models import User, UserRole, AuditAction
-from accounts.utils import log_audit, notify_team, notify_user, get_client_ip, is_rate_limited, send_mail_async
+from accounts.utils import log_audit, notify_team, notify_admins, notify_user, get_client_ip, is_rate_limited, send_mail_async
 from django.db.models import Q
 from mentors.models import MentorAvailability
 from transactions.models import (
@@ -841,6 +841,12 @@ def refund_my_product(request, product_id):
         f"Produk: {detail.title if detail else '-'}\n"
         f"Alasan: {reason}\n\n"
         f"Tinjau di dashboard admin -> Pengajuan Refund.",
+    )
+    notify_admins(
+        "Pengajuan Refund Baru",
+        f"{request.user.fullname} ({request.user.email}) mengajukan refund untuk "
+        f"\"{detail.title if detail else '-'}\". Alasan: {reason}",
+        url="/admin/refund-requests",
     )
 
     return JsonResponse(
@@ -2412,6 +2418,11 @@ def register_bootcamp(request):
         f"Bootcamp: {package.bootcamp.title}\n"
         f"Paket: {package.name}\n\n"
         f"Tinjau di dashboard admin -> Pendaftaran Bootcamp.",
+    )
+    notify_admins(
+        f"Pendaftaran Bootcamp Baru -- {package.bootcamp.title}",
+        f"{request.user.fullname} ({request.user.email}) mendaftar paket {package.name}.",
+        url="/admin/bootcamp-registrations",
     )
 
     return JsonResponse(
@@ -4127,6 +4138,12 @@ def create_bootcamp_payment(request, registration_id):
             f"Paket: {package.name}\n"
             f"Total: Rp {txn.grand_total}\n\n"
             f"Cek & verifikasi di dashboard admin -> Transaksi.",
+        )
+        notify_admins(
+            f"Pembayaran Bootcamp Menunggu Verifikasi -- {bootcamp_product.title}",
+            f"{request.user.fullname} ({request.user.email}) bayar paket {package.name} "
+            f"sebesar Rp {txn.grand_total:,.0f}".replace(",", ".") + f" (ID: {txn.id}).",
+            url="/admin/transactions",
         )
 
     return JsonResponse(

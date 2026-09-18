@@ -1,6 +1,7 @@
 "use client";
 
 import { Menu } from "lucide-react";
+import NotificationBell from "@/component/NotificationBell";
 
 export default function Header({
   judulHalaman = "Dashboard",
@@ -26,6 +27,7 @@ export default function Header({
       </div>
 
       <div className="flex items-center gap-5">
+        <NotificationBell theme="light" historyUrl="/admin/notifications" />
         <div className="flex items-center gap-3">
           <div className="hidden sm:block text-right">
             <p className="text-[13px] font-semibold text-[#1E293B] leading-tight whitespace-nowrap">

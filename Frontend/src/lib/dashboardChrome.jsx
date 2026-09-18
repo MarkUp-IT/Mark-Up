@@ -54,6 +54,9 @@ const JUDUL = {
   "/admin/payouts": "Pencairan Mentor",
   "/user/settings": "Pengaturan Akun",
   "/admin": "Dashboard",
+  "/user/notifications": "Notifikasi",
+  "/mentor/notifications": "Notifikasi",
+  "/admin/notifications": "Notifikasi",
 };
 
 /** Rute dinamis dicocokkan sebagai awalan, mis. /admin/orders/bootcamp/<id>. */

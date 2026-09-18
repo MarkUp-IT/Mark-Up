@@ -6,7 +6,7 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, AccountDeletionTokenGenerator, get_client_ip, is_rate_limited, notify_team, send_mail_async
+from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, AccountDeletionTokenGenerator, get_client_ip, is_rate_limited, notify_team, notify_admins, send_mail_async
 from .forms import RegisterForm, UpdateProfileForm
 from mark_up.imaging import compress_or_original, is_real_image, MAX_DIM_AVATAR
 from rest_framework_simplejwt.exceptions import TokenError
@@ -914,6 +914,11 @@ def submit_contact_message(request):
 		f"Isi pesan:\n{message}\n\n"
 		f"Cek di dashboard admin -> Pesan Masuk.",
 	)
+	notify_admins(
+		f"Pesan Masuk Baru -- {subject}",
+		f"Dari {name} ({email}): {message}",
+		url="/admin/messages",
+	)
 
 	return JsonResponse(
 		{"detail": "Pesan berhasil dikirim.", "id": str(contact_message.id)}, status=201
@@ -1415,6 +1420,15 @@ def get_notifications(request):
 
 	from .models import Notification
 
+	# limit=30 buat dropdown lonceng (default). Halaman histori notifikasi
+	# kirim limit lebih besar (mis. 200) buat nampilin daftar lengkap --
+	# dibatasi 200 tetap, bukan literally unlimited, biar gak sekali fetch
+	# ratusan/ribuan baris kalau suatu akun numpuk banyak notifikasi.
+	try:
+		limit = min(int(request.GET.get("limit", 30)), 200)
+	except (TypeError, ValueError):
+		limit = 30
+
 	qs = Notification.objects.filter(user=request.user)
 	unread_count = qs.filter(is_read=False).count()
 	items = [
@@ -1426,7 +1440,7 @@ def get_notifications(request):
 			"is_read": n.is_read,
 			"created_at": n.created_at.isoformat(),
 		}
-		for n in qs[:30]
+		for n in qs[:limit]
 	]
 
 	return JsonResponse({"notifications": items, "unread_count": unread_count}, status=200)
