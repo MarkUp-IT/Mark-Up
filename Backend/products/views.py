@@ -1389,10 +1389,12 @@ def issue_certificate(request):
         new_data={"number": cert.number, "type": cert.type, "recipient": recipient.fullname},
     )
 
+    produk_detail = _get_product_detail(product) if product else None
+    judul_produk = produk_detail.title if produk_detail else "-"
     notify_user(
         recipient,
         "Sertifikat Terbit",
-        f"Sertifikat kamu untuk \"{product.title if product else '-'}\" (No. {cert.number}) sudah terbit "
+        f"Sertifikat kamu untuk \"{judul_produk}\" (No. {cert.number}) sudah terbit "
         "dan bisa diunduh sekarang.",
         url="/mentor/certificates" if recipient.role == UserRole.MENTOR else "/user/certificates",
     )
