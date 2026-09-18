@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Download, ChevronDown, Search, Table2 } from "lucide-react";
+import { Download, ChevronDown, Search, Table2, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
@@ -18,11 +18,33 @@ const REG_STATUS_BADGE = {
 const PAY_STATUS_LABEL = {
   BELUM_ADA: "Belum Ada Transaksi", PENDING: "Menunggu Verifikasi",
   PAID: "Lunas", FAILED: "Ditolak", EXPIRED: "Kedaluwarsa", REFUNDED: "Refund",
+  // Anggota tim gak pernah bayar sendiri (ketua yang bayar buat semua) --
+  // status ini dipakai KHUSUS anggota, gantiin PAID/BELUM_ADA yang
+  // menyesatkan (baik yang sudah diprovisi maupun yang masih nunggu ketua
+  // bayar, dua-duanya "ditanggung ketua", bedanya cuma sudah aktif atau
+  // belum -- itu tercermin di kolom Status Pendaftaran, bukan di sini).
+  DITANGGUNG_KETUA: "Ditanggung Ketua Tim",
 };
 const PAY_STATUS_BADGE = {
   BELUM_ADA: "bg-[#F1F5F9] text-[#475569]", PENDING: "bg-[#FEF3C7] text-[#92400E]",
   PAID: "bg-[#DCFCE7] text-[#166534]", FAILED: "bg-[#FEE2E2] text-[#991B1B]",
   EXPIRED: "bg-[#F1F5F9] text-[#475569]", REFUNDED: "bg-[#E0E7FF] text-[#3730A3]",
+  DITANGGUNG_KETUA: "bg-[#E0E7FF] text-[#3730A3]",
+};
+// Status pendaftaran KHUSUS anggota tim yang belum diprovisi (belum punya
+// BootcampRegistration sendiri -- baru dibuatkan begitu ketua bayar &
+// di-ACC, lihat _provision_team_members di backend). Dipetakan dari status
+// KETUA-nya: kalau ketua belum ditinjau/ditolak, anggota ikut status itu;
+// kalau ketua sudah diterima tapi belum bayar, anggota nunggu ketua bayar.
+const MEMBER_STATUS_LABEL = {
+  registered: "Menunggu Ditinjau (Ketua)",
+  rejected: "Ditolak (Ketua)",
+  waiting_payment: "Menunggu Ketua Bayar",
+};
+const MEMBER_STATUS_BADGE = {
+  registered: "bg-[#FEF3C7] text-[#92400E]",
+  rejected: "bg-[#FEE2E2] text-[#991B1B]",
+  waiting_payment: "bg-[#FEF3C7] text-[#92400E]",
 };
 const PRODUCT_TYPE_LABEL = { BOOTCAMP: "Bootcamp", MENTORING: "Mentoring", MODULE: "Modul" };
 const ROLE_LABEL = { ADMIN: "Admin", MENTOR: "Mentor", STUDENT: "Mentee" };
@@ -89,12 +111,63 @@ const DATA_TYPES = [
 
 const EMPTY_FILTERS = { status: "Semua", secondary: "Semua", dateFrom: "", dateTo: "", search: "" };
 
+// Anggota tim yang diundang BELUM PUNYA BootcampRegistration sendiri
+// sampai ketuanya bayar & di-ACC admin (lihat _provision_team_members di
+// backend) -- jadi mereka gak pernah muncul sebagai baris sendiri di
+// endpoint bootcamp-registrations, cuma "nebeng" di `team.members` milik
+// ketuanya. Fungsi ini nge-"mekarin" jadi baris tersendiri (relasinya ke
+// ketua tetap kelihatan lewat kolom Ketua Tim) supaya mereka gak hilang
+// dari daftar -- ini persis gap yang bikin bug "peserta gak nemu opsi
+// bayar" beberapa waktu lalu, jangan sampai kejadian lagi versi "gak
+// kelihatan di data admin".
+function expandBootcampTeamMembers(registrations) {
+  const expanded = [...registrations];
+  for (const reg of registrations) {
+    if (reg.team?.role !== "leader") continue;
+    for (const member of reg.team.members || []) {
+      // Kalau anggota ini SUDAH diprovisi (sudah punya baris sendiri --
+      // ketuanya sudah bayar & di-ACC), jangan digandakan.
+      const sudahAda = registrations.some(
+        (r) => r.team?.role === "member" && r.team?.leader_email === reg.user_email && r.user_email === member.email
+      );
+      if (sudahAda) continue;
+
+      const waitingPayment = reg.status === "accepted" && (!reg.payment || reg.payment.status !== "PAID");
+      const memberStatusKey = reg.status === "accepted" ? (waitingPayment ? "waiting_payment" : null) : reg.status;
+
+      expanded.push({
+        id: `virtual-member-${reg.id}-${member.email}`,
+        user_name: member.name,
+        user_email: member.email,
+        status: reg.status,
+        created_at: reg.created_at,
+        reviewed_at: reg.reviewed_at,
+        package: reg.package,
+        payment: null,
+        team: { role: "member", leader_name: reg.user_name, leader_email: reg.user_email, target_size: reg.package.group_size },
+        _memberStatusOverride: memberStatusKey,
+        _isVirtualMember: true,
+      });
+    }
+  }
+  return expanded;
+}
+
 export default function DataExplorerPage() {
   const [dataType, setDataType] = useState("BOOTCAMP");
   const [cache, setCache] = useState({ BOOTCAMP: null, TRANSAKSI: null, PENGGUNA: null });
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [sort, setSort] = useState({ key: null, direction: "asc" });
+
+  const toggleSort = (key) => {
+    setSort((prev) => {
+      if (prev.key !== key) return { key, direction: "asc" };
+      if (prev.direction === "asc") return { key, direction: "desc" };
+      return { key: null, direction: "asc" }; // klik ke-3 -> balik ke urutan asli
+    });
+  };
 
   const setFilter = (key) => (value) => setFilters((prev) => ({ ...prev, [key]: value }));
 
@@ -105,7 +178,7 @@ export default function DataExplorerPage() {
       let rows = [];
       if (type === "BOOTCAMP") {
         const res = await apiRequest("/api/products/bootcamp-registrations/");
-        rows = res?.registrations || [];
+        rows = expandBootcampTeamMembers(res?.registrations || []);
       } else if (type === "TRANSAKSI") {
         const res = await apiRequest("/api/transactions/");
         rows = res?.transactions || [];
@@ -126,6 +199,7 @@ export default function DataExplorerPage() {
   // data yang baru), dan fetch cuma kalau belum pernah di-fetch sebelumnya.
   useEffect(() => {
     setFilters(EMPTY_FILTERS);
+    setSort({ key: null, direction: "asc" });
     if (cache[dataType] === null) fetchData(dataType);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataType]);
@@ -137,7 +211,27 @@ export default function DataExplorerPage() {
     return [...new Set(rawRows.map((r) => r.package?.name).filter(Boolean))];
   }, [dataType, rawRows]);
 
-  const payStatusOf = (r) => (r.payment ? r.payment.status : "BELUM_ADA");
+  // Anggota tim gak pernah bayar sendiri -- badge pembayarannya selalu
+  // "Ditanggung Ketua Tim", apa pun isi `r.payment` mentahnya (baris yang
+  // sudah diprovisi punya transaksi Rp0 PAID, baris virtual belum punya
+  // apa-apa -- dua-duanya sama aja dari sudut "siapa yang bayar").
+  const payStatusOf = (r) => {
+    if (r.team?.role === "member") return "DITANGGUNG_KETUA";
+    return r.payment ? r.payment.status : "BELUM_ADA";
+  };
+  // Status pendaftaran yang ditampilkan -- anggota tim (baik virtual
+  // maupun yang sudah diprovisi) ikut status ketua kalau ketua belum
+  // diterima, atau "Menunggu Ketua Bayar" kalau ketua sudah diterima tapi
+  // belum lunas. Anggota yang SUDAH diprovisi (status accepted asli di
+  // DB) ditampilkan apa adanya.
+  const regStatusLabelOf = (r) => {
+    if (r._memberStatusOverride) return MEMBER_STATUS_LABEL[r._memberStatusOverride] || r._memberStatusOverride;
+    return REG_STATUS_LABEL[r.status] || r.status;
+  };
+  const regStatusBadgeOf = (r) => {
+    if (r._memberStatusOverride) return MEMBER_STATUS_BADGE[r._memberStatusOverride] || "";
+    return REG_STATUS_BADGE[r.status] || "";
+  };
 
   const filteredRows = useMemo(() => {
     const search = filters.search.trim().toLowerCase();
@@ -193,12 +287,13 @@ export default function DataExplorerPage() {
         { key: "user_name", label: "Nama", get: (r) => r.user_name },
         { key: "user_email", label: "Email", get: (r) => r.user_email },
         { key: "package", label: "Paket", get: (r) => r.package?.name || "-" },
-        { key: "status", label: "Status Pendaftaran", get: (r) => REG_STATUS_LABEL[r.status] || r.status },
+        { key: "status", label: "Status Pendaftaran", get: (r) => regStatusLabelOf(r) },
         { key: "pay_status", label: "Status Pembayaran", get: (r) => PAY_STATUS_LABEL[payStatusOf(r)] || payStatusOf(r) },
-        { key: "total", label: "Total Bayar", get: (r) => (r.payment ? formatIDR(r.payment.grand_total) : "-") },
+        { key: "total", label: "Total Bayar", get: (r) => (r.payment ? formatIDR(r.payment.grand_total) : "-"), sortValue: (r) => (r.payment ? Number(r.payment.grand_total) : -1) },
         { key: "team", label: "Peran Tim", get: (r) => (r.team?.role === "leader" ? "Ketua" : r.team?.role === "member" ? "Anggota" : "-") },
-        { key: "created_at", label: "Tanggal Daftar", get: (r) => formatDate(r.created_at) },
-        { key: "reviewed_at", label: "Tanggal Ditinjau", get: (r) => formatDate(r.reviewed_at) },
+        { key: "leader", label: "Ketua Tim", get: (r) => (r.team?.role === "member" ? `${r.team.leader_name} (${r.team.leader_email})` : "-") },
+        { key: "created_at", label: "Tanggal Daftar", get: (r) => formatDate(r.created_at), sortValue: (r) => r.created_at || "" },
+        { key: "reviewed_at", label: "Tanggal Ditinjau", get: (r) => formatDate(r.reviewed_at), sortValue: (r) => r.reviewed_at || "" },
       ];
     }
     if (dataType === "TRANSAKSI") {
@@ -206,8 +301,8 @@ export default function DataExplorerPage() {
         { key: "user_name", label: "Nama Pembeli", get: (r) => r.user_name },
         { key: "product_title", label: "Produk", get: (r) => r.product_title || "-" },
         { key: "product_type", label: "Tipe Produk", get: (r) => PRODUCT_TYPE_LABEL[r.product_type] || r.product_type },
-        { key: "date_time", label: "Tanggal", get: (r) => formatDateTime(r.date_time) },
-        { key: "amount", label: "Jumlah", get: (r) => formatIDR(r.amount) },
+        { key: "date_time", label: "Tanggal", get: (r) => formatDateTime(r.date_time), sortValue: (r) => r.date_time || "" },
+        { key: "amount", label: "Jumlah", get: (r) => formatIDR(r.amount), sortValue: (r) => Number(r.amount) || 0 },
         { key: "method", label: "Metode", get: (r) => r.method || "-" },
         { key: "gateway", label: "Gateway", get: (r) => r.gateway || "-" },
         { key: "status", label: "Status", get: (r) => PAY_STATUS_LABEL[r.status] || r.status },
@@ -219,10 +314,32 @@ export default function DataExplorerPage() {
       { key: "phone", label: "No. HP", get: (r) => r.phone || "-" },
       { key: "role", label: "Role", get: (r) => ROLE_LABEL[r.role] || r.role },
       { key: "status", label: "Status Akun", get: (r) => (r.status === "ACTIVE" ? "Aktif" : "Nonaktif") },
-      { key: "created_at", label: "Tanggal Daftar", get: (r) => formatDate(r.created_at) },
-      { key: "last_login", label: "Login Terakhir", get: (r) => formatDate(r.last_login) },
+      { key: "created_at", label: "Tanggal Daftar", get: (r) => formatDate(r.created_at), sortValue: (r) => r.created_at || "" },
+      { key: "last_login", label: "Login Terakhir", get: (r) => formatDate(r.last_login), sortValue: (r) => r.last_login || "" },
     ];
   }, [dataType]);
+
+  // Diurutkan SETELAH difilter -- klik header kolom buat urut ascending,
+  // klik lagi buat descending, klik ke-3 balik ke urutan asli (created_at
+  // terbaru duluan, dari respons API). Pakai sortValue (angka/tanggal
+  // mentah) kalau kolomnya nyediain -- perbandingan string hasil format
+  // ("Rp1.000.000" dst) bakal salah urut buat angka/tanggal.
+  const sortedRows = useMemo(() => {
+    if (!sort.key) return filteredRows;
+    const col = columns.find((c) => c.key === sort.key);
+    if (!col) return filteredRows;
+    const valueOf = col.sortValue || col.get;
+    const dir = sort.direction === "asc" ? 1 : -1;
+    return [...filteredRows].sort((a, b) => {
+      const va = valueOf(a);
+      const vb = valueOf(b);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
+      return String(va).localeCompare(String(vb), "id-ID") * dir;
+    });
+  }, [filteredRows, sort, columns]);
 
   const statusOptions = useMemo(() => {
     if (dataType === "BOOTCAMP") {
@@ -249,7 +366,7 @@ export default function DataExplorerPage() {
       return;
     }
     const prefix = dataType === "BOOTCAMP" ? "pendaftaran-bootcamp" : dataType === "TRANSAKSI" ? "transaksi" : "pengguna";
-    downloadCSV(filteredRows, columns, prefix);
+    downloadCSV(sortedRows, columns, prefix);
     toast.success("CSV berhasil dibuat", { description: `${filteredRows.length} baris terunduh.` });
   };
 
@@ -321,11 +438,24 @@ export default function DataExplorerPage() {
             <table className="w-full text-[13px] text-left">
               <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                 <tr>
-                  {columns.map((c) => (
-                    <th key={c.key} className="px-5 py-3.5 font-bold text-[#64748B] text-[11px] tracking-wider uppercase whitespace-nowrap">
-                      {c.label}
-                    </th>
-                  ))}
+                  {columns.map((c) => {
+                    const isSorted = sort.key === c.key;
+                    const SortIcon = isSorted ? (sort.direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+                    return (
+                      <th
+                        key={c.key}
+                        onClick={() => toggleSort(c.key)}
+                        className={`px-5 py-3.5 font-bold text-[11px] tracking-wider uppercase whitespace-nowrap cursor-pointer select-none transition-colors ${
+                          isSorted ? "text-[#148F89]" : "text-[#64748B] hover:text-[#1E293B]"
+                        }`}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          {c.label}
+                          <SortIcon size={12} className={isSorted ? "text-[#148F89]" : "text-[#CBD5E1]"} />
+                        </span>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E2E8F0]">
@@ -334,12 +464,12 @@ export default function DataExplorerPage() {
                     <td colSpan={columns.length} className="px-5 py-8 text-center text-[#94A3B8]">Memuat data...</td>
                   </tr>
                 ) : (
-                  filteredRows.map((r, idx) => (
+                  sortedRows.map((r, idx) => (
                     <tr key={r.id || r.transaction_id || idx} className="hover:bg-[#F8FAFC] transition-colors">
                       {columns.map((c) => (
                         <td key={c.key} className="px-5 py-3.5 text-[#334155] whitespace-nowrap">
                           {dataType === "BOOTCAMP" && c.key === "status" ? (
-                            <span className={`inline-flex px-2.5 py-1 text-[10.5px] rounded-full font-bold ${REG_STATUS_BADGE[r.status] || ""}`}>
+                            <span className={`inline-flex px-2.5 py-1 text-[10.5px] rounded-full font-bold ${regStatusBadgeOf(r)}`}>
                               {c.get(r)}
                             </span>
                           ) : dataType === "BOOTCAMP" && c.key === "pay_status" ? (
