@@ -258,10 +258,16 @@ ZOOM_CRED_KEY = os.getenv("ZOOM_CRED_KEY", "")
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 IPAYMU_CRED_KEY = os.getenv("IPAYMU_CRED_KEY", "")
 
-# Link Zoom dibuat H-berapa jam sebelum sesi. Sengaja mepet, bukan pas sesi
-# dijadwalkan: akun Zoom-nya dirotasi ~2 minggu sekali, jadi meeting yang dibuat
-# jauh-jauh hari bisa mati hostnya pas hari-H.
-ZOOM_GENERATE_LEAD_HOURS = int(os.getenv("ZOOM_GENERATE_LEAD_HOURS", "24"))
+# Link Zoom dibuat H-berapa jam sebelum sesi -- BUKAN langsung pas sesi
+# dijadwalkan/dibeli, karena ZoomAccount gak nyimpen tanggal kedaluwarsa
+# terstruktur (cuma is_active manual), jadi ada risiko meeting yang dibuat
+# jauh-jauh hari matiin hostnya kalau akunnya keburu dirotasi/diganti admin.
+# Nilainya HARUS disesuaikan sama masa aktif langganan akun Zoom yang lagi
+# dipakai (mis. subscription 3 bulan -> aman diset ~90 hari = 2160 jam),
+# BUKAN diasumsikan tetap "~2 minggu" -- itu keliru, rotasi tergantung durasi
+# langganan yang dibeli, bisa beda-beda tiap kali diperpanjang. Kalau nanti
+# ganti ke langganan yang lebih pendek, turunkan lagi nilai ini manual.
+ZOOM_GENERATE_LEAD_HOURS = int(os.getenv("ZOOM_GENERATE_LEAD_HOURS", str(24 * 90)))
 # Jeda antar meeting di satu akun. Satu akun Zoom cuma bisa meng-host SATU
 # meeting live dalam satu waktu, jadi jendela pemakaiannya dikasih bantalan.
 ZOOM_BUFFER_MINUTES = int(os.getenv("ZOOM_BUFFER_MINUTES", "15"))
