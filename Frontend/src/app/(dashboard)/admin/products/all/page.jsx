@@ -3,7 +3,6 @@
 import { ArrowLeft, Search, ChevronDown, Download, Loader2 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import EmptyState from "@/component/admin/EmptyState";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -110,7 +109,7 @@ export default function AllProducts() {
   }
 
   return (
-    <DashboardLayout title="Semua Produk">
+    <>
       <style>{heightFix}</style>
 
       <Link
@@ -176,9 +175,11 @@ export default function AllProducts() {
             ))}
           </div>
         </div>
-        <span className="text-[#64748B] text-[13px] font-medium">
-          {filtered.length} produk
-        </span>
+        {!loading && (
+          <span className="text-[#64748B] text-[13px] font-medium">
+            {filtered.length} produk
+          </span>
+        )}
       </div>
 
       {loading ? (
@@ -197,7 +198,7 @@ export default function AllProducts() {
           </button>
         </div>
       ) : filtered.length === 0 ? (
-        <EmptyState message="Nggak ada produk yang cocok sama filter ini." />
+        <EmptyState message="Tidak ada produk yang sesuai dengan filter ini." />
       ) : (
         <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
           <div className="overflow-x-auto">
@@ -258,6 +259,6 @@ export default function AllProducts() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

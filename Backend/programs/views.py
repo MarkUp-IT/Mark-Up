@@ -1,15 +1,35 @@
 from django.http import JsonResponse, HttpResponseNotAllowed
 from .utils import get_request_data
 from .forms import CompetitionForm
-from .models import Competition, CompetitionCategory, BootcampSession, BootcampSessionMentor
+from .models import (
+    Competition,
+    CompetitionCategory,
+    BootcampSession,
+    BootcampSessionMentor,
+    BootcampSessionRequiredBenefit,
+)
 from django.utils import timezone
+from mark_up.imaging import compress_or_original, is_real_image, MAX_DIM_POSTER
 from django.utils.dateparse import parse_datetime
 from accounts.decorators import jwt_required, role_required
 from accounts.models import UserRole, AuditAction
-from accounts.utils import log_audit
+from accounts.utils import log_audit, normalize_and_validate_url
 from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
 from mentors.models import MentorProfile
+
+
+def _get_competition_image_url(competition):
+    """URL poster kompetisi. Prioritas file yang di-upload (competition.image)
+    -- URL-nya di-generate fresh di sini (storage pakai presigned URL),
+    fallback ke image_url (link eksternal legacy) kalau belum ada file."""
+    if competition.image:
+        try:
+            return competition.image.url
+        except Exception:
+            pass
+    return competition.image_url
+
 
 @csrf_exempt
 @jwt_required
@@ -32,6 +52,10 @@ def add_competition(request):
 		return JsonResponse({"errors": errors}, status=400)
 
 	competition = form.save(commit=False)
+	# image_key = path file yang udah di-upload duluan lewat upload-poster/.
+	image_key = request_data.get("image_key")
+	if image_key:
+		competition.image = image_key
 	competition.save()
 
 	return JsonResponse(
@@ -153,7 +177,7 @@ def get_competitions(request):
             "prize": c.prizepool,
             "level": c.level,
             "target": c.target_participant,
-            "image": c.image_url,
+            "image": _get_competition_image_url(c),
             "link": c.registration_link,
         }
         for c in page.object_list
@@ -220,6 +244,9 @@ def update_competition(request, competition_id):
 		return JsonResponse({"errors": errors}, status=400)
 
 	competition = form.save(commit=False)
+	image_key = request_data.get("image_key")
+	if image_key:
+		competition.image = image_key
 	competition.save()
 
 	return JsonResponse(
@@ -233,16 +260,19 @@ def update_competition(request, competition_id):
 
 
 def _serialize_bootcamp_session_template(session):
-    assignment = session.session_mentors.select_related("mentor_profile__user").first()
+    assignments = list(session.session_mentors.select_related("mentor_profile__user").all())
     return {
+        "for_all_packages": session.for_all_packages,
+        "package_ids": [str(p.id) for p in session.packages.all()],
         "id": str(session.id),
         "title": session.title,
         "description": session.description or "",
-        "start_time": session.start_time.isoformat(),
-        "end_time": session.end_time.isoformat(),
+        "start_time": session.start_time.isoformat() if session.start_time else None,
+        "end_time": session.end_time.isoformat() if session.end_time else None,
         "meeting_link": session.meeting_link or "",
-        "mentor_id": str(assignment.mentor_profile_id) if assignment else None,
-        "mentor_name": assignment.mentor_profile.user.fullname if assignment else None,
+        "mentor_ids": [str(a.mentor_profile_id) for a in assignments],
+        "mentor_names": [a.mentor_profile.user.fullname for a in assignments],
+        "required_benefit": session.required_benefit,
     }
 
 
@@ -271,6 +301,7 @@ def get_bootcamp_batches(request):
             "sesi": len(sessions),
             "unassigned": unassigned,
             "pending": pending_link,
+            "is_active": batch.is_active,
         })
 
     return JsonResponse({"batches": data}, status=200)
@@ -291,7 +322,7 @@ def get_bootcamp_batch_detail(request, product_id):
 
     sessions = batch.sessions.prefetch_related(
         "session_mentors__mentor_profile__user"
-    ).order_by("start_time")
+    ).order_by("order", "start_time")
 
     return JsonResponse(
         {
@@ -323,6 +354,21 @@ def add_bootcamp_session_template(request, product_id):
             status=400,
         )
 
+    required_benefit = request_data.get("required_benefit") or ""
+    if required_benefit and required_benefit not in BootcampSessionRequiredBenefit.values:
+        return JsonResponse(
+            {"errors": {"required_benefit": ["Pilihan benefit tidak valid."]}}, status=400,
+        )
+
+    # Siapa yang dapat sesi ini. Default "semua peserta bootcamp ini";
+    # kalau dibatasi, admin milih paketnya sendiri (bukan lagi lewat 3
+    # kategori benefit tetap yang dulu gak bisa diatur dari panel).
+    for_all = bool(request_data.get("for_all_packages", True))
+    package_ids = request_data.get("package_ids") or []
+
+    next_order = (
+        BootcampSession.objects.filter(bootcamp_id=product_id).count() + 1
+    )
     session = BootcampSession.objects.create(
         bootcamp_id=product_id,
         title=title,
@@ -330,7 +376,17 @@ def add_bootcamp_session_template(request, product_id):
         start_time=start_time,
         end_time=end_time,
         meeting_link=request_data.get("meeting_link", ""),
+        order=next_order,
+        required_benefit=required_benefit,
+        for_all_packages=for_all,
     )
+    if not for_all and package_ids:
+        # Dibatasi ke paket milik bootcamp ini saja, biar admin gak bisa
+        # (sengaja atau tidak) nyantol paket dari bootcamp lain.
+        from products.models import BootcampPackage
+        session.packages.set(
+            BootcampPackage.objects.filter(id__in=package_ids, bootcamp_id=product_id)
+        )
 
     log_audit(request, AuditAction.CREATE, "bootcamp_sessions", object_id=session.id)
 
@@ -366,24 +422,39 @@ def update_bootcamp_session_template(request, session_id):
     if "description" in request_data:
         session.description = request_data["description"]
     if "meeting_link" in request_data:
-        session.meeting_link = request_data["meeting_link"]
+        link, link_error = normalize_and_validate_url(request_data["meeting_link"])
+        if link_error:
+            return JsonResponse(
+                {"errors": {"meeting_link": ["Link Zoom/meeting harus berupa link yang valid (contoh: https://...)."]}},
+                status=400,
+            )
+        session.meeting_link = link
     if request_data.get("start_time"):
         session.start_time = parse_datetime(request_data["start_time"])
     if request_data.get("end_time"):
         session.end_time = parse_datetime(request_data["end_time"])
+    if "required_benefit" in request_data:
+        required_benefit = request_data["required_benefit"] or ""
+        if required_benefit and required_benefit not in BootcampSessionRequiredBenefit.values:
+            return JsonResponse(
+                {"errors": {"required_benefit": ["Pilihan benefit tidak valid."]}}, status=400,
+            )
+        session.required_benefit = required_benefit
     session.save()
 
-    mentor_profile = None
-    mentor_changed = "mentor_id" in request_data
+    mentor_profiles = []
+    mentor_changed = "mentor_ids" in request_data
     if mentor_changed:
         session.session_mentors.all().delete()
-        mentor_id = request_data.get("mentor_id")
-        if mentor_id:
-            try:
-                mentor_profile = MentorProfile.objects.get(id=mentor_id)
-            except MentorProfile.DoesNotExist:
-                return JsonResponse({"errors": {"mentor_id": ["Mentor tidak ditemukan."]}}, status=404)
-            BootcampSessionMentor.objects.create(bootcamp_session=session, mentor_profile=mentor_profile)
+        mentor_ids = request_data.get("mentor_ids") or []
+        mentor_profiles = list(MentorProfile.objects.filter(id__in=mentor_ids))
+        found_ids = {str(m.id) for m in mentor_profiles}
+        missing_ids = [str(mid) for mid in mentor_ids if str(mid) not in found_ids]
+        if missing_ids:
+            return JsonResponse({"errors": {"mentor_ids": [f"Mentor tidak ditemukan: {', '.join(missing_ids)}"]}}, status=404)
+        BootcampSessionMentor.objects.bulk_create([
+            BootcampSessionMentor(bootcamp_session=session, mentor_profile=m) for m in mentor_profiles
+        ])
 
     # Sesi bootcamp itu kelas bareng -- satu link/jadwal/mentor yang sama
     # buat semua peserta yang beli batch ini (beda sama mentoring yang
@@ -391,14 +462,61 @@ def update_bootcamp_session_template(request, session_id):
     # update template-nya, ikut disebar ke salinan sesi tiap peserta yang
     # sudah beli tapi BELUM menyelesaikan sesi itu -- yang sudah selesai
     # dibiarkan apa adanya karena riwayatnya sudah final.
-    sync_fields = {"title": session.title, "start_time": session.start_time, "meeting_link": session.meeting_link}
-    if mentor_changed:
-        sync_fields["mentor"] = mentor_profile
+    # products.BootcampSession.meeting_link gak nullable (cuma blank=True),
+    # beda sama field ini yang null=True -- None wajib dinormalisasi ke ""
+    # dulu, kalau enggak .update() di bawah langsung nabrak NOT NULL
+    # constraint di database begitu template belum diisi link sama sekali.
+    sync_fields = {"title": session.title, "start_time": session.start_time, "meeting_link": session.meeting_link or ""}
+    active_buyer_sessions = list(session.buyer_sessions.exclude(status="completed"))
     session.buyer_sessions.exclude(status="completed").update(**sync_fields)
+    if mentor_changed:
+        for buyer_session in active_buyer_sessions:
+            buyer_session.mentors.set(mentor_profiles)
 
     log_audit(request, AuditAction.UPDATE, "bootcamp_sessions", object_id=session.id)
 
     return JsonResponse(
         {"detail": "Sesi berhasil diperbarui.", "session": _serialize_bootcamp_session_template(session)},
         status=200,
+    )
+
+
+ALLOWED_POSTER_IMAGE_EXT = {"jpg", "jpeg", "png", "webp"}
+MAX_POSTER_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def upload_competition_poster(request):
+    """Upload poster kompetisi ke storage, balikin key + URL. Key-nya dipakai
+    FE buat dikirim balik di payload add/update kompetisi (field image_key)
+    -- sama polanya kayak upload_product_image."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    from django.core.files.storage import default_storage
+
+    image = request.FILES.get("image")
+    if not image:
+        return JsonResponse({"detail": "File gambar diperlukan."}, status=400)
+
+    ext = image.name.rsplit(".", 1)[-1].lower() if "." in image.name else ""
+    if ext not in ALLOWED_POSTER_IMAGE_EXT:
+        return JsonResponse({"detail": "Format harus JPG, PNG, atau WEBP."}, status=400)
+
+    if image.size > MAX_POSTER_IMAGE_SIZE:
+        return JsonResponse({"detail": "Ukuran file maksimal 5MB."}, status=400)
+    if not is_real_image(image):
+        return JsonResponse({"detail": "File ini bukan gambar yang valid."}, status=400)
+
+    # Sama seperti poster produk: dikecilkan & dikonversi WebP dulu.
+    image, poster_name = compress_or_original(image, max_dim=MAX_DIM_POSTER)
+
+    now = timezone.now()
+    key = f"competition_posters/{now.year}/{now.month:02d}/{poster_name}"
+    saved_key = default_storage.save(key, image)
+
+    return JsonResponse(
+        {"key": saved_key, "url": default_storage.url(saved_key)}, status=201
     )

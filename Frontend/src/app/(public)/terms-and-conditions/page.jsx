@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { Headphones, Mail } from "lucide-react";
-import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 
 const sections = [
@@ -55,7 +54,7 @@ const sections = [
     title: "Harga dan Pembayaran",
     bullets: [
       "Seluruh harga ditampilkan dalam Rupiah (IDR), kecuali dinyatakan lain.",
-      "Pembayaran dilakukan lewat transfer bank manual, dengan mengunggah bukti transfer untuk diverifikasi oleh tim kami.",
+      "Pembayaran dapat dilakukan lewat iPaymu (otomatis, terverifikasi langsung setelah pembayaran selesai) maupun transfer bank manual (dengan mengunggah bukti transfer untuk diverifikasi oleh tim kami).",
       "Pesanan dianggap selesai setelah pembayaran berhasil diverifikasi.",
       "Mark-Up berhak membatalkan transaksi apabila ditemukan indikasi penipuan atau pelanggaran hukum.",
     ],
@@ -125,16 +124,18 @@ export default function TermsAndConditionsPage() {
 
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative overflow-x-hidden">
-      <div
-        className="fixed top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%] pointer-events-none z-0"
-        style={{
-          background:
-            "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
-          filter: "blur(40px)",
-        }}
-      />
-
-      <Navbar />
+      {/* Background Glow -- overflow-hidden di-scope ke wrapper kecil ini
+          doang (bukan di root), biar nggak ganggu scroll/sticky halaman. */}
+      <div className="absolute inset-x-0 top-0 h-[400px] overflow-hidden pointer-events-none z-0">
+        <div
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%]"
+          style={{
+            background:
+              "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
+            filter: "blur(40px)",
+          }}
+        />
+      </div>
 
       <div className="main-content flex flex-col gap-12 items-center mt-28 md:mt-36 mb-24 relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6">
         {/* Hero */}

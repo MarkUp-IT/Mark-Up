@@ -1,22 +1,36 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutGrid, ShieldCheck, Briefcase, Settings, X } from "lucide-react";
+import { api } from "@/lib/api";
+import NotifBadge from "@/component/NotifBadge";
 
+// badgeKey nyambung ke response /api/accounts/me/sidebar-badges/ -- Sertifikat
+// gak punya konsep "butuh tindakan" yang jelas, jadi gak dikasih badge.
 const menuList = [
-  { name: "My Products", url: "/user/my-products", icon: LayoutGrid },
+  { name: "My Products", url: "/user/my-products", icon: LayoutGrid, badgeKey: "my_products" },
   { name: "Sertifikat", url: "/user/certificates", icon: ShieldCheck },
-  { name: "Transaksi", url: "/user/transactions", icon: Briefcase },
-  { name: "Pengaturan Akun", url: "/user/settings", icon: Settings },
+  { name: "Transaksi", url: "/user/transactions", icon: Briefcase, badgeKey: "transactions" },
+  { name: "Pengaturan Akun", url: "/user/settings", icon: Settings, badgeKey: "settings" },
 ];
 
 export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const pathname = usePathname() || "/user/my-products";
+  const [badges, setBadges] = useState({});
+
+  useEffect(() => {
+    api
+      .get("/api/accounts/me/sidebar-badges/")
+      .then((data) => data && setBadges(data))
+      .catch(() => {});
+  }, []);
 
   return (
     <div
-      className={`fixed top-0 left-0 w-[288px] h-screen flex flex-col py-8 z-50 overflow-y-auto no-scrollbar transform transition-transform duration-300 ease-in-out
+      className={`fixed top-0 left-0 w-[288px] max-w-[85vw] h-screen flex flex-col py-8 z-50 overflow-y-auto no-scrollbar transform transition-transform duration-300 ease-in-out
+      bg-[#140B22] border-r border-white/5 shadow-2xl lg:shadow-none
       ${isOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
     >
       {/* Tombol tutup khusus mobile -- logo brand nggak di sini lagi, sekarang
@@ -50,7 +64,8 @@ export default function Sidebar({ isOpen = false, onClose = () => {} }) {
               }`}
             >
               <Icon size={20} />
-              <span className="font-medium text-[14px]">{menu.name}</span>
+              <span className="font-medium text-[14px] flex-1">{menu.name}</span>
+              <NotifBadge count={badges[menu.badgeKey]} />
             </Link>
           );
         })}

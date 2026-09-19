@@ -7,6 +7,7 @@ import {
   Camera,
   ChevronRight,
   Link2,
+  Instagram,
   Briefcase,
   Pencil,
   Trash2,
@@ -14,14 +15,27 @@ import {
   X,
   Landmark,
 } from "lucide-react";
-import DashboardLayout from "@/component/mentor/DashboardLayout";
+import { toast } from "sonner";
 import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
+import AttentionBanner from "@/component/AttentionBanner";
 
-function Field({ label, value, onChange, disabled, note, textarea, icon }) {
+/**
+ * `anchor` + `perluDiisi` menyorot syarat yang bikin badge angka di sidebar
+ * menyala. Sorotannya hilang begitu kolomnya diketik, tanpa menunggu disimpan.
+ */
+function Field({ label, value, onChange, disabled, note, textarea, icon, anchor, perluDiisi }) {
   const Component = textarea ? "textarea" : "input";
+  const kosong = perluDiisi && !(value || "").trim();
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-[#E2E8F0] text-[13px] font-medium">{label}</label>
+    <div className="flex flex-col gap-1.5 scroll-mt-32" id={anchor}>
+      <label className="text-[#E2E8F0] text-[13px] font-medium flex items-center gap-2">
+        {label}
+        {kosong && (
+          <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-[#F59E0B]/15 text-[#FBBF24] border border-[#F59E0B]/30">
+            Belum diisi
+          </span>
+        )}
+      </label>
       <div className="relative">
         {icon && (
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6B7280]">
@@ -33,7 +47,10 @@ function Field({ label, value, onChange, disabled, note, textarea, icon }) {
           onChange={onChange ? (e) => onChange(e.target.value) : undefined}
           disabled={disabled}
           rows={textarea ? 3 : undefined}
-          className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 ${
+          aria-invalid={kosong || undefined}
+          className={`w-full bg-[#0F081C] border rounded-[8px] px-4 py-3 ${
+            kosong ? "border-[#F59E0B]/70" : "border-[#2D2342]"
+          } ${
             icon ? "pl-11" : ""
           } text-[14px] outline-none transition-colors resize-none ${
             disabled
@@ -59,11 +76,25 @@ export default function MentorSettings() {
 
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
+  const [isProfileComplete, setIsProfileComplete] = useState(true);
+  const [missingFields, setMissingFields] = useState([]);
 
-  const [initialInfo, setInitialInfo] = useState({ fullName: "", phone: "", linkedin: "", bio: "" });
+  // Sebuah syarat disorot hanya kalau backend memang menandainya kurang.
+  const perluDiisi = (key) => missingFields.some((f) => f.key === key);
+
+  const [initialInfo, setInitialInfo] = useState({
+    fullName: "",
+    phone: "",
+    linkedin: "",
+    instagram: "",
+    headline: "",
+    bio: "",
+  });
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [linkedin, setLinkedin] = useState("");
+  const [instagram, setInstagram] = useState("");
+  const [headline, setHeadline] = useState("");
   const [bio, setBio] = useState("");
   const [infoSaved, setInfoSaved] = useState(false);
 
@@ -97,6 +128,8 @@ export default function MentorSettings() {
     fullName !== initialInfo.fullName ||
     phone !== initialInfo.phone ||
     linkedin !== initialInfo.linkedin ||
+    instagram !== initialInfo.instagram ||
+    headline !== initialInfo.headline ||
     bio !== initialInfo.bio;
 
   const isExpertiseDirty =
@@ -127,11 +160,17 @@ export default function MentorSettings() {
     async function load() {
       setLoading(true);
       try {
-        const [profileRes, expertiseRes, meRes] = await Promise.all([
+        const [profileRes, expertiseRes, meRes, meStatusRes] = await Promise.all([
           apiRequest("/api/mentors/me/profile/"),
           apiRequest("/api/mentors/expertise/", { auth: false }),
           apiRequest("/api/accounts/me/profile/"),
+          apiRequest("/api/accounts/me/"),
         ]);
+
+        setIsProfileComplete(meStatusRes?.user?.is_profile_complete ?? true);
+        // Syarat mana saja yang bikin badge angka di sidebar menyala. Dari
+        // backend, memakai aturan yang sama dengan badge-nya.
+        setMissingFields(profileRes?.missing_profile_fields || []);
 
         setExpertiseOptions(expertiseRes?.expertise || []);
 
@@ -142,12 +181,16 @@ export default function MentorSettings() {
           fullName: profileRes.fullname,
           phone: profileRes.phone,
           linkedin: profileRes.linkedin_url,
+          instagram: profileRes.instagram_url || "",
+          headline: profileRes.headline || "",
           bio: profileRes.bio,
         };
         setInitialInfo(info);
         setFullName(info.fullName);
         setPhone(info.phone);
         setLinkedin(info.linkedin);
+        setInstagram(info.instagram);
+        setHeadline(info.headline);
         setBio(info.bio);
 
         setInitialExpertise(profileRes.expertise || []);
@@ -181,6 +224,18 @@ export default function MentorSettings() {
     load();
   }, []);
 
+  // Dipanggil ulang tiap kali salah satu section berhasil disimpan, biar
+  // banner "lengkapi data wajib" langsung ilang tanpa perlu refresh manual
+  // begitu semua field wajib udah keisi.
+  const refreshProfileCompleteness = async () => {
+    try {
+      const res = await apiRequest("/api/accounts/me/");
+      setIsProfileComplete(res?.user?.is_profile_complete ?? true);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const closeExpModal = () => setShowExpModal(false);
 
   const handleSaveInfo = async (e) => {
@@ -188,13 +243,23 @@ export default function MentorSettings() {
     try {
       await apiRequest("/api/mentors/me/profile/", {
         method: "PATCH",
-        body: { fullname: fullName, phone, linkedin_url: linkedin, bio },
+        body: {
+          fullname: fullName,
+          phone,
+          linkedin_url: linkedin,
+          instagram_url: instagram,
+          headline,
+          bio,
+        },
       });
-      setInitialInfo({ fullName, phone, linkedin, bio });
+      setInitialInfo({ fullName, phone, linkedin, instagram, headline, bio });
       setInfoSaved(true);
       setTimeout(() => setInfoSaved(false), 3000);
+      refreshProfileCompleteness();
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menyimpan", {
+        description: err?.message || "Coba lagi, atau cek isian kamu.",
+      });
     }
   };
 
@@ -215,8 +280,11 @@ export default function MentorSettings() {
       setInitialExpertise(selectedExpertise);
       setExpertiseSaved(true);
       setTimeout(() => setExpertiseSaved(false), 3000);
+      refreshProfileCompleteness();
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menyimpan keahlian", {
+        description: err?.message || "Coba lagi sebentar.",
+      });
     }
   };
 
@@ -234,8 +302,11 @@ export default function MentorSettings() {
       setInitialBank({ bankName, accountNumber, accountHolder });
       setBankSaved(true);
       setTimeout(() => setBankSaved(false), 3000);
+      refreshProfileCompleteness();
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menyimpan rekening", {
+        description: err?.message || "Coba lagi sebentar.",
+      });
     }
   };
 
@@ -255,6 +326,7 @@ export default function MentorSettings() {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.detail || "Gagal mengunggah foto.");
       setProfileImage(data.profile_image);
+      refreshProfileCompleteness();
     } catch (err) {
       setPhotoError(err.message || "Gagal mengunggah foto.");
     } finally {
@@ -298,7 +370,9 @@ export default function MentorSettings() {
       await apiRequest(`/api/mentors/me/experiences/${id}/`, { method: "DELETE" });
       setExperiences((prev) => prev.filter((exp) => exp.id !== id));
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menghapus pengalaman", {
+        description: err?.message || "Coba lagi sebentar.",
+      });
     }
   };
 
@@ -338,20 +412,22 @@ export default function MentorSettings() {
       }
       setShowExpModal(false);
     } catch (err) {
-      console.error(err);
+      toast.error("Gagal menyimpan pengalaman", {
+        description: err?.message || "Cek isian kamu, lalu coba lagi.",
+      });
     }
   };
 
   if (loading) {
     return (
-      <DashboardLayout title="Settings">
+      <>
         <p className="text-[#6B7280] text-[13px]">Memuat pengaturan...</p>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout title="Settings">
+    <>
       <motion.div {...sectionReveal} className="flex flex-col gap-1">
         <h1 className="text-[28px] sm:text-[32px] font-bold text-white leading-tight">
           Pengaturan Akun
@@ -361,18 +437,38 @@ export default function MentorSettings() {
         </p>
       </motion.div>
 
+      {/* Dulu spanduk ini menyebut SEMUA syarat sebagai kalimat tetap, jadi
+          mentor tetap harus menebak mana yang kurang miliknya. Sekarang yang
+          ditampilkan hanya yang benar-benar belum terpenuhi, dan tiap butirnya
+          bisa diklik untuk melompat ke bagiannya. */}
+      <motion.div {...sectionReveal}>
+        <AttentionBanner
+          judul={`${missingFields.length} syarat belum terpenuhi`}
+          keterangan="Ini yang membuat angka merah muncul di menu Settings. Sebelum lengkap, kamu hanya dapat mengakses halaman ini dan belum muncul di halaman Mentors publik."
+          butir={missingFields.map((f) => ({
+            key: f.key,
+            label: f.label,
+            anchor: `mentor-${f.key}`,
+          }))}
+          dismissKey="mentor-settings-lengkapi"
+        />
+      </motion.div>
+
       {/* Foto Profil */}
       <motion.div
         {...sectionReveal}
-        className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col sm:flex-row sm:items-center gap-5"
+        id="mentor-profile_image"
+        className={`bg-[#170F26] border rounded-[12px] p-6 flex flex-col sm:flex-row sm:items-center gap-5 scroll-mt-32 ${
+          perluDiisi("profile_image") ? "border-[#F59E0B]/70" : "border-[#2D2342]"
+        }`}
       >
         <div className="relative shrink-0">
           <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#2D2342] bg-[#0F081C] flex items-center justify-center">
-            {profileImage ? (
-              <img src={profileImage} alt="Foto profil" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-[#6B7280] text-[11px]">Tidak ada foto</span>
-            )}
+            <img
+              src={profileImage || "/images/default-avatar.svg"}
+              alt="Foto profil"
+              className="w-full h-full object-cover"
+            />
           </div>
           <label
             aria-label="Ganti foto"
@@ -429,15 +525,38 @@ export default function MentorSettings() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Nama Lengkap" value={fullName} onChange={setFullName} />
+          <Field label="Nama Lengkap *" value={fullName} onChange={setFullName} />
           <Field label="Email" value={email} disabled note="Hubungi support untuk mengubah email." />
-          <Field label="Nomor WhatsApp" value={phone} onChange={setPhone} />
           <Field
-            label="LinkedIn"
+            label="Nomor WhatsApp *"
+            value={phone}
+            onChange={setPhone}
+            anchor="mentor-phone"
+            perluDiisi={perluDiisi("phone")}
+          />
+          <Field
+            label="LinkedIn *"
             value={linkedin}
             onChange={setLinkedin}
             icon={<Link2 size={16} />}
-            note="Tautan profil LinkedIn-mu."
+            note="Tempel link lengkap, contoh: https://linkedin.com/in/namamu"
+            anchor="mentor-linkedin_url"
+            perluDiisi={perluDiisi("linkedin_url")}
+          />
+          <Field
+            label="Instagram *"
+            value={instagram}
+            onChange={setInstagram}
+            icon={<Instagram size={16} />}
+            note="Tempel link lengkap, contoh: https://instagram.com/namamu (bukan username saja)"
+            anchor="mentor-instagram_url"
+            perluDiisi={perluDiisi("instagram_url")}
+          />
+          <Field
+            label="Headline"
+            value={headline}
+            onChange={setHeadline}
+            note="Contoh: Konsultan Bisnis, Product Manager, dsb. (opsional)"
           />
         </div>
         <Field label="Bio Singkat" value={bio} onChange={setBio} textarea />
@@ -466,7 +585,10 @@ export default function MentorSettings() {
       <motion.form
         {...sectionReveal}
         onSubmit={handleSaveExpertise}
-        className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col gap-4"
+        id="mentor-expertises"
+        className={`bg-[#170F26] border rounded-[12px] p-6 flex flex-col gap-4 scroll-mt-32 ${
+          perluDiisi("expertises") ? "border-[#F59E0B]/70" : "border-[#2D2342]"
+        }`}
       >
         <div>
           <h3 className="text-white font-semibold text-[15px]">Keahlian</h3>
@@ -602,14 +724,28 @@ export default function MentorSettings() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Nama Bank" value={bankName} onChange={setBankName} />
-          <Field label="Nomor Rekening" value={accountNumber} onChange={setAccountNumber} />
+          <Field
+            label="Nama Bank *"
+            value={bankName}
+            onChange={setBankName}
+            anchor="mentor-bank_name"
+            perluDiisi={perluDiisi("bank_name")}
+          />
+          <Field
+            label="Nomor Rekening *"
+            value={accountNumber}
+            onChange={setAccountNumber}
+            anchor="mentor-bank_account"
+            perluDiisi={perluDiisi("bank_account")}
+          />
         </div>
         <Field
-          label="Nama Pemilik Rekening"
+          label="Nama Pemilik Rekening *"
           value={accountHolder}
           onChange={setAccountHolder}
           note="Harus sama persis dengan nama di buku tabungan/rekening."
+          anchor="mentor-bank_account_holder"
+          perluDiisi={perluDiisi("bank_account_holder")}
         />
 
         <div className="flex items-center gap-3">
@@ -639,6 +775,9 @@ export default function MentorSettings() {
       >
         <div>
           <h3 className="text-white font-semibold text-[15px]">Keamanan Akun</h3>
+          <p className="text-[#9CA3AF] text-[12px] mt-1">
+            Ganti kata sandi secara berkala dan pakai yang kuat untuk menjaga keamanan akunmu.
+          </p>
         </div>
         <Link
           href="/mentor/settings/change-password"
@@ -691,13 +830,14 @@ export default function MentorSettings() {
                 textarea
               />
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[#E2E8F0] text-[13px] font-medium">Mulai</label>
                   <input
                     type="date"
                     value={expForm.startDate}
                     onChange={(e) => setExpForm((f) => ({ ...f, startDate: e.target.value }))}
+                    style={{ colorScheme: "dark" }}
                     className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[13px] text-white outline-none focus:border-[#148F89]/60 transition-colors"
                   />
                 </div>
@@ -708,6 +848,7 @@ export default function MentorSettings() {
                     value={expForm.endDate}
                     disabled={expForm.isOngoing}
                     onChange={(e) => setExpForm((f) => ({ ...f, endDate: e.target.value }))}
+                    style={{ colorScheme: "dark" }}
                     className={`w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[13px] outline-none transition-colors ${
                       expForm.isOngoing
                         ? "text-[#6B7280] cursor-not-allowed"
@@ -744,6 +885,6 @@ export default function MentorSettings() {
           </motion.form>
         </motion.div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

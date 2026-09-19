@@ -3,8 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Mail, Phone, MapPin, Send, ExternalLink } from "lucide-react";
-import Navbar from "@/component/Navbar";
+import { Mail, Phone, MapPin, Send } from "lucide-react";
 import Footer from "@/component/Footer";
 import { apiRequest } from "@/lib/api";
 
@@ -62,16 +61,19 @@ export default function ContactPage() {
 
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative overflow-x-hidden">
-      <div
-        className="fixed top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%] pointer-events-none z-0"
-        style={{
-          background:
-            "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
-          filter: "blur(40px)",
-        }}
-      />
+      {/* Background Glow -- overflow-hidden di-scope ke wrapper kecil ini
+          doang (bukan di root), biar nggak ganggu scroll/sticky halaman. */}
+      <div className="absolute inset-x-0 top-0 h-[400px] overflow-hidden pointer-events-none z-0">
+        <div
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%]"
+          style={{
+            background:
+              "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
+            filter: "blur(40px)",
+          }}
+        />
+      </div>
 
-      <Navbar />
 
       <div className="main-content flex flex-col gap-12 items-center mt-28 md:mt-36 mb-24 relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6">
         {/* Hero */}
@@ -181,32 +183,6 @@ export default function ContactPage() {
                   {ALAMAT}
                 </p>
               </div>
-
-              {/* Placeholder peta -- link ke pencarian Google Maps pakai teks
-                  alamat, jadi selalu akurat tanpa perlu koordinat manual */}
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ALAMAT)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="relative w-full h-[220px] rounded-md md:rounded-lg border border-[#B19EEF]/20 bg-[#1A132F] flex flex-col items-center justify-center gap-2 overflow-hidden group hover:border-[#B19EEF]/50 transition-colors"
-              >
-                <div
-                  className="absolute inset-0 opacity-30"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(rgba(177,158,239,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(177,158,239,0.15) 1px, transparent 1px)",
-                    backgroundSize: "24px 24px",
-                  }}
-                />
-                <MapPin
-                  size={28}
-                  className="text-[#B19EEF] relative z-10 group-hover:scale-110 transition-transform"
-                />
-                <span className="text-sm text-white font-semibold flex items-center gap-1.5 relative z-10">
-                  Buka di Google Maps
-                  <ExternalLink size={13} />
-                </span>
-              </a>
             </div>
           </motion.div>
 

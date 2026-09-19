@@ -11,7 +11,6 @@ import {
   Minus,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import CurrencyInput from "@/component/admin/CurrencyInput";
@@ -337,13 +336,13 @@ export default function ReferralCodes() {
   const totalUsed = codes.reduce((sum, c) => sum + c.used_count, 0);
 
   return (
-    <DashboardLayout title="Kode Referral">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-bold text-[22px] text-[#0F172A]">Kode Referral & Voucher</h1>
-          <p className="text-[#64748B] text-[14px] mt-1">Kelola kode diskon yang bisa dipakai user pas checkout.</p>
+          <p className="text-[#64748B] text-[14px] mt-1">Kelola kode diskon yang dapat digunakan pengguna saat checkout.</p>
         </div>
         <button
           onClick={openAdd}
@@ -355,9 +354,9 @@ export default function ReferralCodes() {
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total Kode" value={codes.length} unit="kode" />
-        <StatCard label="Kode Aktif" value={activeCount} unit="kode" variant="success" />
-        <StatCard label="Total Terpakai" value={totalUsed} unit="kali" variant="primary" />
+        <StatCard label="Total Kode" value={codes.length} unit="kode" loading={loading} />
+        <StatCard label="Kode Aktif" value={activeCount} unit="kode" variant="success" loading={loading} />
+        <StatCard label="Total Terpakai" value={totalUsed} unit="kali" variant="primary" loading={loading} />
       </div>
 
       <div className="flex flex-col gap-4">
@@ -446,7 +445,7 @@ export default function ReferralCodes() {
               <X className="text-[#64748B]" size={20} />
             </button>
           </div>
-          <p className="text-[#64748B] text-[13px]">Bikin kode diskon baru buat dipakai user pas checkout.</p>
+          <p className="text-[#64748B] text-[13px]">Buat kode diskon baru untuk digunakan pengguna saat checkout.</p>
         </div>
 
         <div className="px-8 py-6 flex flex-col gap-5">
@@ -506,7 +505,7 @@ export default function ReferralCodes() {
             <CurrencyInput
               value={form.maxDiscount}
               onChange={(e) => setForm((f) => ({ ...f, maxDiscount: e.target.value }))}
-              placeholder="Cuma berlaku buat tipe persentase"
+              placeholder="Hanya berlaku untuk tipe persentase"
               className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] pr-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
@@ -573,7 +572,7 @@ export default function ReferralCodes() {
           </div>
           <p className="text-[#64748B] text-[13px]">
             {editingCode?.used_count > 0
-              ? `Udah dipakai ${editingCode.used_count} kali -- perubahan cuma berlaku buat pemakaian selanjutnya.`
+              ? `Sudah dipakai ${editingCode.used_count} kali. Perubahan hanya berlaku untuk pemakaian berikutnya.`
               : "Ubah detail kode ini."}
           </p>
         </div>
@@ -632,7 +631,7 @@ export default function ReferralCodes() {
             <CurrencyInput
               value={form.maxDiscount}
               onChange={(e) => setForm((f) => ({ ...f, maxDiscount: e.target.value }))}
-              placeholder="Cuma berlaku buat tipe persentase"
+              placeholder="Hanya berlaku untuk tipe persentase"
               className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] pr-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
           </div>
@@ -651,7 +650,7 @@ export default function ReferralCodes() {
             {fieldErrors.quota && <p className="text-red-500 text-[11px]">{fieldErrors.quota}</p>}
             {editingCode && Number(form.quota) < editingCode.used_count && (
               <p className="text-[#DC2626] text-[11px]">
-                Kuota nggak boleh kurang dari {editingCode.used_count} (jumlah yang udah kepake).
+                Kuota tidak boleh kurang dari {editingCode.used_count} (jumlah yang sudah terpakai).
               </p>
             )}
           </div>
@@ -685,6 +684,6 @@ export default function ReferralCodes() {
           </button>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }
