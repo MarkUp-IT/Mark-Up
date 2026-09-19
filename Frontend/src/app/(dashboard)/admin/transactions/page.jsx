@@ -439,15 +439,40 @@ export default function Transactions() {
                     </span>
                   </div>
                 )}
+                {selectedTx?.promo_code && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                      Kode Referral
+                    </span>
+                    <span className="text-[#148F89] font-bold">
+                      {selectedTx.promo_code}
+                    </span>
+                  </div>
+                )}
               </div>
 
-              <div className="bg-[#F8FAFC] border border-[#E2E8F0] p-4 rounded-[8px] flex justify-between items-center">
-                <span className="text-[#475569] font-bold text-[13px]">
-                  Total Dibayar
-                </span>
-                <span className="text-[#0F172A] font-bold text-[19px]">
-                  {formatIDR(selectedTx?.amount)}
-                </span>
+              <div className="bg-[#F8FAFC] border border-[#E2E8F0] p-4 rounded-[8px] flex flex-col gap-2">
+                {selectedTx?.promo_code && (
+                  <>
+                    <div className="flex justify-between items-center text-[12.5px]">
+                      <span className="text-[#64748B]">Subtotal</span>
+                      <span className="text-[#334155] font-medium">{formatIDR(selectedTx?.sub_total)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-[12.5px]">
+                      <span className="text-[#64748B]">Diskon ({selectedTx.promo_code})</span>
+                      <span className="text-[#148F89] font-medium">-{formatIDR(selectedTx?.discount_amount)}</span>
+                    </div>
+                    <div className="border-t border-[#E2E8F0] my-1" />
+                  </>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-[#475569] font-bold text-[13px]">
+                    Total Dibayar
+                  </span>
+                  <span className="text-[#0F172A] font-bold text-[19px]">
+                    {formatIDR(selectedTx?.amount)}
+                  </span>
+                </div>
               </div>
 
               {selectedTx?.notes ? (
