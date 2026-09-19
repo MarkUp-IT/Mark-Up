@@ -1995,6 +1995,7 @@ def _serialize_registration(reg, for_admin=False):
             "sub_total": str(txn.sub_total),
             "commitment_fee_amount": str(txn.commitment_fee_amount),
             "grand_total": str(txn.grand_total),
+            "team_discount_amount": str(txn.team_discount_amount or 0),
             "discount_amount": str(txn.discount_amount or 0),
             "promo_code": txn.promo_code or None,
             "proof_of_payment": proof_url,
@@ -4024,15 +4025,17 @@ def create_bootcamp_payment(request, registration_id):
     # diprovisikan otomatis begitu pembayaran ketua ini di-ACC admin (lihat
     # _provision_team_members di transactions/views.py).
     #
-    # `per_head_price` dipakai buat ngitung diskon kode referral SEBELUM
-    # dikali jumlah anggota (lihat di bawah) -- bukan cuma buat sub_total.
+    # sub_total SELALU harga NORMAL (solo) x jumlah anggota -- bukan harga
+    # tim yang sudah didiskon -- biar rinciannya selalu bisa ditampilkan
+    # transparan "Harga Normal -> Diskon -> Total", baik pakai kode referral
+    # maupun tidak (lihat team_discount_amount di bawah).
     is_team_leader = (
         getattr(registration, "led_team_group", None) is not None
         and package.group_price is not None
     )
     headcount = package.group_size if is_team_leader else 1
-    per_head_price = package.group_price if is_team_leader else package.price
-    sub_total = per_head_price * headcount
+    solo_price = package.price
+    sub_total = solo_price * headcount
     if is_team_leader:
         commitment_fee_amount = commitment_fee_amount * headcount
 
@@ -4040,16 +4043,17 @@ def create_bootcamp_payment(request, registration_id):
     # didiskon karena duit itu bukan pendapatan (dikembalikan penuh ke peserta
     # di akhir program), jadi mendiskonnya sama aja bikin selisih kas pas refund.
     #
-    # PENTING: dihitung per_head_price DULU baru dikali headcount (bukan
-    # dihitung sekali dari sub_total gabungan tim) -- supaya persen maupun
-    # potongan tetap PROPORSIONAL per kepala, dan max_discount (batas atas
-    # nominal) ikut berlaku PER ORANG, bukan dibagi rata buat satu tim
+    # PENTING: dihitung per-kepala (solo_price) DULU baru dikali headcount
+    # (bukan dihitung sekali dari sub_total gabungan tim) -- supaya persen
+    # maupun potongan tetap PROPORSIONAL per kepala, dan max_discount (batas
+    # atas nominal) ikut berlaku PER ORANG, bukan dibagi rata buat satu tim
     # sekaligus. Tanpa ini, kode dengan max_discount kecil jadi jauh lebih
     # kecil manfaatnya buat tim besar dibanding kalau tiap anggota daftar
     # sendiri-sendiri -- padahal niatnya sama-sama dapat diskon yang sama.
     voucher_code = (request_data.get("referral_code") or "").strip()
     referral_code = None
     discount_amount = Decimal("0")
+    team_discount_amount = Decimal("0")
     if voucher_code:
         try:
             referral_code = ReferralCode.objects.get(code__iexact=voucher_code)
@@ -4061,8 +4065,18 @@ def create_bootcamp_payment(request, registration_id):
                 {"detail": "Kode referral tidak berlaku, sudah tidak aktif, atau sudah pernah kamu pakai."},
                 status=400,
             )
+        # Kode referral MEMBATALKAN harga tim -- basisnya balik ke harga
+        # NORMAL (solo_price), bukan ditumpuk di atas harga tim yang sudah
+        # didiskon. Dua diskon ini sengaja gak pernah jalan bareng.
         discount_amount = (
-            referral_code.compute_discount(per_head_price) * headcount
+            referral_code.compute_discount(solo_price) * headcount
+        ).quantize(Decimal("0.01"))
+    elif is_team_leader:
+        # TANPA kode referral: harga tim berlaku seperti biasa. Dicatat
+        # eksplisit sebagai "diskon tim" (bukan langsung jadi sub_total)
+        # biar rinciannya tetap kelihatan "Harga Normal -> Diskon Tim -> Total".
+        team_discount_amount = (
+            (solo_price - package.group_price) * headcount
         ).quantize(Decimal("0.01"))
 
     # Ajak teman -- BEDA dari kode referral di atas (itu satu kode buat siapa
@@ -4079,12 +4093,14 @@ def create_bootcamp_payment(request, registration_id):
 
     invite_discount_amount = Decimal("0")
     if sudah_ajak:
-        sisa_setelah_kode = sub_total - discount_amount
+        sisa_setelah_diskon = sub_total - team_discount_amount - discount_amount
         invite_discount_amount = (
-            sisa_setelah_kode * Decimal(package.referral_invite_discount_percent) / Decimal("100")
+            sisa_setelah_diskon * Decimal(package.referral_invite_discount_percent) / Decimal("100")
         ).quantize(Decimal("0.01"))
 
-    grand_total = (sub_total - discount_amount - invite_discount_amount) + commitment_fee_amount
+    grand_total = (
+        sub_total - team_discount_amount - discount_amount - invite_discount_amount
+    ) + commitment_fee_amount
 
     try:
         with db_transaction.atomic():
@@ -4124,6 +4140,7 @@ def create_bootcamp_payment(request, registration_id):
                 buyer_phone=request.user.phone or "",
                 sub_total=sub_total,
                 promo_code=voucher_code or None,
+                team_discount_amount=team_discount_amount,
                 # Total gabungan kode referral + ajak-teman -- Transaction cuma
                 # punya satu field discount_amount. Rincian per sumbernya tetap
                 # bisa ditelusuri lewat ReferralCodeUsage & BootcampReferredInvitee

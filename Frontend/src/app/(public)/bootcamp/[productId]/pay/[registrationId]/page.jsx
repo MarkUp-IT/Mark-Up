@@ -155,21 +155,33 @@ function BootcampPaymentPageInner() {
   };
 
   const payment = registration?.payment;
-  // Diskon KODE referral dihitung server (aturan persen/nominal + batas
-  // maksimum ada di sana), jadi baru kelihatan setelah pembayaran terkirim --
-  // sama kayak checkout produk lain yang juga gak pratinjau diskon di browser.
-  const appliedDiscount = Number(payment?.discount_amount || 0);
   // Harga TIM cuma berlaku kalau registrasi ini adalah KETUA tim -- tim wajib
   // lengkap sejak daftar (lihat halaman pendaftaran), jadi begitu peran ini
   // "leader" berarti timnya SUDAH PASTI lengkap. Dibayar SEKALI buat SELURUH
   // anggota (harga & commitment fee dikali jumlah anggota).
   const teamPriceActive = registration?.team?.role === "leader" && registration.package.group_price != null;
   const jumlahAnggotaTim = registration?.team?.target_size || 1;
+  // Harga Normal SELALU basisnya harga solo x jumlah anggota (konsisten
+  // sama create_bootcamp_payment di backend) -- baik dipotong diskon tim
+  // maupun diskon kode referral, rinciannya sama-sama tampil transparan
+  // "Harga Normal -> Diskon -> Total", bukan langsung angka jadi.
   const subTotal = payment
     ? Number(payment.sub_total)
+    : Number(registration?.package?.price || 0) * jumlahAnggotaTim;
+  // Diskon TIM cuma berlaku kalau TIDAK pakai kode referral -- kode referral
+  // MEMBATALKAN harga tim (balik ke harga normal, potongannya dari kode itu
+  // aja), dua-duanya sengaja gak ditumpuk. Sebelum submit, defaultnya
+  // diasumsikan belum pakai kode (diskon tim kelihatan) -- begitu payment
+  // sungguhan dibuat, angka aslinya dari server yang menentukan.
+  const teamDiscount = payment
+    ? Number(payment.team_discount_amount || 0)
     : teamPriceActive
-      ? Number(registration.package.group_price) * jumlahAnggotaTim
-      : Number(registration?.package?.price || 0);
+      ? (Number(registration.package.price) - Number(registration.package.group_price)) * jumlahAnggotaTim
+      : 0;
+  // Diskon KODE referral dihitung server (aturan persen/nominal + batas
+  // maksimum ada di sana), jadi baru kelihatan setelah pembayaran terkirim --
+  // sama kayak checkout produk lain yang juga gak pratinjau diskon di browser.
+  const appliedDiscount = Number(payment?.discount_amount || 0);
   const commitmentFeeTampil = teamPriceActive
     ? Number(registration.package.commitment_fee) * jumlahAnggotaTim
     : Number(registration?.package?.commitment_fee || 0);
@@ -181,12 +193,12 @@ function BootcampPaymentPageInner() {
     && (registration?.invited || []).length > 0;
   const inviteDiscount =
     !payment && sudahAjakTeman
-      ? (subTotal * Number(registration.package.referral_invite_discount_percent || 0)) / 100
+      ? ((subTotal - teamDiscount) * Number(registration.package.referral_invite_discount_percent || 0)) / 100
       : 0;
   const total = registration
     ? (payment
       ? Number(payment.grand_total)
-      : subTotal - inviteDiscount + commitmentFeeTampil)
+      : subTotal - teamDiscount - inviteDiscount + commitmentFeeTampil)
     : 0;
   const showForm =
     registration
@@ -239,16 +251,9 @@ function BootcampPaymentPageInner() {
             <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-5 flex flex-col gap-2">
               <div className="flex justify-between text-[13px]">
                 <span className="text-[#9CA3AF]">
-                  {teamPriceActive ? `Harga tim (${jumlahAnggotaTim} orang)` : "Harga paket"}
+                  {teamPriceActive ? `Harga Normal (${jumlahAnggotaTim} orang)` : "Harga paket"}
                 </span>
-                <div className="flex items-center gap-2">
-                  {teamPriceActive && (
-                    <span className="text-[#6B7280] line-through text-[12px]">
-                      {formatIDR(Number(registration.package.price) * jumlahAnggotaTim)}
-                    </span>
-                  )}
-                  <span className="text-white font-medium">{formatIDR(subTotal)}</span>
-                </div>
+                <span className="text-white font-medium">{formatIDR(subTotal)}</span>
               </div>
               {teamPriceActive && (
                 <div className="flex items-center gap-1.5 text-[#148F89] text-[11px]">
@@ -256,9 +261,17 @@ function BootcampPaymentPageInner() {
                   ({registration.team.members.map((m) => m.name).join(", ")}).
                 </div>
               )}
+              {teamDiscount > 0 && (
+                <div className="flex justify-between text-[13px]">
+                  <span className="text-[#9CA3AF]">Diskon tim</span>
+                  <span className="text-[#148F89] font-medium">-{formatIDR(teamDiscount)}</span>
+                </div>
+              )}
               {appliedDiscount > 0 && (
                 <div className="flex justify-between text-[13px]">
-                  <span className="text-[#9CA3AF]">Diskon kode referral</span>
+                  <span className="text-[#9CA3AF]">
+                    Diskon kode referral{payment?.promo_code ? ` (${payment.promo_code})` : ""}
+                  </span>
                   <span className="text-[#148F89] font-medium">-{formatIDR(appliedDiscount)}</span>
                 </div>
               )}
@@ -368,6 +381,12 @@ function BootcampPaymentPageInner() {
                       Potongan berlaku untuk harga paket saja
                       {Number(registration.package.commitment_fee) > 0 ? ", commitment fee tidak ikut didiskon." : "."}
                     </span>
+                    {teamPriceActive && teamDiscount > 0 && (
+                      <span className="text-[#F59E0B] text-[11px]">
+                        Perhatian: kalau kamu pakai kode referral, diskon tim di atas otomatis
+                        dibatalkan dan diganti diskon dari kode itu (dua-duanya gak ditumpuk).
+                      </span>
+                    )}
                   </div>
 
                   {/* Ajak teman TIDAK diisi di sini lagi -- promonya dipilih &
