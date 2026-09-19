@@ -287,9 +287,15 @@ def get_mentor_availability(request, mentor_id):
     except MentorProfile.DoesNotExist:
         return JsonResponse({"detail": "Mentor profile tidak ditemukan."}, status=404)
 
+    # start_time__gt=now WAJIB -- tanpa ini, slot yang sudah lewat waktu
+    # tapi gak pernah kebooking (mis. mentor buka jadwal terus gak ada yang
+    # ambil) tetap muncul sebagai "bisa dipilih", dan karena diurutkan
+    # ascending malah nongol PALING ATAS duluan sebelum jadwal yang beneran
+    # valid -- user bisa nge-klik jadwal yang udah lewat.
     slots = MentorAvailability.objects.filter(
         mentor_profile=mentor,
         is_booked=False,
+        start_time__gt=timezone.now(),
     ).order_by("start_time")
 
     day_names = {
