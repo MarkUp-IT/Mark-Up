@@ -4,11 +4,15 @@ Dijalankan cron tiap 15 menit (lihat deploy/deploy.sh). Sengaja DI LUAR jalur
 request: memanggil API pihak ketiga saat admin memverifikasi pembayaran itu
 persis pola yang dulu bikin worker gunicorn mati kena timeout gara-gara SMTP.
 
-Kenapa dibuat mepet (H-24 jam), bukan pas sesi dijadwalkan?
-Akun Zoom-nya dirotasi ~2 minggu sekali. Meeting yang dibuat jauh-jauh hari
-bakal di-host akun yang sudah tidak dipakai lagi -- peserta klik "Gabung Sesi"
-pas hari-H, link-nya mati. Dibuat menjelang sesi berarti selalu memakai akun
-yang benar-benar aktif saat itu.
+Kenapa dibuat mepet (H-sekian jam, lihat settings.ZOOM_GENERATE_LEAD_HOURS),
+bukan langsung pas sesi dijadwalkan/dibeli?
+ZoomAccount gak nyimpen tanggal kedaluwarsa terstruktur (cuma is_active
+manual) -- meeting yang dibuat jauh-jauh hari BERISIKO di-host akun yang
+keburu dirotasi/dinonaktifkan admin sebelum hari-H, jadi linknya mati pas
+peserta klik "Gabung Sesi". ZOOM_GENERATE_LEAD_HOURS dipatok sesuai masa
+aktif langganan akun yang lagi dipakai (BUKAN "~2 minggu" tetap seperti
+asumsi awal -- itu keliru, rotasinya tergantung durasi langganan yang
+dibeli tiap kali, bisa 2 minggu bisa 3 bulan bisa lebih).
 """
 from datetime import timedelta
 
