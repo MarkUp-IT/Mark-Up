@@ -153,6 +153,7 @@ def get_transactions(request):
             "proof_of_payment": item.transaction.proof_of_payment.url if item.transaction.proof_of_payment else None,
             "notes": item.transaction.notes,
             "sub_total": str(item.transaction.sub_total),
+            "team_discount_amount": str(item.transaction.team_discount_amount),
             "discount_amount": str(item.transaction.discount_amount),
             "promo_code": item.transaction.promo_code,
             "product_type": item.product.type,

@@ -452,16 +452,24 @@ export default function Transactions() {
               </div>
 
               <div className="bg-[#F8FAFC] border border-[#E2E8F0] p-4 rounded-[8px] flex flex-col gap-2">
-                {selectedTx?.promo_code && (
+                {(selectedTx?.promo_code || Number(selectedTx?.team_discount_amount) > 0) && (
                   <>
                     <div className="flex justify-between items-center text-[12.5px]">
-                      <span className="text-[#64748B]">Subtotal</span>
+                      <span className="text-[#64748B]">Harga Normal</span>
                       <span className="text-[#334155] font-medium">{formatIDR(selectedTx?.sub_total)}</span>
                     </div>
-                    <div className="flex justify-between items-center text-[12.5px]">
-                      <span className="text-[#64748B]">Diskon ({selectedTx.promo_code})</span>
-                      <span className="text-[#148F89] font-medium">-{formatIDR(selectedTx?.discount_amount)}</span>
-                    </div>
+                    {Number(selectedTx?.team_discount_amount) > 0 && (
+                      <div className="flex justify-between items-center text-[12.5px]">
+                        <span className="text-[#64748B]">Diskon Tim</span>
+                        <span className="text-[#148F89] font-medium">-{formatIDR(selectedTx.team_discount_amount)}</span>
+                      </div>
+                    )}
+                    {selectedTx?.promo_code && (
+                      <div className="flex justify-between items-center text-[12.5px]">
+                        <span className="text-[#64748B]">Diskon ({selectedTx.promo_code})</span>
+                        <span className="text-[#148F89] font-medium">-{formatIDR(selectedTx?.discount_amount)}</span>
+                      </div>
+                    )}
                     <div className="border-t border-[#E2E8F0] my-1" />
                   </>
                 )}

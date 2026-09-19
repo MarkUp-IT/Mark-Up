@@ -50,8 +50,20 @@ class Transaction(models.Model):
     )
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="transactions")
     buyer_phone = models.CharField(max_length=20, blank=True, null=True) 
+    # Buat pendaftaran TIM: sub_total SELALU harga normal (harga solo x
+    # jumlah anggota) -- bukan harga tim yang sudah didiskon -- biar detail
+    # pembayaran bisa selalu ditampilkan transparan "Harga Normal -> Diskon
+    # -> Total", konsisten baik pakai kode referral maupun tidak.
     sub_total = models.DecimalField(max_digits=12, decimal_places=2)
     promo_code = models.CharField(max_length=100, blank=True, null=True)
+    # Diskon HARGA TIM (selisih harga solo vs harga tim per kepala x jumlah
+    # anggota) -- CUMA kepakai kalau TIDAK ada kode referral yang dipakai.
+    # Kalau ada kode referral, harga tim DIBATALKAN (balik ke harga solo
+    # sebagai basis), kode referral-nya yang jalan sendiri lewat
+    # discount_amount di bawah -- dua-duanya sengaja gak ditumpuk sekaligus.
+    team_discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Diskon KODE REFERRAL + ajak-teman digabung di sini (rincian per sumber
+    # tetap bisa ditelusuri lewat ReferralCodeUsage & BootcampReferredInvitee).
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     tax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     grand_total = models.DecimalField(max_digits=12, decimal_places=2)
