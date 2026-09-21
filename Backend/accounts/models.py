@@ -202,8 +202,10 @@ class BroadcastFilterType(models.TextChoices):
     ALL = "ALL", "Semua User"
     ROLE = "ROLE", "Per Role"
     BOUGHT_PRODUCT = "BOUGHT_PRODUCT", "Sudah Beli Produk Ini"
-    BOOTCAMP_REGISTERED = "BOOTCAMP_REGISTERED", "Sudah Daftar Bootcamp Ini"
-    BOOTCAMP_UNPAID = "BOOTCAMP_UNPAID", "Diterima Tapi Belum Bayar (Bootcamp)"
+    # Satu filter buat SEMUA kebutuhan seputar bootcamp -- status pendaftaran
+    # & status pembayaran dua-duanya sub-filter DI DALAM ini (lihat
+    # _resolve_broadcast_recipients), bukan filter_type terpisah-pisah.
+    BOOTCAMP_REGISTERED = "BOOTCAMP_REGISTERED", "Bootcamp"
     MANUAL = "MANUAL", "Daftar Email Manual"
 
 
