@@ -214,40 +214,53 @@ export default function AdminDashboard() {
               {loading ? "…" : formatRupiah(revenue?.total_revenue ?? 0)}
             </p>
           </div>
-          <div className="flex-1" style={{ minHeight: "220px" }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={revenue?.daily_chart ?? []}
-                barCategoryGap={30}
-                margin={{ top: 10, right: 0, left: -20, bottom: 0 }}
-              >
-                <XAxis
-                  dataKey="day"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#94A3B8", fontSize: 12, fontWeight: 600 }}
-                  dy={10}
-                />
-                <YAxis hide />
-                <Tooltip
-                  cursor={{ fill: "#F8FAFC" }}
-                  formatter={(value) => [formatRupiah(value), "Pendapatan"]}
-                  contentStyle={{
-                    borderRadius: "8px",
-                    border: "1px solid #E2E8F0",
-                    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                  }}
-                />
-                <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
-                  {(revenue?.daily_chart ?? []).map((entry, index, arr) => (
-                    <Cell
-                      key={index}
-                      fill={index === arr.length - 1 ? "#148F89" : "#CDEEEB"}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          {/* overflow-x-auto + lebar minimum PER BATANG -- sebelumnya
+              ResponsiveContainer dipaksa width="100%" selalu, jadi pas filter
+              "Semua Waktu" (bisa puluhan hari) batangnya kepepet numpuk atau
+              malah ke-crop di kanan tanpa cara buat digeser lihat sisanya.
+              min-width: 100% (dari CSS) + width dari JS (px) -- kalau
+              datanya dikit, 100% menang (persis kayak sebelumnya, penuh
+              sejajar); kalau datanya banyak, lebar px menang dan pembungkus
+              di luar jadi bisa discroll horizontal. */}
+          <div className="flex-1 overflow-x-auto" style={{ minHeight: "220px" }}>
+            <div
+              className="h-full"
+              style={{ minWidth: "100%", width: (revenue?.daily_chart?.length ?? 0) * 36 }}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={revenue?.daily_chart ?? []}
+                  barCategoryGap={30}
+                  margin={{ top: 10, right: 0, left: -20, bottom: 0 }}
+                >
+                  <XAxis
+                    dataKey="day"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#94A3B8", fontSize: 12, fontWeight: 600 }}
+                    dy={10}
+                  />
+                  <YAxis hide />
+                  <Tooltip
+                    cursor={{ fill: "#F8FAFC" }}
+                    formatter={(value) => [formatRupiah(value), "Pendapatan"]}
+                    contentStyle={{
+                      borderRadius: "8px",
+                      border: "1px solid #E2E8F0",
+                      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                    }}
+                  />
+                  <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
+                    {(revenue?.daily_chart ?? []).map((entry, index, arr) => (
+                      <Cell
+                        key={index}
+                        fill={index === arr.length - 1 ? "#148F89" : "#CDEEEB"}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
