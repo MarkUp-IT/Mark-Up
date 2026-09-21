@@ -29,9 +29,13 @@ class RegisterForm(forms.ModelForm):
         self.fields["linkedin_url"].required = False
 
     def clean_email(self):
-        email = self.cleaned_data.get("email")
+        # Dirapikan (strip + lowercase) SEBELUM dicek/disimpan -- tanpa ini,
+        # "Nama@Contoh.com" dan "nama@contoh.com" dianggap dua email BEDA
+        # (bisa daftar dobel), dan pas login nanti kapitalisasi yang beda
+        # dikit aja bikin "akun gak ketemu" walau sebenarnya sama persis.
+        email = (self.cleaned_data.get("email") or "").strip().lower()
 
-        if User.objects.filter(email=email).exists():
+        if User.objects.filter(email__iexact=email).exists():
             raise forms.ValidationError(
                 "Email sudah digunakan."
             )
