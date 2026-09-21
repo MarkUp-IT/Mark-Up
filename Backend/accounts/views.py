@@ -1531,6 +1531,27 @@ def _resolve_broadcast_recipients(filter_type, params):
 			regs = regs.filter(status=status)
 		return User.objects.filter(id__in=regs.values("user_id")).distinct()
 
+	if filter_type == BroadcastFilterType.BOOTCAMP_UNPAID:
+		bootcamp_id = params.get("bootcamp_id")
+		if not bootcamp_id:
+			return User.objects.none()
+		from products.models import BootcampRegistration
+		from transactions.models import PaymentStatus
+
+		# Sama persis logikanya sama "pending_bootcamp_payments" di
+		# get_my_products (products/views.py) -- diterima admin, TAPI belum
+		# punya transaksi PENDING/PAID sama sekali. Sengaja TIDAK ikut cek
+		# payment_deadline_at kayak di sana (itu buat nyembunyiin dari
+		# tampilan mahasiswa begitu lewat batas; di sini admin JUSTRU mau
+		# tetap bisa jangkau yang lewat batas juga buat follow-up/reminder).
+		regs = BootcampRegistration.objects.filter(
+			package__bootcamp_id=bootcamp_id,
+			status=BootcampRegistration.Status.ACCEPTED,
+		).exclude(
+			payment_transactions__payment_status__in=[PaymentStatus.PENDING, PaymentStatus.PAID]
+		)
+		return User.objects.filter(id__in=regs.values("user_id")).distinct()
+
 	if filter_type == BroadcastFilterType.MANUAL:
 		raw = params.get("emails") or []
 		emails = [e.strip().lower() for e in raw if isinstance(e, str) and e.strip()]
