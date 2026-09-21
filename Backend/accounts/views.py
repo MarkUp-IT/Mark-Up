@@ -181,17 +181,23 @@ def login_view(request):
 	if request_data is None:
 		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
-	email = request_data.get("email")
+	# Email DIRAPIKAN (strip + lowercase) sebelum dicari -- tanpa ini, email
+	# yang ketikan/paste-nya beda kapitalisasi atau kebawa spasi (mis. hasil
+	# copy dari badan email, atau autocapitalize browser/HP) bakal selalu
+	# dianggap "salah", padahal akunnya ADA dan passwordnya BENAR. Ketemu
+	# nyata: reviewer iPaymu gagal login 5x berturut-turut sampai kena
+	# rate limit, gara-gara ini -- passwordnya udah benar dari awal.
+	email = (request_data.get("email") or "").strip().lower()
 	password = request_data.get("password")
 
-	if email and is_rate_limited(f"rl:login:email:{email.strip().lower()}", limit=5, window_seconds=300):
+	if email and is_rate_limited(f"rl:login:email:{email}", limit=5, window_seconds=300):
 		return JsonResponse(
 			{"detail": "Terlalu banyak percobaan login untuk akun ini. Coba lagi beberapa menit lagi."},
 			status=429,
 		)
 
 	try:
-		user_obj = User.objects.get(email=email)
+		user_obj = User.objects.get(email__iexact=email)
 	except User.DoesNotExist:
 		user_obj = None
 
