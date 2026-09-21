@@ -10,8 +10,7 @@ const FILTER_LABELS = {
   ALL: "Semua User",
   ROLE: "Per Role",
   BOUGHT_PRODUCT: "Sudah Beli Produk Ini",
-  BOOTCAMP_REGISTERED: "Sudah Daftar Bootcamp Ini",
-  BOOTCAMP_UNPAID: "Diterima Tapi Belum Bayar (Bootcamp)",
+  BOOTCAMP_REGISTERED: "Bootcamp",
   MANUAL: "Daftar Email Manual",
 };
 
@@ -26,6 +25,12 @@ const BOOTCAMP_STATUS_OPTIONS = [
   { value: "registered", label: "Menunggu Ditinjau" },
   { value: "accepted", label: "Diterima" },
   { value: "rejected", label: "Ditolak" },
+];
+
+const BOOTCAMP_PAYMENT_OPTIONS = [
+  { value: "", label: "Semua" },
+  { value: "PAID", label: "Sudah Bayar" },
+  { value: "UNPAID", label: "Belum Bayar" },
 ];
 
 function formatDate(dateStr) {
@@ -45,6 +50,7 @@ export default function BroadcastEmailPage() {
   const [productId, setProductId] = useState("");
   const [bootcampId, setBootcampId] = useState("");
   const [bootcampStatus, setBootcampStatus] = useState("");
+  const [bootcampPayment, setBootcampPayment] = useState("");
   const [manualEmails, setManualEmails] = useState("");
 
   const [subject, setSubject] = useState("");
@@ -87,13 +93,18 @@ export default function BroadcastEmailPage() {
   // ngirim berdasarkan angka dari filter SEBELUMNYA yang keliatan masih nempel.
   useEffect(() => {
     setPreview(null);
-  }, [filterType, role, productId, bootcampId, bootcampStatus, manualEmails]);
+  }, [filterType, role, productId, bootcampId, bootcampStatus, bootcampPayment, manualEmails]);
 
   const buildFilterParams = () => {
     if (filterType === "ROLE") return { role };
     if (filterType === "BOUGHT_PRODUCT") return { product_id: productId };
-    if (filterType === "BOOTCAMP_REGISTERED") return { bootcamp_id: bootcampId, status: bootcampStatus || undefined };
-    if (filterType === "BOOTCAMP_UNPAID") return { bootcamp_id: bootcampId };
+    if (filterType === "BOOTCAMP_REGISTERED") {
+      return {
+        bootcamp_id: bootcampId,
+        status: bootcampStatus || undefined,
+        payment_status: bootcampPayment || undefined,
+      };
+    }
     if (filterType === "MANUAL") {
       return { emails: manualEmails.split(/[\n,]/).map((e) => e.trim()).filter(Boolean) };
     }
@@ -109,11 +120,8 @@ export default function BroadcastEmailPage() {
     if (filterType === "BOOTCAMP_REGISTERED") {
       const p = products.find((x) => x.id === bootcampId);
       const statusLabel = BOOTCAMP_STATUS_OPTIONS.find((s) => s.value === bootcampStatus)?.label || "Semua Status";
-      return `Daftar bootcamp: ${p?.title || "(bootcamp tidak ditemukan)"} -- ${statusLabel}`;
-    }
-    if (filterType === "BOOTCAMP_UNPAID") {
-      const p = products.find((x) => x.id === bootcampId);
-      return `Diterima tapi belum bayar: ${p?.title || "(bootcamp tidak ditemukan)"}`;
+      const paymentLabel = BOOTCAMP_PAYMENT_OPTIONS.find((s) => s.value === bootcampPayment)?.label || "Semua";
+      return `Bootcamp: ${p?.title || "(bootcamp tidak ditemukan)"} -- ${statusLabel}, Pembayaran: ${paymentLabel}`;
     }
     if (filterType === "MANUAL") return "Daftar email manual";
     return "Semua User";
@@ -122,7 +130,6 @@ export default function BroadcastEmailPage() {
   const isFilterReady = () => {
     if (filterType === "BOUGHT_PRODUCT") return Boolean(productId);
     if (filterType === "BOOTCAMP_REGISTERED") return Boolean(bootcampId);
-    if (filterType === "BOOTCAMP_UNPAID") return Boolean(bootcampId);
     if (filterType === "MANUAL") return manualEmails.trim().length > 0;
     return true;
   };
@@ -234,10 +241,10 @@ export default function BroadcastEmailPage() {
         )}
 
         {filterType === "BOOTCAMP_REGISTERED" && (
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex flex-col gap-2 flex-1">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
               <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Bootcamp</p>
-              <div className="relative w-full">
+              <div className="relative w-full max-w-md">
                 <select value={bootcampId} onChange={(e) => setBootcampId(e.target.value)} className={`${inputCls} appearance-none pr-10`}>
                   <option value="">-- Pilih Bootcamp --</option>
                   {bootcampProducts.map((p) => (
@@ -247,35 +254,35 @@ export default function BroadcastEmailPage() {
                 <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
               </div>
             </div>
-            <div className="flex flex-col gap-2 flex-1">
-              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Status Pendaftaran</p>
-              <div className="relative w-full">
-                <select value={bootcampStatus} onChange={(e) => setBootcampStatus(e.target.value)} className={`${inputCls} appearance-none pr-10`}>
-                  {BOOTCAMP_STATUS_OPTIONS.map((s) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
-                </select>
-                <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-col gap-2 flex-1">
+                <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Status Pendaftaran</p>
+                <div className="relative w-full">
+                  <select value={bootcampStatus} onChange={(e) => setBootcampStatus(e.target.value)} className={`${inputCls} appearance-none pr-10`}>
+                    {BOOTCAMP_STATUS_OPTIONS.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 flex-1">
+                <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Status Pembayaran</p>
+                <div className="relative w-full">
+                  <select value={bootcampPayment} onChange={(e) => setBootcampPayment(e.target.value)} className={`${inputCls} appearance-none pr-10`}>
+                    {BOOTCAMP_PAYMENT_OPTIONS.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
+                </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {filterType === "BOOTCAMP_UNPAID" && (
-          <div className="flex flex-col gap-2">
-            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Bootcamp</p>
-            <div className="relative w-full max-w-md">
-              <select value={bootcampId} onChange={(e) => setBootcampId(e.target.value)} className={`${inputCls} appearance-none pr-10`}>
-                <option value="">-- Pilih Bootcamp --</option>
-                {bootcampProducts.map((p) => (
-                  <option key={p.id} value={p.id}>{p.title}</option>
-                ))}
-              </select>
-              <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
-            </div>
-            <span className="text-[#94A3B8] text-[11px]">
-              Pendaftar yang sudah diterima admin, tapi belum punya transaksi lunas/menunggu verifikasi sama sekali.
-            </span>
+            {bootcampPayment === "UNPAID" && (
+              <span className="text-[#94A3B8] text-[11px] -mt-2">
+                &quot;Belum Bayar&quot; = belum punya transaksi lunas/menunggu verifikasi sama sekali (bukan cuma belum lunas).
+              </span>
+            )}
           </div>
         )}
 
