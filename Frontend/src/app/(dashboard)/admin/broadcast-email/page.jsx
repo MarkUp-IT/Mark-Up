@@ -11,6 +11,7 @@ const FILTER_LABELS = {
   ROLE: "Per Role",
   BOUGHT_PRODUCT: "Sudah Beli Produk Ini",
   BOOTCAMP_REGISTERED: "Sudah Daftar Bootcamp Ini",
+  BOOTCAMP_UNPAID: "Diterima Tapi Belum Bayar (Bootcamp)",
   MANUAL: "Daftar Email Manual",
 };
 
@@ -92,6 +93,7 @@ export default function BroadcastEmailPage() {
     if (filterType === "ROLE") return { role };
     if (filterType === "BOUGHT_PRODUCT") return { product_id: productId };
     if (filterType === "BOOTCAMP_REGISTERED") return { bootcamp_id: bootcampId, status: bootcampStatus || undefined };
+    if (filterType === "BOOTCAMP_UNPAID") return { bootcamp_id: bootcampId };
     if (filterType === "MANUAL") {
       return { emails: manualEmails.split(/[\n,]/).map((e) => e.trim()).filter(Boolean) };
     }
@@ -109,6 +111,10 @@ export default function BroadcastEmailPage() {
       const statusLabel = BOOTCAMP_STATUS_OPTIONS.find((s) => s.value === bootcampStatus)?.label || "Semua Status";
       return `Daftar bootcamp: ${p?.title || "(bootcamp tidak ditemukan)"} -- ${statusLabel}`;
     }
+    if (filterType === "BOOTCAMP_UNPAID") {
+      const p = products.find((x) => x.id === bootcampId);
+      return `Diterima tapi belum bayar: ${p?.title || "(bootcamp tidak ditemukan)"}`;
+    }
     if (filterType === "MANUAL") return "Daftar email manual";
     return "Semua User";
   };
@@ -116,6 +122,7 @@ export default function BroadcastEmailPage() {
   const isFilterReady = () => {
     if (filterType === "BOUGHT_PRODUCT") return Boolean(productId);
     if (filterType === "BOOTCAMP_REGISTERED") return Boolean(bootcampId);
+    if (filterType === "BOOTCAMP_UNPAID") return Boolean(bootcampId);
     if (filterType === "MANUAL") return manualEmails.trim().length > 0;
     return true;
   };
@@ -251,6 +258,24 @@ export default function BroadcastEmailPage() {
                 <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
               </div>
             </div>
+          </div>
+        )}
+
+        {filterType === "BOOTCAMP_UNPAID" && (
+          <div className="flex flex-col gap-2">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Bootcamp</p>
+            <div className="relative w-full max-w-md">
+              <select value={bootcampId} onChange={(e) => setBootcampId(e.target.value)} className={`${inputCls} appearance-none pr-10`}>
+                <option value="">-- Pilih Bootcamp --</option>
+                {bootcampProducts.map((p) => (
+                  <option key={p.id} value={p.id}>{p.title}</option>
+                ))}
+              </select>
+              <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
+            </div>
+            <span className="text-[#94A3B8] text-[11px]">
+              Pendaftar yang sudah diterima admin, tapi belum punya transaksi lunas/menunggu verifikasi sama sekali.
+            </span>
           </div>
         )}
 

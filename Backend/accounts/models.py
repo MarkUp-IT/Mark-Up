@@ -203,6 +203,7 @@ class BroadcastFilterType(models.TextChoices):
     ROLE = "ROLE", "Per Role"
     BOUGHT_PRODUCT = "BOUGHT_PRODUCT", "Sudah Beli Produk Ini"
     BOOTCAMP_REGISTERED = "BOOTCAMP_REGISTERED", "Sudah Daftar Bootcamp Ini"
+    BOOTCAMP_UNPAID = "BOOTCAMP_UNPAID", "Diterima Tapi Belum Bayar (Bootcamp)"
     MANUAL = "MANUAL", "Daftar Email Manual"
 
 
