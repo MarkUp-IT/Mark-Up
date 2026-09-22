@@ -409,6 +409,7 @@ function BootcampPaymentPageInner() {
                     <QrisPaymentPanel
                       onCreateTransaction={handleCreateIpaymuTransaction}
                       onPaid={handleQrisPaid}
+                      productTitle={`${registration.bootcamp_title} -- Paket ${registration.package.name}`}
                     />
                   </div>
                 ) : (
