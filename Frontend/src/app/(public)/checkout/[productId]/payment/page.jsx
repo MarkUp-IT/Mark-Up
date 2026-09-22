@@ -445,6 +445,7 @@ function CheckoutPaymentPageInner() {
                     <QrisPaymentPanel
                       onCreateTransaction={handleCreateIpaymuTransaction}
                       onPaid={handleQrisPaid}
+                      productTitle={checkoutSummary.productTitle}
                     />
                   </motion.div>
                 ) : (
