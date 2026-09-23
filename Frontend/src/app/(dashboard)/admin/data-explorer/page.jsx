@@ -109,7 +109,14 @@ const DATA_TYPES = [
   { value: "PENGGUNA", label: "Pengguna" },
 ];
 
-const EMPTY_FILTERS = { status: "Semua", secondary: "Semua", dateFrom: "", dateTo: "", search: "" };
+const EMPTY_FILTERS = { status: "Semua", secondary: "Semua", team: "Semua", dateFrom: "", dateTo: "", search: "" };
+
+const TEAM_ROLE_OPTIONS = [
+  { value: "Semua", label: "Semua" },
+  { value: "leader", label: "Ketua Tim" },
+  { value: "member", label: "Anggota Tim" },
+  { value: "none", label: "Bukan Tim (Solo)" },
+];
 
 // Anggota tim yang diundang BELUM PUNYA BootcampRegistration sendiri
 // sampai ketuanya bayar & di-ACC admin (lihat _provision_team_members di
@@ -255,6 +262,7 @@ export default function DataExplorerPage() {
       return rawRows.filter((r) => {
         if (filters.status !== "Semua" && r.status !== filters.status) return false;
         if (filters.secondary !== "Semua" && r.package?.name !== filters.secondary) return false;
+        if (filters.team !== "Semua" && (r.team?.role || "none") !== filters.team) return false;
         if (filters.search) {
           const hay = `${r.user_name} ${r.user_email}`.toLowerCase();
           if (!hay.includes(search)) return false;
@@ -396,6 +404,9 @@ export default function DataExplorerPage() {
           <SelectField label="Jenis Data" value={dataType} onChange={setDataType} options={DATA_TYPES} />
           <SelectField label={statusLabel} value={filters.status} onChange={setFilter("status")} options={statusOptions} />
           <SelectField label={secondaryLabel} value={filters.secondary} onChange={setFilter("secondary")} options={secondaryOptions} />
+          {dataType === "BOOTCAMP" && (
+            <SelectField label="Peran Tim" value={filters.team} onChange={setFilter("team")} options={TEAM_ROLE_OPTIONS} />
+          )}
 
           <div className="flex flex-col gap-1.5">
             <p className="text-[#64748B] text-[11px] uppercase font-bold tracking-wider">Dari Tanggal</p>
