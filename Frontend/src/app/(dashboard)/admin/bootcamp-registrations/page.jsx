@@ -2,7 +2,7 @@
 
 import ImageLightbox from "@/component/admin/ImageLightbox";
 import { useState, useEffect, useCallback } from "react";
-import { X, FileText, ShieldCheck, MessageSquare } from "lucide-react";
+import { X, FileText, ShieldCheck, MessageSquare, Users } from "lucide-react";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
@@ -152,8 +152,26 @@ export default function AdminBootcampRegistrations() {
                 {filtered.map((r) => (
                   <tr key={r.id} className="hover:bg-[#F8FAFC] transition-colors">
                     <td className="px-4 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-[#1E293B]">{r.user_name}</span>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-semibold text-[#1E293B]">{r.user_name}</span>
+                          {r.team?.role === "leader" && (
+                            <span
+                              title={`Ketua tim ${r.team.target_size} orang -- anggota: ${(r.team.members || []).map((m) => m.name).join(", ") || "-"}`}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E0E7FF] text-[#3730A3]"
+                            >
+                              <Users size={10} /> Ketua Tim &middot; {r.team.target_size} orang
+                            </span>
+                          )}
+                          {r.team?.role === "member" && (
+                            <span
+                              title={`Anggota tim -- ketua: ${r.team.leader_name} (${r.team.leader_email})`}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E0E7FF] text-[#3730A3]"
+                            >
+                              <Users size={10} /> Anggota Tim
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[#94A3B8] text-[12px]">{r.user_email}</span>
                       </div>
                     </td>
