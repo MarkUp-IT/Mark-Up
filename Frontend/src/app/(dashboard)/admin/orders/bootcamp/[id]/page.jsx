@@ -121,6 +121,45 @@ function MentorMultiSelect({ mentors, selectedIds, onChange }) {
   );
 }
 
+// Ketua & anggota satu tim ditaruh berdekatan (ketua duluan), lewat
+// team_group_id yang backend kirim sama persis buat keduanya -- daripada
+// nyocokin nama/email (dua orang beda bisa kebetulan namanya mirip).
+// Urutan ANTAR grup/peserta solo TETAP ngikut urutan asli dari API
+// (terbaru dibeli duluan), cuma anggota tim yang "ditarik" nempel ke
+// posisi kemunculan pertama grupnya.
+function groupByTeam(list) {
+  const byGroup = new Map();
+  for (const p of list) {
+    if (!p.team_group_id) continue;
+    if (!byGroup.has(p.team_group_id)) byGroup.set(p.team_group_id, []);
+    byGroup.get(p.team_group_id).push(p);
+  }
+  for (const members of byGroup.values()) {
+    members.sort((a, b) => {
+      if (a.team?.role === "leader") return -1;
+      if (b.team?.role === "leader") return 1;
+      return 0;
+    });
+  }
+  const consumed = new Set();
+  const result = [];
+  for (const p of list) {
+    if (consumed.has(p.user_library_id)) continue;
+    if (p.team_group_id) {
+      for (const m of byGroup.get(p.team_group_id)) {
+        if (!consumed.has(m.user_library_id)) {
+          result.push(m);
+          consumed.add(m.user_library_id);
+        }
+      }
+    } else {
+      result.push(p);
+      consumed.add(p.user_library_id);
+    }
+  }
+  return result;
+}
+
 function formatSessionDateTime(dateStr) {
   if (!dateStr) return null;
   return new Date(dateStr).toLocaleString("id-ID", {
@@ -673,9 +712,9 @@ export default function BootcampOrderDetail() {
 
       <div className="flex flex-col gap-4">
         <div>
-          <h2 className="text-[16px] font-semibold text-[#0F172A]">Progres Peserta</h2>
+          <h2 className="text-[16px] font-semibold text-[#0F172A]">Daftar Peserta</h2>
           <p className="text-[#64748B] text-[13px] mt-1">
-            Pantau progres tiap pembelian bootcamp ini per peserta, dan tandai sesi selesai supaya mentor bisa dapat pencairan dana.
+            Semua yang sudah membeli bootcamp ini, ketua & anggota tim ditaruh berdekatan. Tandai sesi selesai supaya mentor bisa dapat pencairan dana.
           </p>
         </div>
 
@@ -683,10 +722,12 @@ export default function BootcampOrderDetail() {
           <EmptyState message="Belum ada peserta yang membeli bootcamp ini." />
         ) : (
           <div className="flex flex-col gap-3">
-            {participants.map((pkg) => (
+            {groupByTeam(participants).map((pkg) => (
               <div
                 key={pkg.user_library_id}
-                className="w-full bg-white border border-[#E2E8F0] rounded-[12px] p-5 flex items-center justify-between shadow-sm hover:shadow-md transition-shadow"
+                className={`w-full bg-white border rounded-[12px] p-5 flex items-center justify-between shadow-sm hover:shadow-md transition-shadow ${
+                  pkg.team?.role === "member" ? "border-[#E0E7FF] ml-6" : "border-[#E2E8F0]"
+                }`}
               >
                 <div className="flex items-center gap-5">
                   <div
@@ -696,11 +737,27 @@ export default function BootcampOrderDetail() {
                     <Users size={16} />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <p className="font-bold text-[15px] text-[#1E293B]">
+                    <p className="font-bold text-[15px] text-[#1E293B] flex items-center gap-2 flex-wrap">
                       {pkg.user_name}
-                      <span className="ml-2 text-[#148F89] text-[12px] font-semibold">
+                      <span className="text-[#148F89] text-[12px] font-semibold">
                         ({pkg.completed_sessions}/{pkg.total_sessions} sesi selesai)
                       </span>
+                      {pkg.team?.role === "leader" && (
+                        <span
+                          title={`Ketua tim ${pkg.team.target_size} orang -- anggota: ${(pkg.team.members || []).map((m) => m.name).join(", ") || "-"}`}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E0E7FF] text-[#3730A3]"
+                        >
+                          <Users size={10} /> Ketua Tim &middot; {pkg.team.target_size} orang
+                        </span>
+                      )}
+                      {pkg.team?.role === "member" && (
+                        <span
+                          title={`Anggota tim -- ketua: ${pkg.team.leader_name} (${pkg.team.leader_email})`}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E0E7FF] text-[#3730A3]"
+                        >
+                          <Users size={10} /> Anggota Tim
+                        </span>
+                      )}
                     </p>
                     <p className="text-[13px] text-[#64748B] font-medium">
                       {pkg.unscheduled_sessions > 0 && (

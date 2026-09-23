@@ -1617,12 +1617,53 @@ def get_bootcamp_orders(request):
     if product_id:
         libraries = libraries.filter(product_id=product_id)
 
+    libraries = list(libraries)
+
+    # Tim (ketua/anggota) ditentukan lewat BootcampRegistration yang match
+    # (user, bootcamp produk) yang sama -- UserLibrary sendiri gak punya link
+    # langsung ke situ. Di-batch sekali per bootcamp produk yang tampil di
+    # sini biar gak N+1 query per baris.
+    bootcamp_product_ids = {lib.product_id for lib in libraries}
+    regs_by_key = {}
+    if bootcamp_product_ids:
+        regs = (
+            BootcampRegistration.objects.filter(
+                package__bootcamp__product_id__in=bootcamp_product_ids
+            )
+            .select_related("package__bootcamp", "led_team_group")
+            .prefetch_related(
+                "team_invites__invitee",
+                "registration_group__leader_registration__user",
+            )
+        )
+        for reg in regs:
+            key = (reg.user_id, reg.package.bootcamp.product_id)
+            # Kalau user kebetulan punya >1 registrasi buat bootcamp yang
+            # sama (mis. sempat ditolak lalu daftar ulang di paket lain),
+            # pakai yang PALING BARU -- itu yang nyambung ke akses aktifnya.
+            existing = regs_by_key.get(key)
+            if existing is None or reg.created_at > existing.created_at:
+                regs_by_key[key] = reg
+
     data = []
     for library in libraries:
         sessions = list(library.bootcamp_sessions.all())
         if not sessions:
             continue
         detail = library.product.bootcamp_detail
+        reg = regs_by_key.get((library.user_id, library.product_id))
+
+        # ID grup tim yang SAMA buat ketua & tiap anggotanya -- lebih aman
+        # dipakai FE buat ngelompokin barisnya berdekatan daripada cocok-
+        # cocokan nama/email (dua orang beda bisa kebetulan nama sama).
+        team_group_id = None
+        if reg is not None:
+            grup = getattr(reg, "led_team_group", None)
+            if grup is not None:
+                team_group_id = str(grup.id)
+            elif reg.registration_group_id:
+                team_group_id = str(reg.registration_group_id)
+
         data.append({
             "user_library_id": str(library.id),
             "user_name": library.user.fullname,
@@ -1633,6 +1674,8 @@ def get_bootcamp_orders(request):
             "scheduled_sessions": sum(1 for s in sessions if s.status == "scheduled"),
             "unscheduled_sessions": sum(1 for s in sessions if s.status == "waiting_schedule"),
             "pending_links": sum(1 for s in sessions if s.status == "scheduled" and not s.meeting_link),
+            "team": _serialize_team_info(reg) if reg is not None else None,
+            "team_group_id": team_group_id,
         })
 
     return JsonResponse({"packages": data}, status=200)
