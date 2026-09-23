@@ -96,6 +96,15 @@ export default function Products() {
     discount_percent: "",
     session_count: 1,
     duration_minutes: 60,
+    // registration_link/image_url/file_pdf_url sebelumnya KELEWAT di sini
+    // (ada di formData/create tapi gak di editFormData) -- form edit gak
+    // pernah nampilin nilai sekarang & gak pernah bisa dipakai buat
+    // ngubahnya. Backend sekarang udah PATCH-semantics (lihat
+    // update_product di products/views.py) jadi gak akan kehapus lagi
+    // walau kosong, tapi tetap harus ada di sini biar bisa DILIHAT & DIUBAH.
+    registration_link: "",
+    image_url: "",
+    file_pdf_url: "",
     stock: "",
     is_active: true,
     payment_gateway_mode: "AUTO",
@@ -489,19 +498,34 @@ export default function Products() {
       );
     }
     if (category === "Modul") {
+      // ModuleProduct.file_pdf_url itu URLField (link), BUKAN FileField --
+      // sebelumnya di sini cuma <div> hiasan bergaya dropzone, gak ada
+      // <input>/state sama sekali, jadi formData.file_pdf_url SELALU ""
+      // dan submit produk Modul SELALU gagal (field itu wajib di backend).
+      // Disamakan gayanya sama input URL lain di form ini (Link Grup
+      // Komunitas dst) -- tempel link PDF (mis. Google Drive/S3), bukan
+      // upload file langsung.
       return (
         <div className="flex flex-col gap-2">
           <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-            File PDF Utama
+            Link File PDF Utama
           </p>
-          <div
-            style={{ height: "100px" }}
-            className="bg-[#F8FAFC] w-full rounded-[8px] flex items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:bg-[#F1F5F9] transition-all cursor-pointer"
-          >
-            <p className="text-[#64748B] text-[13px]">
-              Klik untuk unggah PDF materi utama
-            </p>
-          </div>
+          <input
+            type="url"
+            placeholder="https://drive.google.com/... atau link PDF lainnya"
+            value={data.file_pdf_url}
+            onChange={(e) =>
+              setData((prev) => ({
+                ...prev,
+                file_pdf_url: e.target.value,
+              }))
+            }
+            className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+          />
+          <p className="text-[#94A3B8] text-[11px]">
+            Link ke file PDF materi utama modul ini -- wajib diisi, peserta yang
+            sudah beli bakal diarahkan ke sini buat baca/unduh materinya.
+          </p>
         </div>
       );
     }
@@ -921,6 +945,9 @@ export default function Products() {
                                 discount_percent: item.discount_percent ?? "",
                                 session_count: item.session_count ?? 1,
                                 duration_minutes: item.duration_minutes ?? 60,
+                                registration_link: item.registration_link ?? "",
+                                image_url: item.image_url ?? "",
+                                file_pdf_url: item.file_pdf_url ?? "",
                                 stock: item.stock ?? "",
                                 is_active: item.is_active,
                                 payment_gateway_mode: item.payment_gateway_mode ?? "AUTO",
@@ -1678,6 +1705,9 @@ export default function Products() {
                 discount_percent: viewProduct.discount_percent ?? "",
                 session_count: viewProduct.session_count ?? 1,
                 duration_minutes: viewProduct.duration_minutes ?? 60,
+                registration_link: viewProduct.registration_link ?? "",
+                image_url: viewProduct.image_url ?? "",
+                file_pdf_url: viewProduct.file_pdf_url ?? "",
                 stock: viewProduct.stock ?? "",
                 is_active: viewProduct.is_active,
                 payment_gateway_mode: viewProduct.payment_gateway_mode ?? "AUTO",

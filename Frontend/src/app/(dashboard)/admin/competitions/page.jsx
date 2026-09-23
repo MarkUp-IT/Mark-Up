@@ -54,10 +54,22 @@ function formatDate(iso) {
   });
 }
 
-// yyyy-mm-dd buat value input type="date"
-function toDateInputValue(iso) {
+// event_date & deadline itu DateTimeField (bukan DateField) di backend,
+// tapi form-nya cuma pakai <input type="date"> -- setiap kali disimpan
+// ulang, jam-nya ke-reset jadi 00:00 WIB, walau admin cuma ngubah field
+// LAIN yang gak ada hubungannya (mis. ganti judul doang). Ditambah lagi
+// backend ngirim ISO dalam UTC (gak di-localtime-in dulu), jadi slice
+// mentah 10 karakter pertama bisa mundur 1 hari buat deadline yang jam
+// WIB-nya di bawah jam 7 pagi. Sekarang pakai <input type="datetime-local">
+// + konversi eksplisit ke WIB.
+function toDateTimeLocalValue(iso) {
   if (!iso) return "";
-  return iso.slice(0, 10);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  // Trik: geser 7 jam lalu baca lewat toISOString (yang selalu nampilin UTC)
+  // -- hasilnya jadi "jam dinding WIB" tanpa perlu Intl.DateTimeFormat.
+  const wib = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+  return wib.toISOString().slice(0, 16); // "YYYY-MM-DDTHH:mm"
 }
 
 export default function Competitions() {
@@ -187,15 +199,19 @@ export default function Competitions() {
     setEditForm({
       title: selectedCompetition.title || "",
       organizer: selectedCompetition.organizer || "",
+      // Backend ngirim "category" sebagai STRING (nama), bukan objek --
+      // yang punya id itu field terpisah "category_id". Sebelumnya
+      // `.category?.id` selalu undefined, jadi edit APA PUN diam-diam
+      // ngerubah kategori balik ke categories[0].
       category:
-        selectedCompetition.category?.id != null
-          ? String(selectedCompetition.category.id)
+        selectedCompetition.category_id != null
+          ? String(selectedCompetition.category_id)
           : categories[0]
           ? String(categories[0].id)
           : "",
       level: selectedCompetition.level || "",
-      event_date: toDateInputValue(selectedCompetition.date),
-      deadline: toDateInputValue(selectedCompetition.deadline),
+      event_date: toDateTimeLocalValue(selectedCompetition.date),
+      deadline: toDateTimeLocalValue(selectedCompetition.deadline),
       target_participant: selectedCompetition.target || "",
       registration_fee: selectedCompetition.fee ?? "",
       prizepool: selectedCompetition.prize ?? "",
@@ -208,7 +224,7 @@ export default function Competitions() {
   const filtered = competitions.filter((c) => {
     const status = getStatus(c.deadline);
     const matchCategory =
-      categoryFilter === "Semua" || c.category?.name === categoryFilter;
+      categoryFilter === "Semua" || c.category === categoryFilter;
     const matchStatus = statusFilter === "Semua" || status === statusFilter;
     return matchCategory && matchStatus;
   });
@@ -353,7 +369,7 @@ export default function Competitions() {
       c.id,
       c.title,
       c.organizer,
-      c.category?.name,
+      c.category,
       formatDate(c.deadline),
       getStatus(c.deadline),
     ]);
@@ -530,7 +546,7 @@ export default function Competitions() {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span className="inline-flex px-3 py-1.5 text-[11px] rounded-[6px] font-semibold bg-[#F1F5F9] text-[#475569]">
-                            {item.category?.name}
+                            {item.category}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-center text-[#475569] font-medium whitespace-nowrap">
@@ -707,7 +723,7 @@ export default function Competitions() {
                 Tanggal Event
               </p>
               <input
-                type="date"
+                type="datetime-local"
                 name="event_date"
                 value={addForm.event_date}
                 onChange={handleAddChange}
@@ -719,7 +735,7 @@ export default function Competitions() {
                 Deadline Pendaftaran
               </p>
               <input
-                type="date"
+                type="datetime-local"
                 name="deadline"
                 value={addForm.deadline}
                 onChange={handleAddChange}
@@ -921,7 +937,7 @@ export default function Competitions() {
               Tanggal Event
             </p>
             <input
-              type="date"
+              type="datetime-local"
               name="event_date"
               value={editForm.event_date}
               onChange={handleEditChange}
@@ -933,7 +949,7 @@ export default function Competitions() {
               Deadline Pendaftaran
             </p>
             <input
-              type="date"
+              type="datetime-local"
               name="deadline"
               value={editForm.deadline}
               onChange={handleEditChange}
