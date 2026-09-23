@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, Check, X as XIcon, MailCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -48,7 +49,15 @@ function Field({ label, type = "text", value, onChange, error, rightIcon, placeh
   );
 }
 
-export default function Register() {
+function RegisterInner() {
+  // ?next= diisi halaman yang butuh login (mis. checkout) saat ngelempar
+  // pengunjung yang belum punya akun ke sini. Diteruskan ke /login setelah
+  // verifikasi email, biar dia gak kembali ke dashboard kosong -- sama pola
+  // validasinya (cuma path internal) kayak di halaman login.
+  const rawNext = useSearchParams().get("next");
+  const nextPath = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
+  const loginHref = nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : "/login";
+
   // Catatan: field "Username" dihapus -- skema tabel `users` cuma punya
   // kolom `email` sebagai identitas unik buat login, nggak ada kolom
   // `username` sama sekali. Field di bawah ini disamakan sama kolom yang
@@ -219,7 +228,7 @@ export default function Register() {
               </p>
             </div>
             <Link
-              href="/login"
+              href={loginHref}
               className="bg-[#B19EEF] flex items-center justify-center w-full h-[48px] rounded-[12px] text-black font-bold text-[14px] transition-colors mt-1"
             >
               Ke Halaman Login
@@ -420,6 +429,9 @@ export default function Register() {
               )}
             </div>
             <p className="text-[#6B7280] text-[11.5px]">JPG, PNG, atau WEBP. Maksimal 2MB.</p>
+            {fieldErrors.profile_image && (
+              <p className="text-red-400 text-[12px]">{fieldErrors.profile_image}</p>
+            )}
           </div>
 
 
@@ -473,7 +485,7 @@ export default function Register() {
 
           <p className="text-[13px] text-center text-[#9CA3AF]">
             Sudah memiliki akun?{" "}
-            <Link href="/login" className="text-[#08C7E1] hover:underline">
+            <Link href={loginHref} className="text-[#08C7E1] hover:underline">
               Login
             </Link>
           </p>
@@ -492,5 +504,15 @@ export default function Register() {
         </div>
       </div>
     </div>
+  );
+}
+
+// useSearchParams wajib dibungkus Suspense, kalau nggak build produksi bisa
+// gagal waktu Next.js nyoba prerender halaman ini.
+export default function Register() {
+  return (
+    <Suspense fallback={<div className="w-full min-h-screen bg-[#0F081C]" />}>
+      <RegisterInner />
+    </Suspense>
   );
 }

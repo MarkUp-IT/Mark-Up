@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Camera, Lock } from "lucide-react";
 import Link from "next/link";
-import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
 
@@ -54,19 +54,12 @@ export default function AdminSettings() {
     try {
       const formData = new FormData();
       formData.append("photo", file);
-      const token = getAccessToken();
-      const res = await fetch(`${API_BASE}/api/accounts/me/profile/photo/`, {
+      const data = await apiRequest("/api/accounts/me/profile/photo/", {
         method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
-      const data = await res.json().catch(() => null);
-      if (res.ok) {
-        setProfileImage(data.profile_image);
-        toast.success("Foto Profil Diperbarui");
-      } else {
-        toast.error("Gagal Mengunggah Foto", { description: data?.detail || "Terjadi kesalahan." });
-      }
+      setProfileImage(data.profile_image);
+      toast.success("Foto Profil Diperbarui");
     } catch (err) {
       toast.error("Gagal Mengunggah Foto", { description: err?.message || "Terjadi kesalahan." });
     } finally {

@@ -943,6 +943,31 @@ def get_products(request):
     fetch_all = request.GET.get("all") == "true"
     include_inactive = request.GET.get("include_inactive") == "true"
 
+    if include_inactive:
+        # Endpoint ini publik (dipakai storefront tanpa login), tapi
+        # include_inactive dimaksudkan CUMA buat admin (lihat komentar di
+        # bawah) -- sebelumnya gak ada pengecekan sama sekali, jadi siapa pun
+        # yang tau nama parameternya bisa lihat produk yang sengaja
+        # disembunyikan/dinonaktifkan. Turunkan diam-diam ke false kalau yang
+        # minta bukan admin yang beneran login, daripada 403 (biar request
+        # publik yang gak sengaja nyertain param ini tetap jalan normal).
+        from rest_framework_simplejwt.authentication import JWTAuthentication
+        from rest_framework_simplejwt.exceptions import InvalidToken, AuthenticationFailed
+        from accounts.models import UserRole
+
+        is_admin = False
+        auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+        if auth_header.startswith("Bearer "):
+            try:
+                token = auth_header.split(" ", 1)[1].strip()
+                validated_token = JWTAuthentication().get_validated_token(token)
+                user = JWTAuthentication().get_user(validated_token)
+                is_admin = user.role == UserRole.ADMIN
+            except (InvalidToken, AuthenticationFailed):
+                is_admin = False
+        if not is_admin:
+            include_inactive = False
+
     # Product tanpa detail sama sekali (baris yatim -- biasanya sisa proses
     # tambah produk yang keputus di tengah jalan) bukan produk valid di
     # tampilan manapun, jadi selalu dikecualikan di sini, terlepas dari flag
