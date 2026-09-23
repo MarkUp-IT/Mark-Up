@@ -32,6 +32,7 @@ function formatDate(dateStr) {
 export default function Feedbacks() {
   const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [togglingId, setTogglingId] = useState(null);
 
   const fetchReviews = useCallback(async () => {
     setLoading(true);
@@ -50,14 +51,24 @@ export default function Feedbacks() {
   }, [fetchReviews]);
 
   const toggleHidden = async (id) => {
+    // Endpoint-nya TOGGLE (server balik-in nilai is_hidden yang lagi ada,
+    // bukan set ke nilai tertentu) -- kalau tombolnya diklik dobel sebelum
+    // request pertama kelar, dua request itu ikut balikin state dua kali
+    // (net gak berubah), jadi kelihatannya "gak ngefek" padahal server
+    // sebenarnya sempat ngubah dua kali. Guard per-id ini nyegah klik kedua
+    // nyampe server selagi yang pertama masih diproses.
+    if (togglingId === id) return;
+    setTogglingId(id);
     try {
       await apiRequest(`/api/products/reviews/${id}/toggle/`, { method: "PATCH" });
-      fetchReviews();
+      await fetchReviews();
       toast.success("Status Ulasan Diperbarui");
     } catch (err) {
       toast.error("Gagal Mengubah Status Ulasan", {
         description: extractErrorMessage(err, "Terjadi kesalahan."),
       });
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -121,8 +132,9 @@ export default function Feedbacks() {
                       <td className="px-6 py-5 align-top text-center">
                         <button
                           onClick={() => toggleHidden(item.id)}
+                          disabled={togglingId === item.id}
                           title={item.is_hidden ? "Tampilkan ulasan" : "Sembunyikan ulasan"}
-                          className={`p-2 rounded-full transition-colors ${
+                          className={`p-2 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                             item.is_hidden ? "text-[#94A3B8] hover:bg-[#F1F5F9]" : "text-[#148F89] hover:bg-[#148F89]/10"
                           }`}
                         >

@@ -291,9 +291,9 @@ export default function AdminDashboard() {
           variant="success"
         />
         <StatCard
-          label="User Aktif"
+          label="Total Pengguna"
           value={loading ? "…" : String(userSummary?.total_users ?? 0)}
-          unit="online"
+          unit="akun"
         />
       </div>
 

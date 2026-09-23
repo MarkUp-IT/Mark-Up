@@ -134,7 +134,13 @@ export default function BootcampRegistrationFormPanel({ productId }) {
 
   const simpanEdit = async () => {
     if (!editForm?.text.trim()) return;
-    await ubahPertanyaan(editId, {
+    // ubahPertanyaan nangkep errornya sendiri (biar tombol Aktifkan/Nonaktifkan
+    // di daftar juga bisa pakai fungsi yang sama tanpa perlu try/catch masing-
+    // masing) -- tapi itu artinya di sini HARUS dicek balikannya dulu sebelum
+    // nutup form & bilang sukses. Sebelumnya form ini langsung ketutup dan
+    // toast "Diperbarui" tetap muncul walau requestnya gagal, jadi perubahan
+    // yang barusan diketik ilang tanpa admin sadar itu gak kesimpen.
+    const berhasil = await ubahPertanyaan(editId, {
       text: editForm.text.trim(),
       helper_text: editForm.helper_text.trim(),
       is_required: editForm.is_required,
@@ -142,6 +148,7 @@ export default function BootcampRegistrationFormPanel({ productId }) {
       for_all_packages: editForm.for_all_packages,
       package_ids: editForm.for_all_packages ? [] : editForm.package_ids,
     });
+    if (!berhasil) return;
     setEditId(null);
     setEditForm(null);
     toast.success("Pertanyaan Diperbarui");
@@ -154,10 +161,12 @@ export default function BootcampRegistrationFormPanel({ productId }) {
         body: perubahan,
       });
       muat();
+      return true;
     } catch (err) {
       toast.error("Gagal Mengubah Pertanyaan", {
         description: extractErrorMessage(err, "Terjadi kesalahan."),
       });
+      return false;
     }
   };
 

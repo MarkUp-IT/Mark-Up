@@ -26,7 +26,11 @@ export default function ModuleOrders() {
   const fetchModules = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiRequest("/api/products/?all=true", { auth: false });
+      // include_inactive=true -- ini halaman admin, modul yang sudah
+      // dinonaktifkan (misal habis dianggap usang) harus tetap kelihatan &
+      // bisa dikelola/diaktifkan lagi dari sini. Butuh token admin, jadi
+      // request-nya WAJIB pakai auth (bukan auth:false kayak sebelumnya).
+      const res = await apiRequest("/api/products/?all=true&include_inactive=true");
       const all = res?.products || [];
       setModules(all.filter((p) => p.type === "MODULE"));
     } catch (err) {
