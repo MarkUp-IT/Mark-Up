@@ -20,7 +20,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import PromoPopupPanel from "@/component/admin/PromoPopupPanel";
@@ -49,6 +49,7 @@ export default function Products() {
 
   const [categoryFilter, setCategoryFilter] = useState("Semua");
   const [statusFilter, setStatusFilter] = useState("Semua");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
@@ -64,9 +65,7 @@ export default function Products() {
   const [loadingSummary, setLoadingSummary] = useState(true);
 
   const [products, setProducts] = useState([]);
-  const [pagination, setPagination] = useState(null);
   const [loadingProducts, setLoadingProducts] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
 
   const [formData, setFormData] = useState({
       type: "BOOTCAMP",
@@ -190,26 +189,27 @@ export default function Products() {
     fetchExpertiseOptions();
   }, []);
 
+  // Fetch SEMUA produk sekaligus (bukan paginasi server) -- filter kategori/
+  // status/pencarian di bawah ini kerjanya di sisi klien, jadi sebelumnya
+  // cuma nyaring 10 baris yang lagi kebuka di halaman itu doang. Produk
+  // yang cocok sama filter tapi nyasar ke halaman lain jadi keliatan
+  // "hilang" walau sebenarnya ada. Katalog produk platform ini kecil
+  // (puluhan, bukan ribuan), jadi fetch-semua aman dipakai di sini.
+  const fetchProducts = useCallback(async () => {
+    try {
+      setLoadingProducts(true);
+      const data = await api.get("/api/products/?all=true&include_inactive=true");
+      setProducts(data.products ?? []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingProducts(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        setLoadingProducts(true);
-
-        const data = await api.get(
-          `/api/products/?page=${currentPage}&page_size=10&include_inactive=true`
-        );
-
-        setProducts(data.products ?? []);
-        setPagination(data.pagination ?? null);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoadingProducts(false);
-      }
-    };
-
     fetchProducts();
-  }, [currentPage]);
+  }, [fetchProducts]);
 
   const formatIDR = (val) =>
     val == null
@@ -223,11 +223,16 @@ export default function Products() {
   const [exporting, setExporting] = useState(false);
 
   async function handleExportCsv() {
+    if (filtered.length === 0) {
+      showToast("error", "Gak ada data buat diekspor", "Sesuaikan dulu filter/pencariannya.");
+      return;
+    }
     setExporting(true);
     try {
-      const data = await api.get("/api/products/?all=true&include_inactive=true");
-      const allProducts = data.products ?? [];
-
+      // Ekspor persis apa yang lagi kelihatan di tabel (sudah kena filter
+      // kategori/status/pencarian) -- sebelumnya di sini nge-fetch ULANG
+      // seluruh katalog mentah, jadi CSV-nya selalu isi SEMUA produk
+      // walau admin udah milih filter tertentu di tabel.
       const typeLabel = (t) =>
         t === "MENTORING" ? "Mentoring" : t === "BOOTCAMP" ? "Bootcamp" : "Modul";
 
@@ -235,7 +240,7 @@ export default function Products() {
         "ID", "Judul", "Kategori", "Harga Asli", "Harga Setelah Diskon",
         "Diskon (%)", "Status", "Terjual",
       ];
-      const rows = allProducts.map((item) => [
+      const rows = filtered.map((item) => [
         `${item.type.slice(0, 2)}${String(item.id).slice(-4)}`,
         item.title,
         typeLabel(item.type),
@@ -305,7 +310,10 @@ export default function Products() {
         ? p.is_active
         : !p.is_active);
 
-    return matchCategory && matchStatus;
+    const query = searchQuery.trim().toLowerCase();
+    const matchSearch = !query || (p.title || "").toLowerCase().includes(query);
+
+    return matchCategory && matchStatus && matchSearch;
   });
 
   const renderCategorySpecificFields = (data, setData, category) => {
@@ -551,10 +559,7 @@ export default function Products() {
 
       showToast("success", "Produk diterbitkan", successMessage);
       setIsAddOpen(false);
-
-      const data = await api.get(`/api/products/?page=${currentPage}&page_size=10&include_inactive=true`);
-      setProducts(data.products ?? []);
-      setPagination(data.pagination ?? null);
+      await fetchProducts();
     } catch (err) {
       console.error(err);
       setAddFieldErrors(extractFieldErrors(err));
@@ -605,12 +610,7 @@ export default function Products() {
 
       showToast("success", "Produk diperbarui", successMessage);
       setIsEditOpen(false);
-
-      const data = await api.get(
-        `/api/products/?page=${currentPage}&page_size=10&include_inactive=true`
-      );
-      setProducts(data.products ?? []);
-      setPagination(data.pagination ?? null);
+      await fetchProducts();
     } catch (err) {
       console.error(err);
       setEditFieldErrors(extractFieldErrors(err));
@@ -786,6 +786,8 @@ export default function Products() {
               />
               <input
                 type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari di tabel..."
                 className="bg-white adm-w-220 adm-h-42 rounded-[8px] pl-9 border border-[#E2E8F0] outline-none focus:border-[#148F89] text-[13px]"
               />
@@ -960,31 +962,6 @@ export default function Products() {
                   ))}
                 </tbody>
               </table>
-              {pagination && (
-                <div className="flex items-center justify-between px-6 py-4 border-t border-[#E2E8F0] bg-white">
-                  <p className="text-sm text-[#64748B]">
-                    Halaman {pagination.page} dari {pagination.total_pages}
-                  </p>
-
-                  <div className="flex gap-2">
-                    <button
-                      disabled={!pagination.has_previous}
-                      onClick={() => setCurrentPage((p) => p - 1)}
-                      className="px-4 py-2 border rounded disabled:opacity-40"
-                    >
-                      Sebelumnya
-                    </button>
-
-                    <button
-                      disabled={!pagination.has_next}
-                      onClick={() => setCurrentPage((p) => p + 1)}
-                      className="px-4 py-2 border rounded disabled:opacity-40"
-                    >
-                      Berikutnya
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}

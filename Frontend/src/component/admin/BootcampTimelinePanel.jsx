@@ -473,8 +473,12 @@ export default function BootcampTimelinePanel({ productId }) {
                       </p>
                       {pkg.requires_selection && (
                         <>
+                          {/* Ini nilai DEFAULT buat tes baru, bukan pengaturan tes yang
+                              udah ada -- tiap BootcampQuiz simpan durasi/skor lulusnya
+                              sendiri (lihat BootcampQuizPanel), jadi ngedit angka ini
+                              gak ngubah tes yang sudah dibuat sama sekali. */}
                           <p className="text-[#64748B] text-[11.5px]">
-                            Tes BCC: {pkg.quiz_duration_minutes} menit, lulus ≥ {pkg.quiz_passing_score_percent}%
+                            Default tes baru: {pkg.quiz_duration_minutes} menit, lulus ≥ {pkg.quiz_passing_score_percent}%
                           </p>
                           <p className="text-[#64748B] text-[11.5px]">
                             {pkg.selection_quota
@@ -578,7 +582,7 @@ export default function BootcampTimelinePanel({ productId }) {
                         <>
                           <div className="flex gap-2">
                             <div className="flex-1 flex flex-col gap-1">
-                              <FieldLabel>Durasi Tes (menit)</FieldLabel>
+                              <FieldLabel>Durasi Tes (menit) -- default</FieldLabel>
                               <input
                                 type="number"
                                 min={5}
@@ -590,7 +594,7 @@ export default function BootcampTimelinePanel({ productId }) {
                               />
                             </div>
                             <div className="flex-1 flex flex-col gap-1">
-                              <FieldLabel>Skor Kelulusan (%)</FieldLabel>
+                              <FieldLabel>Skor Kelulusan (%) -- default</FieldLabel>
                               <input
                                 type="number"
                                 min={0}
@@ -602,6 +606,11 @@ export default function BootcampTimelinePanel({ productId }) {
                               />
                             </div>
                           </div>
+                          <span className="text-[#94A3B8] text-[10.5px] -mt-1">
+                            Cuma dipakai sebagai nilai awal pas bikin tes BARU (di panel
+                            Tes/Kuis) -- gak mengubah tes yang sudah ada. Tiap tes punya
+                            durasi & skor kelulusan sendiri-sendiri.
+                          </span>
                           <div className="flex flex-col gap-1">
                             <FieldLabel>Kuota Diterima (opsional)</FieldLabel>
                             <input
