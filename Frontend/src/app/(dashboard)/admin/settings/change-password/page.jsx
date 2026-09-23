@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Eye, EyeOff, Check, X as XIcon } from "lucide-react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import { apiRequest } from "@/lib/api";
 
 const PASSWORD_REQUIREMENTS = [
@@ -56,7 +55,7 @@ export default function AdminChangePassword() {
   };
 
   return (
-    <DashboardLayout title="Pengaturan">
+    <>
       <Link
         href="/admin/settings"
         className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#148F89] text-[13px] font-medium transition-colors w-fit"
@@ -214,6 +213,6 @@ export default function AdminChangePassword() {
           </form>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

@@ -2,7 +2,6 @@
 
 import { Eye, EyeOff, Star } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
@@ -66,7 +65,7 @@ export default function Feedbacks() {
   const hiddenCount = feedbacks.filter((f) => f.is_hidden).length;
 
   return (
-    <DashboardLayout title="Ulasan">
+    <>
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-bold text-[22px] text-[#0F172A]">Ulasan</h1>
@@ -77,9 +76,9 @@ export default function Feedbacks() {
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total Ulasan" value={feedbacks.length} unit="ulasan" />
-        <StatCard label="Ulasan Terlihat" value={visibleCount} unit="ulasan" variant="success" />
-        <StatCard label="Disembunyikan" value={hiddenCount} unit="ulasan" variant="warning" />
+        <StatCard label="Total Ulasan" value={feedbacks.length} unit="ulasan" loading={loading} />
+        <StatCard label="Ulasan Terlihat" value={visibleCount} unit="ulasan" variant="success" loading={loading} />
+        <StatCard label="Disembunyikan" value={hiddenCount} unit="ulasan" variant="warning" loading={loading} />
       </div>
 
       <div className="flex flex-col gap-4">
@@ -138,6 +137,6 @@ export default function Feedbacks() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

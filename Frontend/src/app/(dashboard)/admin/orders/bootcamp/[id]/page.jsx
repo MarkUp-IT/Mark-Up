@@ -1,20 +1,26 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Send,
   Trash2,
   Plus,
   ChevronDown,
   X,
   Check,
   Users,
+  CalendarClock,
+  Pencil,
 } from "lucide-react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import EmptyState from "@/component/admin/EmptyState";
+import BootcampTimelinePanel from "@/component/admin/BootcampTimelinePanel";
+import BootcampQuizPanel from "@/component/admin/BootcampQuizPanel";
+import BootcampResourcePanel from "@/component/admin/BootcampResourcePanel";
+import BootcampTeamPanel from "@/component/admin/BootcampTeamPanel";
+import BootcampRequirementsPanel from "@/component/admin/BootcampRequirementsPanel";
+import BootcampRegistrationFormPanel from "@/component/admin/BootcampRegistrationFormPanel";
 import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
@@ -25,11 +31,116 @@ const PARTICIPANT_STATUS_META = {
   waiting_schedule: { label: "BELUM DIJADWALKAN", className: "bg-[#FEF3C7] text-[#92400E]" },
 };
 
+function MentorMultiSelect({ mentors, selectedIds, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState(null);
+  const btnRef = useRef(null);
+  const listRef = useRef(null);
+  const selectedNames = mentors
+    .filter((m) => selectedIds.includes(m.id))
+    .map((m) => m.name);
+
+  const toggle = (id) => {
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter((x) => x !== id));
+    } else {
+      onChange([...selectedIds, id]);
+    }
+  };
+
+  // Dropdown-nya position: fixed (dihitung dari posisi tombol) -- kalau pakai
+  // absolute biasa, dia keclip sama container tabel yang overflow-x-auto +
+  // overflow-hidden. Fixed bikin dia "lepas" dari container itu. Tutup pas
+  // HALAMAN di-scroll biar posisinya gak nyasar -- tapi scroll di DALAM
+  // list mentor sendiri (listRef, buat liat mentor lain) harus diabaikan,
+  // soalnya listener scroll di window pakai capture jadi ke-trigger juga
+  // sama scroll di elemen manapun di bawahnya termasuk list ini.
+  const openDropdown = () => {
+    if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => {
+      if (listRef.current && listRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative w-full">
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => (open ? setOpen(false) : openDropdown())}
+        className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] pl-3 pr-8 text-[13px] font-medium text-[#475569] text-left outline-none focus:border-[#148F89] truncate"
+        style={{ height: "36px" }}
+      >
+        {selectedNames.length > 0 ? selectedNames.join(", ") : "-- Pilih Mentor --"}
+      </button>
+      <ChevronDown
+        size={14}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
+      />
+      {open && rect && (
+        <>
+          <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
+          <div
+            ref={listRef}
+            className="fixed z-[61] max-h-52 overflow-y-auto bg-white border border-[#E2E8F0] rounded-[8px] shadow-lg py-1"
+            style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
+          >
+            {mentors.length === 0 && (
+              <p className="px-3 py-2 text-[12px] text-[#94A3B8]">Tidak ada mentor</p>
+            )}
+            {mentors.map((m) => (
+              <label
+                key={m.id}
+                className="flex items-center gap-2 px-3 py-2 text-[12.5px] text-[#334155] hover:bg-[#F8FAFC] cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(m.id)}
+                  onChange={() => toggle(m.id)}
+                  className="accent-[#148F89]"
+                />
+                {m.name}
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function formatSessionDateTime(dateStr) {
   if (!dateStr) return null;
   return new Date(dateStr).toLocaleString("id-ID", {
     day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta",
   }) + " WIB";
+}
+
+// ISO (disimpan UTC di server) -> string "YYYY-MM-DDTHH:mm" jam WIB, format
+// yang dibutuhin input type="datetime-local". Konversinya manual (bukan
+// toISOString().slice) soalnya itu bakal ngasih jam UTC, geser 7 jam dari
+// yang ditampilin ke admin di tabel.
+function toWIBLocalInputValue(dateStr) {
+  if (!dateStr) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date(dateStr));
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
 }
 
 export default function BootcampOrderDetail() {
@@ -40,8 +151,29 @@ export default function BootcampOrderDetail() {
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newSession, setNewSession] = useState({ title: "", start_time: "", end_time: "" });
+  const [newSession, setNewSession] = useState({ title: "", start_time: "", end_time: "", meeting_link: "" });
+  // Siapa yang dapat sesi ini. Default semua peserta bootcamp ini.
+  const [sessionForAll, setSessionForAll] = useState(true);
+  const [sessionPackages, setSessionPackages] = useState([]);
+  const [bootcampPackages, setBootcampPackages] = useState([]);
+
+  // Daftar paket buat pilihan target sesi (sesi ini untuk semua / paket tertentu).
+  useEffect(() => {
+    let batal = false;
+    (async () => {
+      try {
+        const res = await apiRequest(`/api/products/${params.id}/packages/`, { auth: false });
+        if (!batal) setBootcampPackages(res?.packages || []);
+      } catch {
+        /* pilihan paket gak muncul, tapi form tetap bisa dipakai */
+      }
+    })();
+    return () => { batal = true; };
+  }, [params.id]);
   const [saving, setSaving] = useState(false);
+  const [scheduleSession, setScheduleSession] = useState(null);
+  const [scheduleForm, setScheduleForm] = useState({ start_time: "", end_time: "" });
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   const [participants, setParticipants] = useState([]);
   const [participantsLoading, setParticipantsLoading] = useState(true);
@@ -57,7 +189,10 @@ export default function BootcampOrderDetail() {
       setSessions(res?.sessions || []);
       const nextDrafts = {};
       (res?.sessions || []).forEach((s) => {
-        nextDrafts[s.id] = { mentor_id: s.mentor_id || "", meeting_link: s.meeting_link || "" };
+        nextDrafts[s.id] = {
+          mentor_ids: s.mentor_ids || [],
+          meeting_link: s.meeting_link || "",
+        };
       });
       setDrafts(nextDrafts);
     } catch (err) {
@@ -81,7 +216,10 @@ export default function BootcampOrderDetail() {
   useEffect(() => {
     fetchDetail();
     fetchParticipants();
-    apiRequest("/api/mentors/", { auth: false })
+    // auth: true (default) -- perlu dikirim biar backend tau ini admin dan
+    // ikut nampilin mentor yang profil publiknya belum lengkap juga, soalnya
+    // dropdown ini buat assign mentor internal, bukan direktori publik.
+    apiRequest("/api/mentors/")
       .then((res) => setMentors(res?.mentors || []))
       .catch(console.error);
   }, [fetchDetail, fetchParticipants]);
@@ -137,22 +275,58 @@ export default function BootcampOrderDetail() {
     setDrafts((prev) => ({ ...prev, [sessionId]: { ...prev[sessionId], [field]: value } }));
   };
 
-  const saveSession = async (sessionId) => {
+  const saveAllSessions = async () => {
     setSaving(true);
     try {
-      const draft = drafts[sessionId];
-      await apiRequest(`/api/programs/bootcamp-sessions/${sessionId}/`, {
-        method: "PATCH",
-        body: { mentor_id: draft.mentor_id || null, meeting_link: draft.meeting_link },
-      });
-      fetchDetail();
-      toast.success("Sesi Diperbarui", { description: "Mentor & link sesi berhasil disimpan." });
+      // Simpan semua sesi sekaligus (mentor + link) -- gantiin tombol panah
+      // per-baris. Dikirim berurutan biar gak nembak rate-limit rame-rame.
+      for (const s of sessions) {
+        const draft = drafts[s.id];
+        if (!draft) continue;
+        await apiRequest(`/api/programs/bootcamp-sessions/${s.id}/`, {
+          method: "PATCH",
+          body: {
+            mentor_ids: draft.mentor_ids || [],
+            meeting_link: draft.meeting_link,
+          },
+        });
+      }
+      await fetchDetail();
+      toast.success("Tersimpan", { description: "Semua sesi (mentor & link) berhasil disimpan." });
     } catch (err) {
-      toast.error("Gagal Menyimpan Sesi", {
+      toast.error("Gagal Menyimpan", {
         description: extractErrorMessage(err, "Terjadi kesalahan."),
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openScheduleModal = (session) => {
+    setScheduleSession(session);
+    setScheduleForm({
+      start_time: toWIBLocalInputValue(session.start_time),
+      end_time: toWIBLocalInputValue(session.end_time),
+    });
+  };
+
+  const saveSchedule = async () => {
+    if (!scheduleForm.start_time || !scheduleForm.end_time) return;
+    setSavingSchedule(true);
+    try {
+      await apiRequest(`/api/programs/bootcamp-sessions/${scheduleSession.id}/`, {
+        method: "PATCH",
+        body: { start_time: scheduleForm.start_time, end_time: scheduleForm.end_time },
+      });
+      setScheduleSession(null);
+      await fetchDetail();
+      toast.success("Jadwal Disimpan", { description: `Jadwal "${scheduleSession.title}" berhasil diatur.` });
+    } catch (err) {
+      toast.error("Gagal Menyimpan Jadwal", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
+    } finally {
+      setSavingSchedule(false);
     }
   };
 
@@ -175,7 +349,11 @@ export default function BootcampOrderDetail() {
     try {
       await apiRequest(`/api/programs/bootcamp-batches/${params.id}/sessions/add/`, {
         method: "POST",
-        body: newSession,
+        body: {
+          ...newSession,
+          for_all_packages: sessionForAll,
+          package_ids: sessionForAll ? [] : sessionPackages,
+        },
       });
       setShowAddModal(false);
       setNewSession({ title: "", start_time: "", end_time: "" });
@@ -192,13 +370,13 @@ export default function BootcampOrderDetail() {
 
   const needsAction = (session) => {
     const flags = [];
-    if (!drafts[session.id]?.mentor_id) flags.push("MENTOR");
+    if (!drafts[session.id]?.mentor_ids?.length) flags.push("MENTOR");
     if (!drafts[session.id]?.meeting_link) flags.push("LINK");
     return flags.length > 0 ? flags : null;
   };
 
   return (
-    <DashboardLayout title="Detail Bootcamp">
+    <>
       <Link
         href="/admin/orders/bootcamp"
         className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#148F89] text-[13px] font-medium transition-colors w-fit"
@@ -207,10 +385,37 @@ export default function BootcampOrderDetail() {
         Kembali ke Daftar Batch
       </Link>
 
-      <div>
-        <h1 className="font-bold text-[22px] text-[#0F172A]">{title}</h1>
-        <p className="text-[#64748B] text-[14px] mt-1">ID Batch: {params?.id}</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-bold text-[22px] text-[#0F172A]">{title}</h1>
+          <p className="text-[#64748B] text-[14px] mt-1">ID Batch: {params?.id}</p>
+        </div>
+        {!loading && sessions.length > 0 && (
+          <button
+            onClick={saveAllSessions}
+            disabled={saving}
+            className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-[8px] bg-[#148F89] text-white text-[13px] font-semibold hover:bg-[#117A75] transition-colors disabled:opacity-50"
+          >
+            <Check size={16} />
+            {saving ? "Menyimpan..." : "Simpan Semua"}
+          </button>
+        )}
       </div>
+
+      {params?.id && <BootcampTimelinePanel productId={params.id} />}
+
+      {params?.id && <BootcampQuizPanel productId={params.id} />}
+
+      {params?.id && <BootcampResourcePanel productId={params.id} />}
+
+      {params?.id && <BootcampTeamPanel productId={params.id} />}
+
+      {params?.id && <BootcampRequirementsPanel productId={params.id} />}
+
+      {/* Saklar isian pendaftaran, pertanyaan, dan teks email hasil seleksi.
+          Ditaruh setelah panel syarat karena keduanya sama-sama mengatur
+          apa yang dilihat & diisi calon pendaftar. */}
+      {params?.id && <BootcampRegistrationFormPanel productId={params.id} />}
 
       {!loading && sessions.length === 0 ? (
         <EmptyState message="Belum ada sesi untuk bootcamp ini." />
@@ -235,47 +440,46 @@ export default function BootcampOrderDetail() {
                     <tr key={item.id} className="hover:bg-[#F8FAFC] transition-colors">
                       <td className="px-4 py-4 text-left text-[#1E293B] font-medium">{item.title}</td>
                       <td className="px-4 py-4">
-                        <div className="relative w-full">
-                          <select
-                            value={drafts[item.id]?.mentor_id || ""}
-                            onChange={(e) => updateDraft(item.id, "mentor_id", e.target.value)}
-                            className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] pl-3 pr-8 text-[13px] font-medium text-[#475569] appearance-none outline-none focus:border-[#148F89]"
-                            style={{ height: "36px" }}
-                          >
-                            <option value="">-- Pilih Mentor --</option>
-                            {mentors.map((m) => (
-                              <option key={m.id} value={m.id}>{m.name}</option>
-                            ))}
-                          </select>
-                          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none" />
-                        </div>
+                        <MentorMultiSelect
+                          mentors={mentors}
+                          selectedIds={drafts[item.id]?.mentor_ids || []}
+                          onChange={(ids) => updateDraft(item.id, "mentor_ids", ids)}
+                        />
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <p className="text-[#1E293B] font-bold text-[12px]">
-                          {new Date(item.start_time).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                        </p>
-                        <p className="text-[#94A3B8] text-[11px]">
-                          {new Date(item.start_time).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })} WIB
-                        </p>
+                        <button
+                          type="button"
+                          onClick={() => openScheduleModal(item)}
+                          className="group w-full flex flex-col items-center gap-0.5 rounded-[6px] px-2 py-1 hover:bg-[#F1F5F9] transition-colors"
+                        >
+                          {item.start_time ? (
+                            <>
+                              <span className="text-[#1E293B] font-bold text-[12px] flex items-center gap-1.5">
+                                {new Date(item.start_time).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                                <Pencil size={10} className="text-[#94A3B8] opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </span>
+                              <span className="text-[#94A3B8] text-[11px]">
+                                {new Date(item.start_time).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })} WIB
+                              </span>
+                            </>
+                          ) : (
+                            <span className="flex items-center gap-1.5 text-[#148F89] text-[11.5px] font-semibold">
+                              <CalendarClock size={13} />
+                              Atur Jadwal
+                            </span>
+                          )}
+                        </button>
                       </td>
                       <td className="px-4 py-4">
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-center">
                           <input
                             type="text"
                             placeholder="Masukkan link zoom..."
                             value={drafts[item.id]?.meeting_link || ""}
                             onChange={(e) => updateDraft(item.id, "meeting_link", e.target.value)}
-                            style={{ width: "150px", height: "36px" }}
+                            style={{ width: "200px", height: "36px" }}
                             className="bg-[#F8FAFC] rounded-[6px] px-3 text-[12px] outline-none border border-[#E2E8F0] text-[#334155] focus:border-[#148F89] transition-colors"
                           />
-                          <button
-                            onClick={() => saveSession(item.id)}
-                            disabled={saving}
-                            style={{ width: "36px", height: "36px" }}
-                            className="rounded-[6px] flex items-center justify-center transition-colors shrink-0 bg-[#148F89] text-white hover:bg-[#117A75] disabled:opacity-50"
-                          >
-                            <Send size={15} />
-                          </button>
                         </div>
                       </td>
                       <td className="px-4 py-4">
@@ -362,6 +566,36 @@ export default function BootcampOrderDetail() {
                 />
               </div>
             </div>
+              <div className="flex flex-col gap-2 px-6 pb-5">
+                <label className="text-[#334155] text-[13px] font-medium">Sesi Ini Untuk</label>
+                <label className="flex items-center gap-2 text-[13px] text-[#1E293B] cursor-pointer">
+                  <input type="radio" checked={sessionForAll} onChange={() => setSessionForAll(true)} className="accent-[#148F89]" />
+                  Semua peserta bootcamp ini
+                </label>
+                <label className="flex items-center gap-2 text-[13px] text-[#1E293B] cursor-pointer">
+                  <input type="radio" checked={!sessionForAll} onChange={() => setSessionForAll(false)} className="accent-[#148F89]" />
+                  Paket tertentu saja
+                </label>
+                {!sessionForAll && (
+                  <div className="flex flex-col gap-1 pl-6">
+                    {bootcampPackages.map((pk) => (
+                      <label key={pk.id} className="flex items-center gap-2 text-[12.5px] text-[#334155] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={sessionPackages.includes(pk.id)}
+                          onChange={(e) => setSessionPackages((cur) => (e.target.checked ? [...cur, pk.id] : cur.filter((x) => x !== pk.id)))}
+                          className="accent-[#148F89]"
+                        />
+                        {pk.name}
+                      </label>
+                    ))}
+                    {sessionPackages.length === 0 && (
+                      <span className="text-[#B45309] text-[11.5px]">Belum ada paket dipilih -- sesi ini tidak akan diterima peserta mana pun.</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
             <div className="px-6 py-5 bg-[#F8FAFC] border-t border-[#E2E8F0] flex gap-3">
               <button
                 onClick={() => setShowAddModal(false)}
@@ -375,6 +609,62 @@ export default function BootcampOrderDetail() {
                 className="flex-1 py-2.5 bg-[#148F89] text-white font-bold text-[13px] rounded-[8px] hover:bg-[#117A75] transition-colors disabled:opacity-50"
               >
                 {saving ? "Menyimpan..." : "Tambah"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scheduleSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setScheduleSession(null)} />
+          <div style={{ width: "420px", maxWidth: "100%" }} className="relative bg-white rounded-[12px] shadow-2xl z-10">
+            <div className="px-6 py-5 border-b border-[#E2E8F0] flex justify-between items-center">
+              <div>
+                <p className="text-[#1E293B] font-bold text-[17px]">Atur Jadwal</p>
+                <p className="text-[#64748B] text-[12.5px] mt-0.5">{scheduleSession.title}</p>
+              </div>
+              <button onClick={() => setScheduleSession(null)} className="p-2 text-[#94A3B8] hover:text-[#0F172A] hover:bg-[#F1F5F9] rounded-full transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-6 flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[#334155] text-[13px] font-medium">Mulai</label>
+                <input
+                  type="datetime-local"
+                  value={scheduleForm.start_time}
+                  onChange={(e) => setScheduleForm((f) => ({ ...f, start_time: e.target.value }))}
+                  style={{ height: "42px", colorScheme: "light" }}
+                  className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 text-[13.5px] text-[#1E293B] outline-none focus:border-[#148F89] transition-colors"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[#334155] text-[13px] font-medium">Selesai</label>
+                <input
+                  type="datetime-local"
+                  value={scheduleForm.end_time}
+                  min={scheduleForm.start_time || undefined}
+                  onChange={(e) => setScheduleForm((f) => ({ ...f, end_time: e.target.value }))}
+                  style={{ height: "42px", colorScheme: "light" }}
+                  className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 text-[13.5px] text-[#1E293B] outline-none focus:border-[#148F89] transition-colors"
+                />
+              </div>
+              <p className="text-[#94A3B8] text-[11px]">Jam mengikuti waktu WIB (Asia/Jakarta).</p>
+            </div>
+            <div className="px-6 py-5 bg-[#F8FAFC] border-t border-[#E2E8F0] flex gap-3">
+              <button
+                onClick={() => setScheduleSession(null)}
+                className="flex-1 py-2.5 bg-white border border-[#E2E8F0] text-[#475569] font-bold text-[13px] rounded-[8px] hover:bg-[#F1F5F9] transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={saveSchedule}
+                disabled={savingSchedule || !scheduleForm.start_time || !scheduleForm.end_time}
+                className="flex-1 py-2.5 bg-[#148F89] text-white font-bold text-[13px] rounded-[8px] hover:bg-[#117A75] transition-colors disabled:opacity-50"
+              >
+                {savingSchedule ? "Menyimpan..." : "Simpan Jadwal"}
               </button>
             </div>
           </div>
@@ -511,6 +801,6 @@ export default function BootcampOrderDetail() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

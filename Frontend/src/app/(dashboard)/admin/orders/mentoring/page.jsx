@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
+import ZoomAccountPanel from "@/component/admin/ZoomAccountPanel";
 import { apiRequest } from "@/lib/api";
 
 export default function MentoringOrders() {
@@ -22,7 +22,7 @@ export default function MentoringOrders() {
   const totalUnscheduled = packages.reduce((sum, p) => sum + p.unscheduled_sessions, 0);
 
   return (
-    <DashboardLayout title="Kelola Pesanan · Mentoring">
+    <>
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-bold text-[22px] text-[#0F172A]">Manajemen Mentoring</h1>
@@ -33,10 +33,15 @@ export default function MentoringOrders() {
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total Paket Aktif" value={packages.length} unit="paket" />
-        <StatCard label="Sesi Belum Dijadwalkan" value={totalUnscheduled} unit="sesi" />
-        <StatCard label="Link Belum Dibagikan" value={totalPendingLinks} unit="sesi" variant="warning" />
+        <StatCard label="Total Paket Aktif" value={packages.length} unit="paket" loading={loading} />
+        <StatCard label="Sesi Belum Dijadwalkan" value={totalUnscheduled} unit="sesi" loading={loading} />
+        <StatCard label="Link Belum Dibagikan" value={totalPendingLinks} unit="sesi" variant="warning" loading={loading} />
       </div>
+
+      {/* Kolam akun Zoom ditaruh di sini, bukan di halaman Pengaturan, supaya
+          sebidang dengan angka "Link Belum Dibagikan" -- kalau otomatisasinya
+          bermasalah, penyebab dan penyelesaiannya kelihatan berdampingan. */}
+      <ZoomAccountPanel />
 
       <div className="flex flex-col gap-4">
         <h2 className="text-[16px] font-semibold text-[#0F172A]">Daftar Paket</h2>
@@ -90,6 +95,6 @@ export default function MentoringOrders() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

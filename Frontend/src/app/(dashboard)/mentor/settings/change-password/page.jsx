@@ -11,7 +11,6 @@ import {
   X as XIcon,
   ShieldCheck,
 } from "lucide-react";
-import DashboardLayout from "@/component/mentor/DashboardLayout";
 import { apiRequest } from "@/lib/api";
 
 function PasswordField({
@@ -112,7 +111,7 @@ export default function MentorChangePassword() {
 
   if (isSuccess) {
     return (
-      <DashboardLayout title="Ubah Kata Sandi">
+      <>
         <motion.div
           initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -137,12 +136,12 @@ export default function MentorChangePassword() {
             Kembali ke Pengaturan
           </Link>
         </motion.div>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout title="Ubah Kata Sandi">
+    <>
       <Link
         href="/mentor/settings"
         className="inline-flex items-center gap-2 text-[#9CA3AF] hover:text-white text-[13px] transition-colors w-fit"
@@ -255,6 +254,6 @@ export default function MentorChangePassword() {
           {isSubmitting ? "Menyimpan..." : "Simpan Kata Sandi Baru"}
         </button>
       </motion.form>
-    </DashboardLayout>
+    </>
   );
 }

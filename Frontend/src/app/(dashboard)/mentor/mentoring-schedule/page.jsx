@@ -9,7 +9,6 @@ import {
   Lock,
   Check,
 } from "lucide-react";
-import DashboardLayout from "@/component/mentor/DashboardLayout";
 import { apiRequest } from "@/lib/api";
 
 const focusRing =
@@ -272,21 +271,18 @@ export default function MentoringSchedule() {
     if (!rangeStart || !rangeEnd || selectedTimeSlots.length === 0) return;
     setSaving(true);
     try {
-      const start = new Date(`${rangeStart}T00:00:00`);
-      const end = new Date(`${rangeEnd}T00:00:00`);
-      const calls = [];
-
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const dateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-        const existingTimes = (slotsByDate[dateStr] || []).map((s) => s.time);
-        for (const time of selectedTimeSlots) {
-          if (!existingTimes.includes(time)) {
-            calls.push(addSlot(dateStr, time));
-          }
-        }
-      }
-
-      await Promise.all(calls);
+      // Satu request bulk buat SEMUA (rentang tanggal x jam) -- server yang
+      // bikin & skip yang udah ada. Sebelumnya nembak 1 request per slot;
+      // pas ngebatch rentang panjang (mis. setahun) itu ratusan request
+      // paralel yang sebagian kena rate-limit & gagal -> kalender bolong.
+      await apiRequest("/api/mentors/availability/add-bulk/", {
+        method: "POST",
+        body: {
+          start_date: rangeStart,
+          end_date: rangeEnd,
+          times: selectedTimeSlots,
+        },
+      });
       await fetchAvailability();
       closeModal();
     } catch (err) {
@@ -297,7 +293,7 @@ export default function MentoringSchedule() {
   };
 
   return (
-    <DashboardLayout title="Jadwal Mentoring">
+    <>
       <style>{darkModeFix}</style>
       <motion.div {...sectionReveal} className="flex flex-col gap-1">
         <h1 className="font-bold text-[22px] sm:text-[25px] text-white">
@@ -461,7 +457,7 @@ export default function MentoringSchedule() {
                   <h3 className="text-white font-bold text-[16px]">
                     Pilih Rentang Tanggal
                   </h3>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[#9CA3AF] text-[12px] font-semibold">
                         Tanggal Mulai
@@ -470,7 +466,7 @@ export default function MentoringSchedule() {
                         type="date"
                         value={rangeStart}
                         onChange={(e) => setRangeStart(e.target.value)}
-                        style={{ height: "46px" }}
+                        style={{ height: "46px", colorScheme: "dark" }}
                         className={`w-full ms-inset border border-[#2D2342] rounded-[8px] px-3.5 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
                       />
                     </div>
@@ -483,15 +479,15 @@ export default function MentoringSchedule() {
                         value={rangeEnd}
                         min={rangeStart || undefined}
                         onChange={(e) => setRangeEnd(e.target.value)}
-                        style={{ height: "46px" }}
+                        style={{ height: "46px", colorScheme: "dark" }}
                         className={`w-full ms-inset border border-[#2D2342] rounded-[8px] px-3.5 text-[13px] text-white outline-none focus:border-[#148F89] transition-colors ${focusRing}`}
                       />
                     </div>
                   </div>
                   <p className="text-[#6B7280] text-[11px]">
-                    Jam yang kamu pilih di bawah bakal ditambahin ke tiap
-                    tanggal dalam rentang ini (nggak ngilangin slot yang udah
-                    ada, termasuk yang udah dibooking).
+                    Jam yang kamu pilih di bawah akan ditambahkan ke tiap
+                    tanggal dalam rentang ini (tidak menghapus slot yang sudah
+                    ada, termasuk yang sudah dipesan).
                   </p>
                 </div>
               ) : (
@@ -516,8 +512,8 @@ export default function MentoringSchedule() {
                   {bookedTimes.length > 0 && (
                     <p className="flex items-start gap-2 text-[#D1D83E] text-[11px] bg-[#D1D83E]/5 border border-[#D1D83E]/20 rounded-[8px] px-3.5 py-2.5">
                       <Lock size={12} className="shrink-0 mt-0.5" />
-                      {bookedTimes.length} jam di tanggal ini udah ada mentee
-                      yang booking, jadi nggak bisa dimatiin dari sini.
+                      {bookedTimes.length} jam pada tanggal ini sudah dipesan
+                      mentee, sehingga tidak dapat dinonaktifkan dari sini.
                     </p>
                   )}
                 </div>
@@ -584,6 +580,6 @@ export default function MentoringSchedule() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

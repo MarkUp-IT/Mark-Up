@@ -10,8 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { useState, useEffect, useCallback } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
+import { useState, useEffect, useCallback, useRef } from "react";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { api, ApiError } from "@/lib/api";
@@ -56,6 +55,7 @@ export default function AdminDashboard() {
   const [activePeriod, setActivePeriod] = useState("all");
 
   const [revenue, setRevenue] = useState(null);
+  const chartScrollRef = useRef(null);
   const [counts, setCounts] = useState(null);
   const [userSummary, setUserSummary] = useState(null);
   const [logs, setLogs] = useState([]);
@@ -135,12 +135,25 @@ export default function AdminDashboard() {
     fetchDashboard(activePeriod);
   }, [activePeriod, fetchDashboard]);
 
+  // Defaultnya nunjukin data TERBARU (paling kanan, tanggal sekarang),
+  // bukan yang tertua -- geser ke kiri buat mundur lihat histori. Dipicu
+  // begitu chart-nya udah beneran ke-render dgn lebar barunya (bukan pas
+  // masih loading), makanya nunggu 1 tick lewat requestAnimationFrame.
+  useEffect(() => {
+    if (!revenue?.daily_chart?.length) return;
+    const frame = requestAnimationFrame(() => {
+      const el = chartScrollRef.current;
+      if (el) el.scrollLeft = el.scrollWidth;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [revenue?.daily_chart]);
+
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
 
   return (
-    <DashboardLayout title="Dashboard">
+    <>
       <style>{`.adm-h-42 { height: 42px; }`}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -215,40 +228,59 @@ export default function AdminDashboard() {
               {loading ? "…" : formatRupiah(revenue?.total_revenue ?? 0)}
             </p>
           </div>
-          <div className="flex-1" style={{ minHeight: "220px" }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={revenue?.daily_chart ?? []}
-                barCategoryGap={30}
-                margin={{ top: 10, right: 0, left: -20, bottom: 0 }}
-              >
-                <XAxis
-                  dataKey="day"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#94A3B8", fontSize: 12, fontWeight: 600 }}
-                  dy={10}
-                />
-                <YAxis hide />
-                <Tooltip
-                  cursor={{ fill: "#F8FAFC" }}
-                  formatter={(value) => [formatRupiah(value), "Pendapatan"]}
-                  contentStyle={{
-                    borderRadius: "8px",
-                    border: "1px solid #E2E8F0",
-                    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                  }}
-                />
-                <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
-                  {(revenue?.daily_chart ?? []).map((entry, index, arr) => (
-                    <Cell
-                      key={index}
-                      fill={index === arr.length - 1 ? "#148F89" : "#CDEEEB"}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          {/* overflow-x-auto + lebar minimum PER BATANG -- sebelumnya
+              ResponsiveContainer dipaksa width="100%" selalu, jadi pas filter
+              "Semua Waktu" (bisa puluhan hari) batangnya kepepet numpuk atau
+              malah ke-crop di kanan tanpa cara buat digeser lihat sisanya.
+              min-width: 100% (dari CSS) + width dari JS (px) -- kalau
+              datanya dikit, 100% menang (persis kayak sebelumnya, penuh
+              sejajar); kalau datanya banyak, lebar px menang dan pembungkus
+              di luar jadi bisa discroll horizontal. Auto-scroll ke ujung
+              kanan (data terbaru) diatur di useEffect chartScrollRef di atas. */}
+          <div ref={chartScrollRef} className="flex-1 overflow-x-auto" style={{ minHeight: "220px" }}>
+            <div
+              className="h-full"
+              style={{ minWidth: "100%", width: (revenue?.daily_chart?.length ?? 0) * 36 }}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={revenue?.daily_chart ?? []}
+                  barCategoryGap={30}
+                  // left: 0 (BUKAN -20 kayak sebelumnya) -- margin negatif
+                  // itu dulu buat "menutupi" YAxis yang di-hide, aman waktu
+                  // ResponsiveContainer selalu pas 100%. Begitu dibungkus
+                  // overflow-x-auto, margin negatif ini malah nutupin/
+                  // motong sisi kiri batang PERTAMA di dalam area scroll.
+                  margin={{ top: 10, right: 0, left: 0, bottom: 0 }}
+                >
+                  <XAxis
+                    dataKey="day"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#94A3B8", fontSize: 12, fontWeight: 600 }}
+                    dy={10}
+                  />
+                  <YAxis hide />
+                  <Tooltip
+                    cursor={{ fill: "#F8FAFC" }}
+                    formatter={(value) => [formatRupiah(value), "Pendapatan"]}
+                    contentStyle={{
+                      borderRadius: "8px",
+                      border: "1px solid #E2E8F0",
+                      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                    }}
+                  />
+                  <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
+                    {(revenue?.daily_chart ?? []).map((entry, index, arr) => (
+                      <Cell
+                        key={index}
+                        fill={index === arr.length - 1 ? "#148F89" : "#CDEEEB"}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
@@ -341,6 +373,6 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

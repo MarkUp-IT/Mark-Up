@@ -12,7 +12,6 @@ import {
   Mail,
   Phone,
 } from "lucide-react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import { apiRequest } from "@/lib/api";
 
 const ROLE_LABEL = { ADMIN: "Admin", MENTOR: "Mentor", STUDENT: "User" };
@@ -44,15 +43,15 @@ export default function UserDetail() {
 
   if (loading) {
     return (
-      <DashboardLayout title="Detail Profil">
+      <>
         <p className="text-[#64748B] text-[14px]">Memuat profil...</p>
-      </DashboardLayout>
+      </>
     );
   }
 
   if (notFound || !profile) {
     return (
-      <DashboardLayout title="Detail Profil">
+      <>
         <Link
           href="/admin/user-management"
           className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#148F89] text-[13px] font-medium transition-colors w-fit"
@@ -61,9 +60,9 @@ export default function UserDetail() {
           Kembali ke Manajemen User
         </Link>
         <p className="text-[#64748B] text-[14px]">
-          Profil dengan ID &ldquo;{params?.id}&rdquo; nggak ditemukan.
+          Profil dengan ID &ldquo;{params?.id}&rdquo; tidak ditemukan.
         </p>
-      </DashboardLayout>
+      </>
     );
   }
 
@@ -71,7 +70,7 @@ export default function UserDetail() {
   const mentorProfile = profile.mentor_profile;
 
   return (
-    <DashboardLayout title="Detail Profil">
+    <>
       <Link
         href="/admin/user-management"
         className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#148F89] text-[13px] font-medium transition-colors w-fit"
@@ -85,13 +84,11 @@ export default function UserDetail() {
           style={{ width: "72px", height: "72px" }}
           className="rounded-full overflow-hidden border border-[#E2E8F0] shrink-0 bg-[#F1F5F9]"
         >
-          {profile.profile_image && (
-            <img
-              src={profile.profile_image}
-              alt={profile.fullname}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          )}
+          <img
+            src={profile.profile_image || "/images/default-avatar.svg"}
+            alt={profile.fullname}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
         </div>
         <div className="flex flex-col gap-1.5 flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -188,7 +185,7 @@ export default function UserDetail() {
                   <div key={idx} className="flex flex-col gap-0.5">
                     <p className="text-[#1E293B] font-semibold text-[13.5px]">{exp.title}</p>
                     <p className="text-[#94A3B8] text-[12px]">
-                      {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : "Sekarang"}
+                      {formatMonthYear(exp.start_date)} s.d. {exp.end_date ? formatMonthYear(exp.end_date) : "Sekarang"}
                     </p>
                   </div>
                 ))
@@ -206,7 +203,7 @@ export default function UserDetail() {
               </div>
               <div>
                 <p className="text-[#1E293B] font-semibold text-[14px]">
-                  {mentorProfile?.bank_name || "-"} — {mentorProfile?.bank_account || "-"}
+                  {mentorProfile?.bank_name || "-"} · {mentorProfile?.bank_account || "-"}
                 </p>
                 <p className="text-[#64748B] text-[12.5px]">a.n. {mentorProfile?.bank_account_holder || "-"}</p>
               </div>
@@ -231,6 +228,6 @@ export default function UserDetail() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

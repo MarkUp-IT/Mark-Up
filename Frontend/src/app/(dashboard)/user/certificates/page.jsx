@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Award, Download, Eye, Search } from "lucide-react";
-import DashboardLayout from "@/component/user/DashboardLayout";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
 
@@ -54,14 +53,14 @@ export default function Certificates() {
   });
 
   return (
-    <DashboardLayout title="Sertifikat">
+    <>
       <motion.div {...sectionReveal} className="flex flex-col gap-1">
         <h1 className="text-[28px] sm:text-[32px] font-bold text-white leading-tight">
           Sertifikat Saya
         </h1>
         <p className="text-[#9CA3AF] text-[14px] mt-1">
-          Sertifikat diterbitkan otomatis setelah kamu menyelesaikan sebuah
-          program bootcamp di Mark-Up.
+          Sertifikat diterbitkan tim Mark-Up setelah kamu menyelesaikan sebuah
+          program bootcamp, biasanya beberapa hari kerja setelah program berakhir.
         </p>
       </motion.div>
 
@@ -137,6 +136,6 @@ export default function Certificates() {
           ))}
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

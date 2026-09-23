@@ -3,6 +3,8 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import SmoothScrollProvider from "@/component/SmoothScroll";
 import { Toaster } from "@/components/ui/sonner";
+import { SITE_URL, SITE_KEYWORDS, ORGANIZATION_JSON_LD, WEBSITE_JSON_LD } from "@/lib/seo";
+import ClientErrorReporter from "@/component/ClientErrorReporter";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -24,15 +26,101 @@ const inter = Inter({
   weight: ["200", "300", "400", "500", "600", "700", "800"],
 });
 
+// Matiin Full Route Cache Next.js buat SELURUH app. Tanpa ini, halaman yang
+// isinya 100% "use client" (gak ada data server) dianggap Next.js statis dan
+// di-prerender sekali lalu di-cache s-maxage=1 tahun -- termasuk kalau yang
+// kebetulan ke-capture pas prerender itu state <Suspense> loading.jsx-nya
+// (bukan konten asli), itu ikut ke-cache selama itu juga dan disajikan ke
+// SEMUA orang (termasuk bot/crawler yang gak jalanin JS) sampai revalidasi
+// alami berikutnya -- yang kalau trafiknya sepi bisa lama banget. Ini
+// kejadian beneran: dari luar keliatan cuma spinner "Memuat halaman..." doang
+// di seluruh halaman (/, /products, /checkout/.../payment, /login), padahal
+// via browser normal (JS jalan) kelihatan baik-baik saja. Konsekuensinya
+// bukan cuma soal SEO -- tim verifikasi payment gateway yang script-nya gak
+// eksekusi JS bisa nyangka situsnya belum jadi.
+//
+// force-dynamic bikin SETIAP request selalu di-render ulang di server (gak
+// ada yang disajikan dari cache lama) -- korbanin sedikit TTFB, tapi jaminan
+// kontennya SELALU yang terbaru & lengkap buat siapa pun yang buka, manusia
+// ataupun alat otomatis.
+export const dynamic = "force-dynamic";
+
 export const metadata = {
-  title: "MARK-UP OFFICIAL WEBSITE",
-  description: "",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    // %s = judul per halaman. Brand-nya sengaja diulang di belakang tiap judul
+    // biar semua varian penulisan ("MarkUp", "Mark-Up", "Mark Up") kebaca
+    // Google di tiap halaman, bukan cuma di homepage.
+    default: "MarkUp - Wadah Akselerasi Talenta Muda Pencetak Para Juara",
+    template: "%s | MarkUp (Mark-Up) Indonesia",
+  },
+  description:
+    "MarkUp (Mark-Up) adalah platform akselerasi talenta muda Indonesia: bootcamp, private mentoring, "
+    + "dan modul e-learning untuk membantu mahasiswa menang business case competition, paper competition, "
+    + "dan lomba lainnya. Dibimbing mentor berpengalaman, bersertifikat.",
+  applicationName: "MarkUp",
+  keywords: SITE_KEYWORDS,
+  authors: [{ name: "MarkUp", url: SITE_URL }],
+  creator: "MarkUp",
+  publisher: "MarkUp",
+  category: "education",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "id_ID",
+    url: SITE_URL,
+    siteName: "MarkUp",
+    title: "MarkUp — Wadah Akselerasi Talenta Muda Pencetak Para Juara",
+    description:
+      "Bootcamp, private mentoring, dan modul e-learning untuk kamu yang ingin memenangkan kompetisi. "
+      + "Belajar langsung dari mentor berpengalaman di MarkUp (Mark-Up) Indonesia.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "MarkUp — Wadah Akselerasi Talenta Muda Pencetak Para Juara",
+    description:
+      "Bootcamp, private mentoring, dan modul e-learning untuk kamu yang ingin memenangkan kompetisi. "
+      + "Belajar langsung dari mentor berpengalaman di MarkUp (Mark-Up) Indonesia.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  // Isi kodenya setelah daftarin domain di Google Search Console
+  // (Setelan > Verifikasi kepemilikan > tag HTML). Tanpa ini tetap keindeks,
+  // cuma nggak bisa lihat data pencarian & submit sitemap manual.
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || undefined,
+  },
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
+    <html lang="id" className={cn("font-sans", geist.variable)}>
       <body className={`${poppins.variable} ${jakarta.variable} ${inter.variable} antialiased`}>
+        {/* JSON-LD: ini yang bikin Google ngerti "MarkUp" itu nama organisasi,
+            bukan istilah umum (HTML markup / markup harga). alternateName
+            nyantumin semua varian penulisan biar ketiganya nyambung ke entitas
+            yang sama. Ditaruh di body sesuai konvensi Next.js App Router --
+            crawler baca JSON-LD di mana pun posisinya dalam dokumen. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(ORGANIZATION_JSON_LD) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(WEBSITE_JSON_LD) }}
+        />
+        <ClientErrorReporter />
         <SmoothScrollProvider>{children}</SmoothScrollProvider>
         <Toaster position="top-right" richColors />
       </body>
