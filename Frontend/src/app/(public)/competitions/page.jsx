@@ -77,7 +77,13 @@ export default function InfoLombaPage() {
     async function fetchCompetitions() {
       try {
         setLoading(true);
-        const json = await api.get("/api/programs/?all=true", {
+        // get_competitions gak kenal "all=true" (bukan param yang
+        // dicek backend) -- selalu kepaginasi page_size=12 diam-diam,
+        // jadi lomba ke-13 dst gak pernah kelihatan siapa pun & halaman
+        // ini gak punya UI paginasi buat lanjut ke halaman 2. Dipakai
+        // page_size besar, sama seperti pola yang sudah kepake di
+        // admin/competitions/page.jsx.
+        const json = await api.get("/api/programs/?page_size=200", {
           auth: false,
         });
         const mapped = (json.competitions || []).map(mapApiCompetition);
@@ -395,14 +401,28 @@ export default function InfoLombaPage() {
                   </div>
                 </div>
 
-                <Link
-                  href={selectedLomba.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`w-full bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold py-3 rounded-full transition-colors mt-6 shrink-0 text-center ${focusRing}`}
-                >
-                  Daftar Sekarang
-                </Link>
+                {/* registration_link opsional di backend (blank=True) --
+                    kalau kosong, jangan render <Link> dgn href kosong/null
+                    (bisa dianggap invalid sama Next.js), tampilin tombol
+                    nonaktif aja daripada link yang nunjuk ke mana pun. */}
+                {selectedLomba.link ? (
+                  <Link
+                    href={selectedLomba.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`w-full bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold py-3 rounded-full transition-colors mt-6 shrink-0 text-center ${focusRing}`}
+                  >
+                    Daftar Sekarang
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full bg-[#E5DFFF]/40 text-[#530D8E]/50 font-bold py-3 rounded-full mt-6 shrink-0 text-center cursor-not-allowed"
+                  >
+                    Link Pendaftaran Belum Tersedia
+                  </button>
+                )}
               </div>
             </motion.div>
           </motion.div>
@@ -412,6 +432,13 @@ export default function InfoLombaPage() {
   );
 }
 
+// PENTING: get_competitions (Backend/programs/views.py) ngirim field
+// PENDEK -- date/fee/prize/target/link -- BUKAN event_date/
+// registration_fee/prizepool/target_participant/registration_link
+// (nama-nama itu cuma ada di sisi FORM admin, beda dari response GET
+// publik). Sebelumnya salah baca nama field di sini, jadi hampir semua
+// detail lomba (Pelaksanaan/Biaya/Hadiah/Peserta/tombol Daftar) tampil
+// "-" atau link rusak, walau datanya lengkap di database.
 function mapApiCompetition(item) {
   return {
     id: item.id,
@@ -419,17 +446,17 @@ function mapApiCompetition(item) {
     category: item.category?.name ?? item.category ?? "Lainnya",
     organizer: item.organizer ?? "-",
 
-    date: formatDate(item.event_date),
+    date: formatDate(item.date),
     deadline: formatDate(item.deadline),
 
-    fee: item.registration_fee,
-    prize: formatRupiah(item.prizepool),
+    fee: item.fee,
+    prize: formatRupiah(item.prize),
 
     level: item.level ?? "-",
-    target: item.target_participant ?? "-",
+    target: item.target ?? "-",
 
     image: item.image,
-    link: item.registration_link,
+    link: item.link,
   };
 }
 

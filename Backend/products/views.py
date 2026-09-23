@@ -1241,7 +1241,29 @@ def update_product(request, product_id):
 		return JsonResponse({"detail": "Detail produk tidak ditemukan."}, status=404)
 
 	form_class = _get_detail_form_class(product_type)
-	detail_form = form_class(request_data, instance=detail)
+	# ModelForm(data, instance=...) itu FULL BIND -- field yang ADA di
+	# Meta.fields tapi TIDAK dikirim frontend dianggap KOSONG, bukan
+	# "biarkan apa adanya". Kalau field-nya wajib -> 400 gak jelas asalnya
+	# (mis. bikin produk Modul tanpa UI upload file_pdf_url). Kalau
+	# field-nya boleh kosong -> nilainya KEHAPUS diam-diam tiap kali admin
+	# nyimpen form yang emang gak nyertain field itu (mis. image_url &
+	# registration_link ilang tiap kali cuma ganti harga). Diisi dulu nilai
+	# SEKARANG dari instance buat tiap field yang gak ada di request_data,
+	# biar perilakunya PATCH beneran (cuma field yang dikirim yang berubah).
+	patch_data = dict(request_data)
+	for field_name in form_class.Meta.fields:
+		if field_name in patch_data:
+			continue
+		model_field = detail._meta.get_field(field_name)
+		if model_field.many_to_many:
+			patch_data[field_name] = list(
+				getattr(detail, field_name).values_list("pk", flat=True)
+			)
+		else:
+			current = getattr(detail, field_name, None)
+			if current is not None:
+				patch_data[field_name] = current
+	detail_form = form_class(patch_data, instance=detail)
 
 	if not detail_form.is_valid():
 		errors = {k: list(v) for k, v in detail_form.errors.items()}
@@ -2882,11 +2904,6 @@ def add_bootcamp_timeline_item(request, product_id):
             errors["end_date"] = ["Format tanggal selesai tidak valid (YYYY-MM-DD)."]
     if errors:
         return JsonResponse({"errors": errors}, status=400)
-
-    try:
-        quiz = BootcampQuiz.objects.get(id=quiz_id)
-    except BootcampQuiz.DoesNotExist:
-        return JsonResponse({"detail": "Tes tidak ditemukan."}, status=404)
 
     next_order = BootcampTimelineItem.objects.filter(bootcamp_id=product_id).count() + 1
     item = BootcampTimelineItem.objects.create(
