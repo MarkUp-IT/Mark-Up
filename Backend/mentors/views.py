@@ -600,21 +600,29 @@ def get_my_reviews(request):
     if error:
         return error
 
-    product_ids = set(
+    # Filter per pasangan (produk, mentee) yang BENERAN diajar mentor ini --
+    # bukan cuma per produk. Satu MentoringProduct bisa diajar mentor
+    # berbeda-beda per mentee (mentee milih mentornya sendiri pas checkout,
+    # lihat MentoringProduct.expertise), jadi kalau cuma difilter per produk,
+    # mentor A bisa ikut lihat ulasan dari mentee yang sebenernya diajar
+    # mentor B di produk yang sama.
+    taught_pairs = set(
         MentoringSession.objects.filter(mentor=mentor_profile).values_list(
-            "mentoring__product_id", flat=True
+            "mentoring__product_id", "user_library__user_id"
         )
     ) | set(
         BootcampSession.objects.filter(mentors=mentor_profile).values_list(
-            "bootcamp__product_id", flat=True
+            "bootcamp__product_id", "user_library__user_id"
         )
     )
+    product_ids = {pid for pid, _ in taught_pairs}
 
     reviews = (
         Review.objects.filter(product_id__in=product_ids, is_hidden=False)
         .select_related("user", "product")
         .order_by("-created_at")
     )
+    reviews = [r for r in reviews if (r.product_id, r.user_id) in taught_pairs]
 
     data = []
     for review in reviews:

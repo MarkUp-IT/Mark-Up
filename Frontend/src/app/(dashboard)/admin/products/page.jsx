@@ -26,7 +26,7 @@ import EmptyState from "@/component/admin/EmptyState";
 import PromoPopupPanel from "@/component/admin/PromoPopupPanel";
 import CurrencyInput from "@/component/admin/CurrencyInput";
 import { toast } from "sonner";
-import { api, ApiError, getAccessToken, API_BASE } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { extractErrorMessage, extractFieldErrors, fieldBorderClass as fieldBorder } from "@/lib/formErrors";
 
 const CATEGORY_FILTERS = ["Semua", "Mentoring", "Bootcamp", "Modul"];
@@ -127,14 +127,7 @@ export default function Products() {
     try {
       const formData = new FormData();
       formData.append("image", file);
-      const token = getAccessToken();
-      const res = await fetch(`${API_BASE}/api/products/upload-image/`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.detail || "Gagal mengunggah gambar.");
+      const data = await api.post("/api/products/upload-image/", formData);
       setImageState({ key: data.key, preview: data.url, uploading: false });
     } catch (err) {
       showToast("error", "Gagal unggah gambar", err?.message || "Coba lagi.");

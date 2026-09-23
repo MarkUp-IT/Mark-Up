@@ -11,7 +11,7 @@ import {
 import { useState, useEffect, useCallback } from "react";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
-import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { fieldBorderClass as fieldBorder } from "@/lib/formErrors";
 
@@ -59,7 +59,7 @@ export default function Certificates() {
     setLoading(true);
     Promise.all([
       fetchCertificates(),
-      apiRequest("/api/products/?all=true", { auth: false }),
+      apiRequest("/api/products/?all=true&include_inactive=true"),
     ])
       .then(([, productsRes]) =>
         // Sertifikat cuma buat bootcamp -- dropdown produknya difilter ke
@@ -127,29 +127,20 @@ export default function Certificates() {
       if (productId) formData.append("product_id", productId);
       formData.append("file", file);
 
-      const token = getAccessToken();
-      const res = await fetch(`${API_BASE}/api/products/certificates/add/`, {
+      await apiRequest("/api/products/certificates/add/", {
         method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        const nextErrors = data?.errors || { detail: data?.detail || "Gagal menerbitkan sertifikat." };
-        setErrors(nextErrors);
-        toast.error("Gagal Menerbitkan Sertifikat", {
-          description: Object.values(nextErrors).flat().join(" "),
-        });
-        return;
-      }
 
       setIsAddOpen(false);
       fetchCertificates();
       toast.success("Sertifikat Diterbitkan", { description: `Nomor ${number.trim()} berhasil diterbitkan.` });
     } catch (err) {
-      const message = err?.message || "Gagal menerbitkan sertifikat.";
-      setErrors({ detail: message });
-      toast.error("Gagal Menerbitkan Sertifikat", { description: message });
+      const nextErrors = err?.data?.errors || { detail: err?.message || "Gagal menerbitkan sertifikat." };
+      setErrors(nextErrors);
+      toast.error("Gagal Menerbitkan Sertifikat", {
+        description: Object.values(nextErrors).flat().join(" "),
+      });
     } finally {
       setSaving(false);
     }

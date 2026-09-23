@@ -15,7 +15,7 @@ import EmptyState from "@/component/admin/EmptyState";
 import CategoryDropdown from "@/component/admin/CategoryDropdown";
 import CurrencyInput from "@/component/admin/CurrencyInput";
 import { toast } from "sonner";
-import { api, getAccessToken, API_BASE } from "@/lib/api";
+import { api } from "@/lib/api";
 import { extractErrorMessage, extractFieldErrors, fieldBorderClass as fieldBorder } from "@/lib/formErrors";
 
 const STATUS_FILTERS = ["Semua", "Aktif", "Kedaluwarsa"];
@@ -106,14 +106,7 @@ export default function Competitions() {
     try {
       const formData = new FormData();
       formData.append("image", file);
-      const token = getAccessToken();
-      const res = await fetch(`${API_BASE}/api/programs/upload-poster/`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.detail || "Gagal mengunggah poster.");
+      const data = await api.post("/api/programs/upload-poster/", formData);
       setImageState({ key: data.key, preview: data.url, uploading: false });
     } catch (err) {
       showToast("error", "Gagal unggah poster", err?.message || "Coba lagi.");

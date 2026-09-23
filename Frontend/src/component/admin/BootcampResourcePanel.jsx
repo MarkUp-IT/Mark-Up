@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash2, FileText, Lock } from "lucide-react";
-import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
 import FieldLabel from "./FieldLabel";
@@ -70,15 +70,10 @@ export default function BootcampResourcePanel({ productId }) {
       formData.append("file", file);
       formData.append("for_all_packages", forAll ? "true" : "false");
       if (!forAll) pickedPackages.forEach((id) => formData.append("package_ids", id));
-      const res = await fetch(`${API_BASE}/api/products/${productId}/resources/add/`, {
+      await apiRequest(`/api/products/${productId}/resources/add/`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${getAccessToken()}` },
         body: formData,
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.detail || Object.values(data?.errors || {}).flat().join(" ") || "Gagal menambahkan berkas.");
-      }
       toast.success("Berkas Tersimpan");
       resetForm();
       fetchData();

@@ -12,7 +12,7 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
-import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import AttentionBanner from "@/component/AttentionBanner";
 
@@ -160,17 +160,10 @@ export default function Settings() {
     const formData = new FormData();
     formData.append("photo", file);
 
-    const token = getAccessToken();
-    const res = await fetch(`${API_BASE}/api/accounts/me/profile/photo/`, {
+    const data = await apiRequest("/api/accounts/me/profile/photo/", {
       method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      throw new Error(data?.detail || "Gagal mengunggah foto.");
-    }
 
     setProfileImage(data.profile_image);
   } catch (err) {
@@ -203,17 +196,10 @@ const handleUploadCv = async (file) => {
     const formData = new FormData();
     formData.append("cv", file);
 
-    const token = getAccessToken();
-    const res = await fetch(`${API_BASE}/api/accounts/me/cv/`, {
+    const data = await apiRequest("/api/accounts/me/cv/", {
       method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      throw new Error(data?.detail || "Gagal mengunggah CV.");
-    }
 
     setCvUrl(data.cv_url);
     setCvFileName(data.cv_filename);

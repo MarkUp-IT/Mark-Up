@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, Clock, XCircle, RefreshCw } from "lucide-react";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, ApiError } from "@/lib/api";
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 30000;
@@ -26,6 +26,8 @@ function IpaymuReturnInner() {
   const [status, setStatus] = useState(null); // null = belum ketahuan
   const [amount, setAmount] = useState(null);
   const [timedOut, setTimedOut] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [manualChecking, setManualChecking] = useState(false);
 
   const checkStatus = useCallback(async () => {
     if (!transactionId) return;
@@ -33,8 +35,18 @@ function IpaymuReturnInner() {
       const res = await apiRequest(`/api/transactions/${transactionId}/status/`);
       setStatus(res.payment_status);
       setAmount(res.grand_total);
-    } catch {
-      // Diam saja -- polling berikutnya coba lagi, atau timeout ngasih tombol manual.
+    } catch (err) {
+      // Sesi login abis nunggu di halaman iPaymu (mis. HP-nya di-lock lama)
+      // itu beda kasus dari "masih nunggu webhook" -- polling gak akan
+      // pernah kelar sendiri di sini, jadi user perlu diberi tahu buat
+      // login lagi, bukan dibiarin lihat "Menunggu Konfirmasi" selamanya.
+      // Pembayarannya sendiri tetap aman: webhook iPaymu-lah yang beneran
+      // nandain lunas, halaman ini murni kosmetik.
+      if (err instanceof ApiError && err.status === 401) {
+        setSessionExpired(true);
+      }
+      // Error lain: diam saja -- polling berikutnya coba lagi, atau timeout
+      // ngasih tombol manual.
     }
   }, [transactionId]);
 
@@ -102,6 +114,24 @@ function IpaymuReturnInner() {
     );
   }
 
+  // Status belum ketahuan karena sesi login abis (bukan karena webhooknya
+  // belum jalan) -- minta login lagi, bukan nampilin "menunggu" selamanya.
+  // Pembayarannya sendiri tetap aman, cuma halaman ini yang gak bisa nanya
+  // statusnya tanpa token yang valid.
+  if (status === null && sessionExpired) {
+    const backHref = `/payment/ipaymu/return?transaction_id=${encodeURIComponent(transactionId)}`;
+    return (
+      <Wrapper>
+        <StateCard
+          icon={<XCircle size={28} className="text-[#F59E0B]" />}
+          title="Sesi Login Berakhir"
+          desc="Pembayaranmu tetap diproses seperti biasa -- kami cuma butuh kamu login lagi buat menampilkan statusnya di sini."
+          cta={{ href: `/login?next=${encodeURIComponent(backHref)}`, label: "Login Lagi" }}
+        />
+      </Wrapper>
+    );
+  }
+
   // Masih PENDING (atau belum ketahuan) -- baik masih dalam jendela polling
   // maupun sudah timeout, tampilan intinya sama, cuma beda ada tombol cek
   // manual atau enggak.
@@ -114,10 +144,21 @@ function IpaymuReturnInner() {
         extra={
           timedOut && (
             <button
-              onClick={() => { setTimedOut(false); checkStatus(); }}
-              className="flex items-center justify-center gap-1.5 w-full py-2.5 rounded-[8px] border border-[#2D2342] text-[#E2E8F0] text-[13px] font-semibold hover:bg-[#2D1B4E] transition-colors"
+              onClick={async () => {
+                // Sengaja BUKAN setTimedOut(false) -- tombolnya tetap
+                // kelihatan setelah diklik, biar bisa dipencet ulang kalau
+                // hasil ceknya masih PENDING juga. Sebelumnya tombol ini
+                // ilang begitu diklik sekali dan gak ada cara coba lagi
+                // selain refresh halaman penuh.
+                setManualChecking(true);
+                await checkStatus();
+                setManualChecking(false);
+              }}
+              disabled={manualChecking}
+              className="flex items-center justify-center gap-1.5 w-full py-2.5 rounded-[8px] border border-[#2D2342] text-[#E2E8F0] text-[13px] font-semibold hover:bg-[#2D1B4E] transition-colors disabled:opacity-50"
             >
-              <RefreshCw size={14} /> Cek Status Manual
+              <RefreshCw size={14} className={manualChecking ? "animate-spin" : ""} />
+              {manualChecking ? "Mengecek..." : "Cek Status Manual"}
             </button>
           )
         }

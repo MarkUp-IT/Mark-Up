@@ -16,7 +16,7 @@ import {
   Landmark,
 } from "lucide-react";
 import { toast } from "sonner";
-import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 import AttentionBanner from "@/component/AttentionBanner";
 
 /**
@@ -317,14 +317,10 @@ export default function MentorSettings() {
     try {
       const formData = new FormData();
       formData.append("photo", file);
-      const token = getAccessToken();
-      const res = await fetch(`${API_BASE}/api/accounts/me/profile/photo/`, {
+      const data = await apiRequest("/api/accounts/me/profile/photo/", {
         method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.detail || "Gagal mengunggah foto.");
       setProfileImage(data.profile_image);
       refreshProfileCompleteness();
     } catch (err) {

@@ -15,7 +15,7 @@ import {
   Trash2,
   Timer,
 } from "lucide-react";
-import { getAccessToken, API_BASE, apiRequest } from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 import { useCheckoutFormStore } from "@/store/formstore";
 import { useBankInfo } from "@/lib/bankInfo";
 import { toast } from "sonner";
@@ -183,20 +183,14 @@ function CheckoutPaymentPageInner() {
 
         formData.append("proof_of_payment", proofFile);
 
-        const token = getAccessToken();
-        const res = await fetch(`${API_BASE}/api/transactions/checkout/`, {
+        // JANGAN set Content-Type manual di sini -- browser yang harus
+        // generate boundary multipart-nya sendiri. apiRequest sudah nanganin
+        // itu (deteksi FormData) sekaligus auto-refresh token kalau access
+        // token keburu kedaluwarsa selagi user lama ngisi form checkout.
+        await apiRequest("/api/transactions/checkout/", {
           method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          // JANGAN set Content-Type manual di sini -- browser yang harus
-          // generate boundary multipart-nya sendiri.
           body: formData,
         });
-
-        const data = await res.json().catch(() => null);
-
-        if (!res.ok) {
-          throw new Error(data?.detail || "Gagal mengonfirmasi pembayaran.");
-        }
 
         toast.success("Pembayaran Berhasil", {
           description: "Pembayaran berhasil dikonfirmasi. Mengalihkan ke halaman transaksi...",

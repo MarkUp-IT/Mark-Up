@@ -80,6 +80,7 @@ export default function ProdukPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [pendingBuyHref, setPendingBuyHref] = useState(null);
   const [selectedTimeline, setSelectedTimeline] = useState([]);
 
   const shouldReduceMotion = useReducedMotion();
@@ -90,18 +91,21 @@ export default function ProdukPage() {
 
   const router = useRouter();
   const handleBuyClick = (productId, type) => {
+    // Bootcamp lewat alur pendaftaran (pilih paket + upload syarat + seleksi/ACC),
+    // bukan checkout langsung seperti produk lain.
+    const destination =
+      type === "BOOTCAMP" ? `/bootcamp/${productId}/register` : `/checkout/${productId}`;
+
     const token = getAccessToken();
     if (!token) {
+      // Tanpa ini, habis login user dilempar ke halaman default (dashboard
+      // kosong) alih-alih balik ke produk yang tadi mau dibeli -- harus cari
+      // produknya lagi dari awal.
+      setPendingBuyHref(destination);
       setShowLoginModal(true);
       return;
     }
-    // Bootcamp lewat alur pendaftaran (pilih paket + upload syarat + seleksi/ACC),
-    // bukan checkout langsung seperti produk lain.
-    if (type === "BOOTCAMP") {
-      router.push(`/bootcamp/${productId}/register`);
-    } else {
-      router.push(`/checkout/${productId}`);
-    }
+    router.push(destination);
   };
 
   // Timeline utama cuma relevan buat Bootcamp -- di-fetch begitu modal detail
@@ -516,7 +520,7 @@ export default function ProdukPage() {
 
               <div className="flex flex-col gap-2.5 w-full mt-2">
                 <Link
-                  href="/login"
+                  href={pendingBuyHref ? `/login?next=${encodeURIComponent(pendingBuyHref)}` : "/login"}
                   className={`w-full bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold py-3 rounded-full transition-colors text-center ${focusRing}`}
                 >
                   Login Sekarang
