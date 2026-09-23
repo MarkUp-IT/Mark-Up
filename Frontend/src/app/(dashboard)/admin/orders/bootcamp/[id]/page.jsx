@@ -216,6 +216,9 @@ export default function BootcampOrderDetail() {
 
   const [participants, setParticipants] = useState([]);
   const [participantsLoading, setParticipantsLoading] = useState(true);
+  const [participantSearch, setParticipantSearch] = useState("");
+  const [participantTypeFilter, setParticipantTypeFilter] = useState("Semua");
+  const [participantStatusFilter, setParticipantStatusFilter] = useState("Semua");
   const [selectedParticipant, setSelectedParticipant] = useState(null);
   const [participantDetail, setParticipantDetail] = useState(null);
   const [participantLoading, setParticipantLoading] = useState(false);
@@ -413,6 +416,21 @@ export default function BootcampOrderDetail() {
     if (!drafts[session.id]?.meeting_link) flags.push("LINK");
     return flags.length > 0 ? flags : null;
   };
+
+  const filteredParticipants = participants.filter((p) => {
+    const query = participantSearch.trim().toLowerCase();
+    if (query && !p.user_name.toLowerCase().includes(query)) return false;
+    if (participantTypeFilter === "Tim" && !p.team) return false;
+    if (participantTypeFilter === "Solo" && p.team) return false;
+    if (participantStatusFilter === "Belum Dijadwalkan" && p.unscheduled_sessions === 0) return false;
+    if (participantStatusFilter === "Link Tertunda" && p.pending_links === 0) return false;
+    if (participantStatusFilter === "Semua Terjadwal" && (p.unscheduled_sessions > 0 || p.pending_links > 0)) return false;
+    if (participantStatusFilter === "Semua Sesi Selesai" && p.completed_sessions !== p.total_sessions) return false;
+    return true;
+  });
+  const groupedParticipants = groupByTeam(filteredParticipants);
+  const isParticipantFilterActive =
+    participantSearch.trim() !== "" || participantTypeFilter !== "Semua" || participantStatusFilter !== "Semua";
 
   return (
     <>
@@ -718,11 +736,80 @@ export default function BootcampOrderDetail() {
           </p>
         </div>
 
+        {!participantsLoading && participants.length > 0 && (
+          <div className="bg-white border border-[#E2E8F0] rounded-[12px] p-4 flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1.5 flex-1 min-w-[180px]">
+              <label className="text-[#64748B] text-[11px] uppercase font-bold tracking-wider">Cari Nama</label>
+              <input
+                type="text"
+                value={participantSearch}
+                onChange={(e) => setParticipantSearch(e.target.value)}
+                placeholder="Cari nama peserta..."
+                className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[6px] px-3 text-[13px] text-[#1E293B] outline-none focus:border-[#148F89] transition-colors"
+                style={{ height: "38px" }}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[#64748B] text-[11px] uppercase font-bold tracking-wider">Tipe Peserta</label>
+              <div className="bg-[#F1F5F9] px-1 rounded-[8px] flex items-center gap-1" style={{ height: "38px" }}>
+                {["Semua", "Tim", "Solo"].map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setParticipantTypeFilter(f)}
+                    className={`px-3 py-1.5 rounded-[6px] font-medium text-[12.5px] transition-colors ${
+                      participantTypeFilter === f ? "bg-white text-[#0F172A] shadow-sm" : "text-[#64748B] hover:bg-white/60"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[#64748B] text-[11px] uppercase font-bold tracking-wider">Status Sesi</label>
+              <div className="bg-[#F1F5F9] px-1 rounded-[8px] flex items-center gap-1 flex-wrap" style={{ minHeight: "38px" }}>
+                {["Semua", "Belum Dijadwalkan", "Link Tertunda", "Semua Terjadwal", "Semua Sesi Selesai"].map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setParticipantStatusFilter(f)}
+                    className={`px-3 py-1.5 rounded-[6px] font-medium text-[12.5px] whitespace-nowrap transition-colors ${
+                      participantStatusFilter === f ? "bg-white text-[#0F172A] shadow-sm" : "text-[#64748B] hover:bg-white/60"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {isParticipantFilterActive && (
+              <button
+                onClick={() => {
+                  setParticipantSearch("");
+                  setParticipantTypeFilter("Semua");
+                  setParticipantStatusFilter("Semua");
+                }}
+                className="h-[38px] px-3 rounded-[6px] text-[#64748B] text-[12.5px] font-semibold hover:text-[#148F89] hover:bg-[#148F89]/5 transition-colors shrink-0"
+              >
+                Reset Filter
+              </button>
+            )}
+          </div>
+        )}
+
+        {!participantsLoading && participants.length > 0 && (
+          <p className="text-[#64748B] text-[12.5px] -mt-1">
+            Menampilkan <span className="font-bold text-[#1E293B]">{filteredParticipants.length}</span> dari{" "}
+            <span className="font-bold text-[#1E293B]">{participants.length}</span> peserta.
+          </p>
+        )}
+
         {!participantsLoading && participants.length === 0 ? (
           <EmptyState message="Belum ada peserta yang membeli bootcamp ini." />
+        ) : !participantsLoading && filteredParticipants.length === 0 ? (
+          <EmptyState message="Gak ada peserta yang cocok dengan filter ini." />
         ) : (
           <div className="flex flex-col gap-3">
-            {groupByTeam(participants).map((pkg) => (
+            {groupedParticipants.map((pkg) => (
               <div
                 key={pkg.user_library_id}
                 className={`w-full bg-white border rounded-[12px] p-5 flex items-center justify-between shadow-sm hover:shadow-md transition-shadow ${
