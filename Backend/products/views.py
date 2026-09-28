@@ -1676,6 +1676,11 @@ def get_bootcamp_orders(request):
             "pending_links": sum(1 for s in sessions if s.status == "scheduled" and not s.meeting_link),
             "team": _serialize_team_info(reg) if reg is not None else None,
             "team_group_id": team_group_id,
+            # True kalau pendaftaran ini hasil impor manual (bukan lewat
+            # form bootcamp di web) -- lihat admin_notes yang ditulis
+            # import_wa_bootcamp.py. Dipakai FE buat filter "Sumber
+            # Pendaftaran" di halaman Daftar Peserta.
+            "is_manual_import": bool(reg is not None and reg.admin_notes and "WA-IMPORT" in reg.admin_notes),
         })
 
     return JsonResponse({"packages": data}, status=200)

@@ -219,6 +219,7 @@ export default function BootcampOrderDetail() {
   const [participantSearch, setParticipantSearch] = useState("");
   const [participantTypeFilter, setParticipantTypeFilter] = useState("Semua");
   const [participantStatusFilter, setParticipantStatusFilter] = useState("Semua");
+  const [participantSourceFilter, setParticipantSourceFilter] = useState("Semua");
   const [selectedParticipant, setSelectedParticipant] = useState(null);
   const [participantDetail, setParticipantDetail] = useState(null);
   const [participantLoading, setParticipantLoading] = useState(false);
@@ -426,11 +427,16 @@ export default function BootcampOrderDetail() {
     if (participantStatusFilter === "Link Tertunda" && p.pending_links === 0) return false;
     if (participantStatusFilter === "Semua Terjadwal" && (p.unscheduled_sessions > 0 || p.pending_links > 0)) return false;
     if (participantStatusFilter === "Semua Sesi Selesai" && p.completed_sessions !== p.total_sessions) return false;
+    if (participantSourceFilter === "Impor Manual WA" && !p.is_manual_import) return false;
+    if (participantSourceFilter === "Reguler" && p.is_manual_import) return false;
     return true;
   });
   const groupedParticipants = groupByTeam(filteredParticipants);
   const isParticipantFilterActive =
-    participantSearch.trim() !== "" || participantTypeFilter !== "Semua" || participantStatusFilter !== "Semua";
+    participantSearch.trim() !== "" ||
+    participantTypeFilter !== "Semua" ||
+    participantStatusFilter !== "Semua" ||
+    participantSourceFilter !== "Semua";
 
   return (
     <>
@@ -781,12 +787,29 @@ export default function BootcampOrderDetail() {
                 ))}
               </div>
             </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[#64748B] text-[11px] uppercase font-bold tracking-wider">Sumber Pendaftaran</label>
+              <div className="bg-[#F1F5F9] px-1 rounded-[8px] flex items-center gap-1" style={{ height: "38px" }}>
+                {["Semua", "Reguler", "Impor Manual WA"].map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setParticipantSourceFilter(f)}
+                    className={`px-3 py-1.5 rounded-[6px] font-medium text-[12.5px] whitespace-nowrap transition-colors ${
+                      participantSourceFilter === f ? "bg-white text-[#0F172A] shadow-sm" : "text-[#64748B] hover:bg-white/60"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
             {isParticipantFilterActive && (
               <button
                 onClick={() => {
                   setParticipantSearch("");
                   setParticipantTypeFilter("Semua");
                   setParticipantStatusFilter("Semua");
+                  setParticipantSourceFilter("Semua");
                 }}
                 className="h-[38px] px-3 rounded-[6px] text-[#64748B] text-[12.5px] font-semibold hover:text-[#148F89] hover:bg-[#148F89]/5 transition-colors shrink-0"
               >
@@ -843,6 +866,14 @@ export default function BootcampOrderDetail() {
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E0E7FF] text-[#3730A3]"
                         >
                           <Users size={10} /> Anggota Tim
+                        </span>
+                      )}
+                      {pkg.is_manual_import && (
+                        <span
+                          title="Pendaftaran ini diimpor manual dari bukti transfer WA, bukan dari form bootcamp di web."
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF3C7] text-[#92400E]"
+                        >
+                          Impor Manual WA
                         </span>
                       )}
                     </p>
