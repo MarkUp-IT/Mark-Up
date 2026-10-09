@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
-import { AlertCircle, CheckCircle2, Loader2, QrCode, Timer } from "lucide-react";
+import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
+import { AlertCircle, CheckCircle2, Download, Loader2, QrCode, Timer } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { extractErrorMessage } from "@/lib/formErrors";
 
@@ -51,6 +51,43 @@ function formatWaktu(iso) {
  * `onPaid` (wajib): dipanggil begitu polling mendeteksi status PAID --
  * pemanggil yang nentuin toast/redirect/refetch-nya sendiri.
  */
+/** Gabungkan QR + nominal + batas waktu jadi satu PNG berlatar putih, lalu
+ * unduh. Dipakai pembeli yang bayar dari HP yang sama: simpan gambar ->
+ * "scan dari galeri" di aplikasi e-wallet/m-banking. */
+function unduhQris(qrCanvas, { total, expiresAt, transactionId }) {
+  if (!qrCanvas) return;
+  const W = 720;
+  const qr = 560;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = 940;
+  const g = c.getContext("2d");
+  g.fillStyle = "#FFFFFF";
+  g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = "#0F172A";
+  g.textAlign = "center";
+  g.font = "bold 40px sans-serif";
+  g.fillText("QRIS MARK-UP", W / 2, 80);
+  g.drawImage(qrCanvas, (W - qr) / 2, 120, qr, qr);
+  if (total != null) {
+    g.font = "bold 44px sans-serif";
+    g.fillText(formatIDR(total), W / 2, 760);
+  }
+  g.font = "26px sans-serif";
+  g.fillStyle = "#475569";
+  if (expiresAt) g.fillText(`Bayar sebelum pukul ${formatWaktu(expiresAt)}`, W / 2, 815);
+  if (transactionId) {
+    g.font = "22px monospace";
+    g.fillText(transactionId, W / 2, 870);
+  }
+  const a = document.createElement("a");
+  a.href = c.toDataURL("image/png");
+  a.download = `QRIS-${transactionId || "markup"}.png`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 export default function QrisPaymentPanel({ onCreateTransaction, onPaid, disabled, productTitle }) {
   // idle -> creating -> showing -> paid | expired  (atau idle -> error)
   const [status, setStatus] = useState("idle");
@@ -62,6 +99,7 @@ export default function QrisPaymentPanel({ onCreateTransaction, onPaid, disabled
   const [errorMsg, setErrorMsg] = useState("");
   const pollRef = useRef(null);
   const tickRef = useRef(null);
+  const qrCanvasWrapRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -251,6 +289,20 @@ export default function QrisPaymentPanel({ onCreateTransaction, onPaid, disabled
       <div className="bg-white p-3 rounded-[10px]">
         <QRCodeSVG value={qrString} size={220} level="M" />
       </div>
+      {/* Versi canvas resolusi tinggi, tersembunyi -- sumber gambar unduhan. */}
+      <div className="hidden" ref={qrCanvasWrapRef}>
+        <QRCodeCanvas value={qrString} size={560} level="M" marginSize={2} />
+      </div>
+      <button
+        type="button"
+        onClick={() =>
+          unduhQris(qrCanvasWrapRef.current?.querySelector("canvas"), { total, expiresAt, transactionId })
+        }
+        className="flex items-center gap-2 px-4 py-2 rounded-[8px] border border-[#148F89]/50 text-[#5EEAD4] text-[12.5px] font-semibold hover:bg-[#148F89]/10 transition-colors"
+      >
+        <Download size={14} />
+        Unduh QRIS
+      </button>
       {total != null && <p className="text-white font-bold text-[22px]">{formatIDR(total)}</p>}
       <div className="flex flex-col items-center gap-1.5">
         <div
@@ -272,7 +324,8 @@ export default function QrisPaymentPanel({ onCreateTransaction, onPaid, disabled
         )}
       </div>
       <p className="text-[#9CA3AF] text-[11px] text-center leading-relaxed max-w-[280px]">
-        Scan pakai aplikasi e-wallet atau m-banking mana pun yang support QRIS. Halaman ini
+        Scan pakai aplikasi e-wallet atau m-banking mana pun yang support QRIS. Bayar dari HP ini?
+        Unduh QRIS-nya, lalu pilih &quot;scan dari galeri&quot; di aplikasimu. Halaman ini
         otomatis update begitu pembayaran diterima -- gak perlu refresh.
       </p>
       {transactionId && (

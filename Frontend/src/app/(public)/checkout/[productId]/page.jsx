@@ -323,7 +323,8 @@ function CheckoutDetailPageInner() {
 
     async function checkProfileCompleteness() {
       try {
-        const data = await api.get("/api/accounts/me/profile/");
+        // Belum login: gak perlu tanya server (cuma bakal dibalas 401).
+        const data = getAccessToken() ? await api.get("/api/accounts/me/profile/") : null;
         if (cancelled) return;
 
         if (!data) {

@@ -192,7 +192,7 @@ export default function Transactions() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
         <StatCard
           label="Total Transaksi"
           value={transactions.length}

@@ -2,9 +2,12 @@ import logging
 
 from django.core.paginator import Paginator, EmptyPage
 from decimal import Decimal, InvalidOperation
+
+from django.core.exceptions import ValidationError as DjangoValidationError
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 import random
+import re
 
 from django.conf import settings
 from django.core.mail import send_mail
@@ -57,8 +60,8 @@ from .models import (
     ZoomAccount,
 )
 from accounts.decorators import jwt_required, role_required
-from accounts.models import User, UserRole, AuditAction
-from accounts.utils import log_audit, notify_team, notify_admins, notify_user, get_client_ip, is_rate_limited, send_mail_async
+from accounts.models import User, UserRole, UserStatus, AuditAction
+from accounts.utils import log_audit, notify_team, notify_admins, notify_user, get_client_ip, is_rate_limited, send_mail_async, tanggal_indo
 from django.db.models import Q
 from mentors.models import MentorAvailability
 from transactions.models import (
@@ -371,8 +374,10 @@ def _serialize_mentoring_session(session):
     return {
         "id": str(session.id),
         "order": session.order,
-        "mentor": mentor.user.fullname,
-        "mentor_id": str(mentor.id),
+        # None = pembeli belum milih mentor -- FE nampilin langkah "pilih
+        # mentor" dulu sebelum pilih jadwal (lihat schedule_my_product_session).
+        "mentor": mentor.user.fullname if mentor else None,
+        "mentor_id": str(mentor.id) if mentor else None,
         "start_time": session.start_time.isoformat() if session.start_time else None,
         "status": session.status,
         "zoom_link": session.zoom_link,
@@ -518,6 +523,19 @@ def get_my_products(request):
     )
 
 
+def _info_refund(user_library):
+    """Kelayakan refund + status pengajuan terakhir, buat halaman produk
+    pembeli (biar pembeli tahu batas waktunya & nasib pengajuannya)."""
+    info = _kelayakan_refund(user_library)
+    terakhir = user_library.refund_requests.order_by("-created_at").first()
+    info["last_request"] = {
+        "status": terakhir.status,
+        "created_at": terakhir.created_at.isoformat(),
+        "refund_amount": float(terakhir.refund_amount) if terakhir.refund_amount is not None else None,
+    } if terakhir else None
+    return info
+
+
 @jwt_required
 def get_my_product_detail(request, product_id):
     if request.method != "GET":
@@ -549,6 +567,7 @@ def get_my_product_detail(request, product_id):
                 "sessions": [_serialize_bootcamp_session(session) for session in sessions],
                 "resources": _serialize_unlocked_bootcamp_resources(user_library),
                 "team": _serialize_my_team(user_library),
+                "refund": _info_refund(user_library),
             },
             status=200,
         )
@@ -562,6 +581,7 @@ def get_my_product_detail(request, product_id):
                 "description": detail.description,
                 "image_url": _get_product_image_url(detail),
                 "sessions": [_serialize_mentoring_session(session) for session in sessions],
+                "refund": _info_refund(user_library),
             },
             status=200,
         )
@@ -671,11 +691,28 @@ def schedule_my_product_session(request, session_id):
         return JsonResponse({"detail": "Sesi tidak ditemukan atau tidak dimiliki oleh user."}, status=404)
 
     try:
-        slot = MentorAvailability.objects.get(id=availability_slot_id)
-    except MentorAvailability.DoesNotExist:
+        slot = MentorAvailability.objects.select_related("mentor_profile__user").get(id=availability_slot_id)
+    except (MentorAvailability.DoesNotExist, DjangoValidationError, ValueError):
         return JsonResponse({"detail": "Slot ketersediaan tidak ditemukan."}, status=404)
 
-    if slot.mentor_profile != session.mentor:
+    if slot.start_time <= timezone.now():
+        return JsonResponse({"detail": "Jadwal ini sudah lewat, silakan pilih jadwal lain."}, status=400)
+
+    # Sesi yang BELUM punya mentor (pembeli belum milih -- lihat catatan di
+    # MentoringSession.mentor): mentor diambil dari slot yang dipilih, asal
+    # mentornya memang boleh buat produk ini (aturan sama persis kayak
+    # widget pilih-mentor di checkout, lihat mentors.views.get_mentors).
+    pilih_mentor_baru = session.mentor_id is None
+    if pilih_mentor_baru:
+        mentor_baru = slot.mentor_profile
+        if (mentor_baru.user.role != UserRole.MENTOR or mentor_baru.user.status != UserStatus.ACTIVE
+                or not mentor_baru.bisa_dipesan()):
+            return JsonResponse({"detail": "Mentor ini sedang tidak aktif."}, status=400)
+        if session.mentoring_id:
+            expertise_ids = list(session.mentoring.expertise.values_list("id", flat=True))
+            if expertise_ids and not mentor_baru.mentor_expertises.filter(expertise_id__in=expertise_ids).exists():
+                return JsonResponse({"detail": "Mentor ini tidak tersedia untuk produk mentoring ini."}, status=400)
+    elif slot.mentor_profile_id != session.mentor_id:
         return JsonResponse({"detail": "Slot tidak milik mentor sesi ini."}, status=400)
 
     if slot.is_booked:
@@ -739,6 +776,14 @@ def schedule_my_product_session(request, session_id):
     session.availability_slot = slot
     session.start_time = slot.start_time
     session.status = MentoringSession.SessionStatus.SCHEDULED
+    if pilih_mentor_baru:
+        # Satu paket mentoring = satu mentor (sama kayak pembelian normal,
+        # lihat _create_mentoring_sessions) -- mentor pilihan pembeli
+        # dipasang juga ke sesi-sesi lain di paket ini yang masih kosong.
+        session.mentor = slot.mentor_profile
+        MentoringSession.objects.filter(
+            user_library=session.user_library, mentoring_id=session.mentoring_id, mentor__isnull=True,
+        ).exclude(id=session.id).update(mentor=slot.mentor_profile)
     session.save()
 
     # Kalau link Zoom-nya sudah dibuat otomatis tapi jadwalnya bergeser, meeting
@@ -758,7 +803,7 @@ def schedule_my_product_session(request, session_id):
         f"{session.user_library.user.fullname} "
         + ("mengubah jadwal" if is_reschedule else "menjadwalkan")
         + f" sesi mentoring \"{session.mentoring.title if session.mentoring else '-'}\" "
-        f"(Sesi {session.order}) ke {timezone.localtime(slot.start_time).strftime('%d %B %Y, %H:%M')} WIB.",
+        f"(Sesi {session.order}) ke {tanggal_indo(slot.start_time)} WIB.",
         url="/mentor/mentoring-schedule",
     )
 
@@ -824,27 +869,45 @@ def refund_my_product(request, product_id):
     if request_data is None:
         return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
-    reason = request_data.get("reason")
+    reason = (request_data.get("reason") or "").strip()
     if not reason:
         return JsonResponse({"detail": "Alasan refund diperlukan."}, status=400)
 
-    now = timezone.now()
-    cutoff = now + timedelta(hours=3)
+    # Rekening tujuan pengembalian dana -- dulu gak ditanya sama sekali,
+    # padahal notifikasi persetujuan bilang "ditransfer ke rekeningmu".
+    rekening = {k: str(request_data.get(k) or "").strip() for k in ("bank_name", "bank_account", "bank_account_holder")}
+    errors = {}
+    if not rekening["bank_name"]:
+        errors["bank_name"] = ["Nama bank / e-wallet wajib diisi."]
+    if not rekening["bank_account"]:
+        errors["bank_account"] = ["Nomor rekening wajib diisi."]
+    elif not re.fullmatch(r"[0-9 .-]{5,40}", rekening["bank_account"]):
+        errors["bank_account"] = ["Nomor rekening hanya boleh berisi angka."]
+    if not rekening["bank_account_holder"]:
+        errors["bank_account_holder"] = ["Nama pemilik rekening wajib diisi."]
+    if errors:
+        return JsonResponse({"detail": "Lengkapi data rekening tujuan refund.", "errors": errors}, status=400)
+    rekening["bank_name"] = rekening["bank_name"][:100]
+    rekening["bank_account_holder"] = rekening["bank_account_holder"][:150]
 
-    scheduled_sessions = []
-    if user_library.product.type == ProductType.BOOTCAMP:
-        scheduled_sessions = [s for s in user_library.bootcamp_sessions.all() if s.status == BootcampSession.SessionStatus.SCHEDULED and s.start_time]
-    elif user_library.product.type == ProductType.MENTORING:
-        scheduled_sessions = [s for s in user_library.mentoring_sessions.all() if s.status == MentoringSession.SessionStatus.SCHEDULED and s.start_time]
+    # Satu produk cuma boleh punya SATU pengajuan yang lagi diproses / sudah
+    # disetujui. Dulu bisa dobel -> admin bisa menyetujui (& mentransfer)
+    # refund produk yang sama lebih dari sekali.
+    if user_library.refund_requests.filter(
+        status__in=[RefundRequest.RefundStatus.PENDING, RefundRequest.RefundStatus.APPROVED]
+    ).exists():
+        return JsonResponse(
+            {"detail": "Kamu sudah punya pengajuan refund untuk produk ini yang sedang diproses."}, status=400
+        )
 
-    if scheduled_sessions:
-        next_session = min(scheduled_sessions, key=lambda s: s.start_time)
-        if next_session.start_time <= cutoff:
-            return JsonResponse({"detail": "Refund ditutup karena sesi terdekat kurang dari 3 jam."}, status=400)
+    kelayakan = _kelayakan_refund(user_library)
+    if not kelayakan["eligible"]:
+        return JsonResponse({"detail": kelayakan["reason"]}, status=400)
 
     refund = RefundRequest.objects.create(
         user_library=user_library,
         reason=reason,
+        **rekening,
     )
 
     detail = _get_product_detail(user_library.product)
@@ -951,21 +1014,7 @@ def get_products(request):
         # disembunyikan/dinonaktifkan. Turunkan diam-diam ke false kalau yang
         # minta bukan admin yang beneran login, daripada 403 (biar request
         # publik yang gak sengaja nyertain param ini tetap jalan normal).
-        from rest_framework_simplejwt.authentication import JWTAuthentication
-        from rest_framework_simplejwt.exceptions import InvalidToken, AuthenticationFailed
-        from accounts.models import UserRole
-
-        is_admin = False
-        auth_header = request.META.get("HTTP_AUTHORIZATION", "")
-        if auth_header.startswith("Bearer "):
-            try:
-                token = auth_header.split(" ", 1)[1].strip()
-                validated_token = JWTAuthentication().get_validated_token(token)
-                user = JWTAuthentication().get_user(validated_token)
-                is_admin = user.role == UserRole.ADMIN
-            except (InvalidToken, AuthenticationFailed):
-                is_admin = False
-        if not is_admin:
+        if not _peminta_adalah_admin(request):
             include_inactive = False
 
     # Product tanpa detail sama sekali (baris yatim -- biasanya sisa proses
@@ -1045,21 +1094,206 @@ def get_product(request, product_id):
         return JsonResponse({"detail": "Produk tidak ditemukan."}, status=404)
 
     detail = _get_product_detail(product)
-    if detail is None or not detail.is_active:
+    # Produk nonaktif disembunyikan dari publik, TAPI admin tetap harus bisa
+    # membukanya -- halaman edit produk admin (mis. /admin/orders/module/[id])
+    # memakai endpoint ini. Dulu admin dapat 404, jadi produk yang sudah
+    # dinonaktifkan gak bisa dibuka/diedit lagi (ketahuan lewat tes E2E).
+    if detail is None or (not detail.is_active and not _peminta_adalah_admin(request)):
         return JsonResponse({"detail": "Produk tidak ditemukan."}, status=404)
 
     return JsonResponse(_serialize_product_item(product), status=200)
 
+
+def _peminta_adalah_admin(request):
+    """True kalau request ini membawa JWT admin yang sah & aktif. Dipakai di
+    endpoint PUBLIK yang menampilkan lebih banyak data ke admin -- tanpa
+    token / token rusak dianggap pengunjung biasa, bukan error."""
+    from rest_framework_simplejwt.authentication import JWTAuthentication
+    from rest_framework_simplejwt.exceptions import InvalidToken, AuthenticationFailed
+    from accounts.decorators import user_boleh_masuk
+
+    auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+    if not auth_header.startswith("Bearer "):
+        return False
+    try:
+        jwt = JWTAuthentication()
+        user = jwt.get_user(jwt.get_validated_token(auth_header.split(" ", 1)[1].strip()))
+    except (InvalidToken, AuthenticationFailed):
+        return False
+    return user.role == UserRole.ADMIN and user_boleh_masuk(user)
+
+# Refund Policy (/refund-policy) -- angka-angka ini HARUS sama dengan teks
+# kebijakan yang dibaca pembeli.
+REFUND_WINDOW_HOURS = 48           # ajukan maks 48 jam setelah lunas
+REFUND_MENTORING_MIN_HOURS = 24    # mentoring: maks 24 jam sebelum sesi
+REFUND_BOOTCAMP_MAX_SESI = 1       # bootcamp: final begitu sesi ke-2 dimulai
+
+
+def _transaksi_produk(user_library):
+    """Transaksi PAID/REFUNDED terbaru milik user+produk ini, atau None
+    (mis. anggota tim bootcamp yang aksesnya dibuatkan dari transaksi ketua)."""
+    from transactions.models import TransactionItem, PaymentStatus as TxPaymentStatus
+
+    item = (
+        TransactionItem.objects.filter(
+            transaction__user=user_library.user,
+            product=user_library.product,
+            transaction__payment_status__in=[TxPaymentStatus.PAID, TxPaymentStatus.REFUNDED],
+        )
+        .select_related("transaction")
+        .order_by("-transaction__created_at")
+        .first()
+    )
+    return item.transaction if item else None
+
+
+def _kelayakan_refund(user_library, now=None):
+    """Satu-satunya sumber aturan refund (Refund Policy). Balikin
+    {eligible, reason, deadline}: `deadline` = kapan paling lambat bisa
+    diajukan (buat ditampilkan ke pembeli), `reason` = kenapa ditolak."""
+    now = now or timezone.now()
+    tipe = user_library.product.type
+
+    def tolak(alasan):
+        return {"eligible": False, "reason": alasan, "deadline": None}
+
+    if tipe == ProductType.MODULE:
+        return tolak("Modul tidak dapat direfund karena materinya langsung bisa diakses penuh.")
+    if user_library.is_revoked:
+        return tolak("Akses produk ini sudah dicabut.")
+    if user_library.refund_requests.filter(
+        status__in=[RefundRequest.RefundStatus.PENDING, RefundRequest.RefundStatus.APPROVED]
+    ).exists():
+        return tolak("Kamu sudah punya pengajuan refund untuk produk ini yang sedang diproses.")
+
+    txn = _transaksi_produk(user_library)
+    if txn and txn.refund_deadline:
+        deadline = txn.refund_deadline
+    else:
+        lunas = (txn.paid_at if txn else None) or user_library.purchased_at
+        deadline = lunas + timedelta(hours=REFUND_WINDOW_HOURS)
+    alasan_deadline = f"Batas pengajuan refund ({REFUND_WINDOW_HOURS} jam setelah pembayaran berhasil) sudah lewat."
+
+    if tipe == ProductType.MENTORING:
+        sesi = list(user_library.mentoring_sessions.all())
+        if any(s.status == MentoringSession.SessionStatus.COMPLETED or (s.start_time and s.start_time <= now)
+               for s in sesi):
+            return tolak("Refund tidak tersedia karena sudah ada sesi mentoring yang berlangsung.")
+        jadwal = [s.start_time for s in sesi if s.status == MentoringSession.SessionStatus.SCHEDULED and s.start_time]
+        if jadwal:
+            batas_sesi = min(jadwal) - timedelta(hours=REFUND_MENTORING_MIN_HOURS)
+            if batas_sesi < deadline:
+                deadline = batas_sesi
+                alasan_deadline = (f"Refund mentoring hanya bisa diajukan maksimal {REFUND_MENTORING_MIN_HOURS} jam "
+                                   f"sebelum jadwal sesi.")
+    elif tipe == ProductType.BOOTCAMP:
+        mulai = sorted(s.start_time for s in user_library.bootcamp_sessions.all() if s.start_time)
+        if len(mulai) > REFUND_BOOTCAMP_MAX_SESI:
+            batas_sesi = mulai[REFUND_BOOTCAMP_MAX_SESI]
+            if batas_sesi < deadline:
+                deadline = batas_sesi
+                alasan_deadline = "Pembelian bootcamp sudah final karena sesi ke-2 sudah dimulai."
+
+    if now >= deadline:
+        return tolak(alasan_deadline)
+    return {"eligible": True, "reason": None, "deadline": deadline.isoformat()}
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def upload_refund_proof(request, refund_id):
+    """Admin mengunggah bukti transfer pengembalian dana (JPG/PNG/PDF, maks
+    5MB -- validasi sama dengan bukti bayar checkout). Cuma buat refund yang
+    sudah DISETUJUI. Boleh diunggah ulang (mis. salah file)."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    from transactions.views import _validate_checkout_upload
+
+    try:
+        refund = RefundRequest.objects.select_related("user_library__user", "user_library__product").get(id=refund_id)
+    except RefundRequest.DoesNotExist:
+        return JsonResponse({"detail": "Pengajuan refund tidak ditemukan."}, status=404)
+    if refund.status != RefundRequest.RefundStatus.APPROVED:
+        return JsonResponse({"detail": "Bukti transfer hanya bisa diunggah untuk refund yang sudah disetujui."},
+                            status=400)
+
+    berkas = request.FILES.get("transfer_proof")
+    if not berkas:
+        return JsonResponse({"errors": {"transfer_proof": ["Pilih berkas bukti transfer."]}}, status=400)
+    error = _validate_checkout_upload(berkas, "Bukti transfer")
+    if error:
+        return JsonResponse({"errors": {"transfer_proof": [error]}}, status=400)
+
+    pertama_kali = not refund.transfer_proof
+    refund.transfer_proof = berkas
+    refund.transferred_at = timezone.now()
+    refund.save(update_fields=["transfer_proof", "transferred_at"])
+    log_audit(request, AuditAction.UPDATE, "refund_requests", object_id=refund.id,
+              new_data={"transfer_proof": refund.transfer_proof.name})
+
+    if pertama_kali:
+        detail = _get_product_detail(refund.user_library.product)
+        nominal = f"{_format_rupiah(refund.refund_amount)} " if refund.refund_amount is not None else ""
+        notify_user(
+            refund.user_library.user,
+            "Dana Refund Sudah Ditransfer",
+            f"Dana refund {nominal}untuk \"{detail.title if detail else '-'}\" sudah kami transfer ke "
+            f"{refund.bank_name} {refund.bank_account}. Bukti transfernya bisa kamu lihat di halaman Transaksi.",
+            url="/user/transactions",
+        )
+
+    return JsonResponse(_serialize_refund_request(refund), status=200)
+
+
+def _refund_paid_amount(refund):
+    """Total yang DIBAYAR pembeli buat produk yang diajukan refund-nya --
+    grand_total transaksi PAID (atau REFUNDED, kalau sudah disetujui)
+    terbaru milik user+produk itu. UserLibrary belum nyimpen link langsung
+    ke Transaction, jadi pencocokannya sama persis kayak di
+    update_refund_request. None kalau gak ketemu (mis. akses hasil impor
+    manual tanpa transaksi)."""
+    txn = _transaksi_produk(refund.user_library)
+    return txn.grand_total if txn else None
+
+
+def _hitung_refund_amount(paid_amount, admin_fee_percent):
+    """paid x (100 - persen) / 100, dibulatkan ke rupiah utuh."""
+    if paid_amount is None:
+        return None
+    nominal = Decimal(paid_amount) * (Decimal(100) - Decimal(admin_fee_percent)) / Decimal(100)
+    return nominal.quantize(Decimal("1"))
+
+
+def _format_rupiah(nilai):
+    return "Rp" + f"{Decimal(nilai):,.0f}".replace(",", ".")
+
+
 def _serialize_refund_request(refund):
     user_library = refund.user_library
     detail = _get_product_detail(user_library.product)
+    paid_amount = _refund_paid_amount(refund)
+    # Sudah disetujui -> nominal final yang tercatat. Belum -> perkiraan
+    # pakai persen yang tersimpan (default 10%), buat ditampilkan ke admin.
+    refund_amount = (
+        refund.refund_amount
+        if refund.refund_amount is not None
+        else _hitung_refund_amount(paid_amount, refund.admin_fee_percent)
+    )
     return {
         "id": str(refund.id),
         "user_name": user_library.user.fullname,
         "product_title": detail.title if detail else None,
         "reason": refund.reason,
+        "bank_name": refund.bank_name,
+        "bank_account": refund.bank_account,
+        "bank_account_holder": refund.bank_account_holder,
+        "transfer_proof_url": refund.transfer_proof.url if refund.transfer_proof else None,
+        "transferred_at": refund.transferred_at.isoformat() if refund.transferred_at else None,
         "status": refund.status,
         "admin_fee_percent": refund.admin_fee_percent,
+        "paid_amount": str(paid_amount) if paid_amount is not None else None,
+        "refund_amount": str(refund_amount) if refund_amount is not None else None,
         "admin_notes": refund.admin_notes,
         "created_at": refund.created_at.isoformat(),
         "resolved_at": refund.resolved_at.isoformat() if refund.resolved_at else None,
@@ -1112,6 +1346,20 @@ def update_refund_request(request, refund_id):
     if decision not in ("approved", "rejected"):
         return JsonResponse({"detail": "decision harus 'approved' atau 'rejected'."}, status=400)
 
+    # Persentase potongan biaya admin -- opsional, default nilai tersimpan
+    # (10% sesuai Refund Policy). Cuma berarti buat pengajuan yang disetujui.
+    if decision == "approved" and request_data.get("admin_fee_percent") not in (None, ""):
+        try:
+            persen = int(str(request_data.get("admin_fee_percent")).strip())
+        except (TypeError, ValueError):
+            persen = -1
+        if persen < 0 or persen > 100:
+            return JsonResponse(
+                {"errors": {"admin_fee_percent": ["Potongan harus angka bulat antara 0 sampai 100."]}},
+                status=400,
+            )
+        refund.admin_fee_percent = persen
+
     old_status = refund.status
     refund.status = decision
     refund.admin_notes = request_data.get("admin_notes", "")
@@ -1120,9 +1368,18 @@ def update_refund_request(request, refund_id):
     if decision == "approved":
         from transactions.models import Transaction, TransactionItem, PaymentStatus as TxPaymentStatus
 
+        refund.refund_amount = _hitung_refund_amount(_refund_paid_amount(refund), refund.admin_fee_percent)
+
         user_library = refund.user_library
         user_library.is_revoked = True
         user_library.save()
+
+        # "Terjual" = orang yang beneran memegang akses. Dulu angka ini cuma
+        # naik (saat lunas) dan gak pernah turun saat refund.
+        detail_produk = _get_product_detail(user_library.product)
+        if detail_produk is not None and detail_produk.sold_count:
+            detail_produk.sold_count -= 1
+            detail_produk.save(update_fields=["sold_count"])
 
         # Bebasin lagi slot mentor yang masih terjadwal biar bisa dibooking user lain.
         for session in user_library.mentoring_sessions.filter(status="scheduled", availability_slot__isnull=False):
@@ -1160,7 +1417,12 @@ def update_refund_request(request, refund_id):
 
     log_audit(
         request, AuditAction.UPDATE, "refund_requests", object_id=refund.id,
-        old_data={"status": old_status}, new_data={"status": refund.status},
+        old_data={"status": old_status},
+        new_data={
+            "status": refund.status,
+            "admin_fee_percent": refund.admin_fee_percent,
+            "refund_amount": str(refund.refund_amount) if refund.refund_amount is not None else None,
+        },
     )
 
     # Sebelumnya pengaju refund SAMA SEKALI gak dikabari hasil keputusannya
@@ -1170,10 +1432,19 @@ def update_refund_request(request, refund_id):
     produk_detail = _get_product_detail(refund.user_library.product)
     judul_produk = produk_detail.title if produk_detail else "-"
     if decision == "approved":
+        if refund.refund_amount is None:
+            info_dana = ""
+        elif refund.admin_fee_percent == 0:
+            info_dana = f" Dana {_format_rupiah(refund.refund_amount)} dikembalikan penuh ke kamu."
+        else:
+            info_dana = (
+                f" Dana {_format_rupiah(refund.refund_amount)} akan dikembalikan ke kamu "
+                f"(setelah potongan biaya administrasi {refund.admin_fee_percent}%)."
+            )
         notify_user(
             refund.user_library.user,
             "Refund Disetujui",
-            f"Pengajuan refund kamu untuk \"{judul_produk}\" DISETUJUI. "
+            f"Pengajuan refund kamu untuk \"{judul_produk}\" DISETUJUI.{info_dana} "
             "Akses produknya sudah dicabut."
             + (f" Catatan admin: {refund.admin_notes}" if refund.admin_notes else ""),
             url="/user/transactions",
@@ -1412,7 +1683,7 @@ def issue_certificate(request):
 
     try:
         recipient = User.objects.get(id=recipient_id)
-    except User.DoesNotExist:
+    except (User.DoesNotExist, DjangoValidationError, ValueError):
         return JsonResponse({"errors": {"recipient_id": ["Penerima tidak ditemukan."]}}, status=404)
 
     product = None
@@ -1574,7 +1845,16 @@ def update_mentoring_order_session(request, session_id):
         from transactions.models import MentorPayout, PayoutSourceType, CommissionSetting
 
         if session.mentor_id and not hasattr(session, "payout"):
-            gross = session.mentoring.new_price or session.mentoring.original_price or 0
+            # Honor mentor dihitung dari yang BENAR-BENAR dibayar pembeli
+            # (sudah dipotong diskon produk & kode referral) -- keputusan tim
+            # Okt 2026. Dulu pakai harga produk, jadi diskon referral
+            # sepenuhnya ditanggung MarkUp. Fallback ke harga produk kalau
+            # transaksinya gak ketemu (mis. akses yang diberikan manual).
+            txn = _transaksi_produk(session.user_library)
+            if txn is not None:
+                gross = txn.grand_total
+            else:
+                gross = session.mentoring.new_price or session.mentoring.original_price or 0
             session_count = session.mentoring.session_count or 1
             # Fee mentoring ngikutin override per-mentor kalau diisi admin di
             # User Management (mentoring_fee_percent_override), kalau kosong
@@ -1676,11 +1956,6 @@ def get_bootcamp_orders(request):
             "pending_links": sum(1 for s in sessions if s.status == "scheduled" and not s.meeting_link),
             "team": _serialize_team_info(reg) if reg is not None else None,
             "team_group_id": team_group_id,
-            # True kalau pendaftaran ini hasil impor manual (bukan lewat
-            # form bootcamp di web) -- lihat admin_notes yang ditulis
-            # import_wa_bootcamp.py. Dipakai FE buat filter "Sumber
-            # Pendaftaran" di halaman Daftar Peserta.
-            "is_manual_import": bool(reg is not None and reg.admin_notes and "WA-IMPORT" in reg.admin_notes),
         })
 
     return JsonResponse({"packages": data}, status=200)
@@ -1886,8 +2161,8 @@ def upload_product_image(request):
 
 MAX_REGISTRATION_DOC_SIZE = 10 * 1024 * 1024  # 10MB (PDF gabungan bisa agak besar)
 MAX_COMMITMENT_LETTER_SIZE = 5 * 1024 * 1024  # 5MB (cuma surat teks, gak sebesar PDF gabungan)
-MAX_PAYMENT_PROOF_SIZE = 5 * 1024 * 1024  # 5MB, sama kayak checkout_product biasa
-ALLOWED_PAYMENT_PROOF_EXTENSIONS = {"jpg", "jpeg", "png", "pdf"}
+# Bukti bayar bootcamp divalidasi pakai transactions.views._validate_checkout_upload
+# (sama persis dengan checkout biasa).
 
 _BENEFIT_LABELS = [
     ("benefit_session_material", "Sesi & Materi Bootcamp"),
@@ -2338,12 +2613,12 @@ def register_bootcamp(request):
 
     try:
         package = BootcampPackage.objects.select_related("bootcamp").get(id=package_id, is_active=True)
-    except BootcampPackage.DoesNotExist:
+    except (BootcampPackage.DoesNotExist, DjangoValidationError, ValueError):
         return JsonResponse({"errors": {"package_id": ["Paket tidak ditemukan."]}}, status=404)
 
     reg_status = _package_registration_status(package)
     if reg_status == "not_open_yet":
-        opens_local = timezone.localtime(package.registration_opens_at).strftime("%d %B %Y")
+        opens_local = tanggal_indo(package.registration_opens_at, jam=False)
         return JsonResponse(
             {"detail": f"Pendaftaran paket {package.name} belum dibuka. Dibuka mulai {opens_local}."},
             status=400,
@@ -2356,6 +2631,21 @@ def register_bootcamp(request):
     if BootcampRegistration.objects.filter(user=request.user, package=package).exists():
         return JsonResponse(
             {"detail": "Kamu sudah mendaftar untuk paket ini."}, status=400
+        )
+    # Satu orang cuma boleh SATU paket per bootcamp (keputusan tim, Okt
+    # 2026). Pendaftaran yang ditolak gak dihitung -- yang ditolak di satu
+    # paket masih boleh mencoba paket lain.
+    paket_lain = (
+        BootcampRegistration.objects.filter(user=request.user, package__bootcamp=package.bootcamp)
+        .exclude(status=BootcampRegistration.Status.REJECTED)
+        .select_related("package")
+        .first()
+    )
+    if paket_lain is not None:
+        return JsonResponse(
+            {"detail": f"Kamu sudah terdaftar di bootcamp ini lewat paket {paket_lain.package.name}. "
+                       f"Satu orang hanya bisa mendaftar satu paket."},
+            status=400,
         )
 
     # Ditolak kalau user ini sudah jadi ANGGOTA TIM yang diundang ketua lain di
@@ -2681,6 +2971,27 @@ def review_bootcamp_registration(request, registration_id):
     # berubah (mis. dari Ditolak jadi Diterima), email tetap terkirim seperti
     # biasa -- itu memang kabar baru buat pendaftar tersebut.
     keputusan_berubah = reg.status != decision
+
+    # Pendaftar yang pembayarannya sudah LUNAS / lagi menunggu verifikasi gak
+    # boleh langsung diubah jadi Ditolak -- dulu bisa, hasilnya status
+    # "Ditolak" tapi aksesnya tetap jalan (atau pembayaran pending-nya nanti
+    # di-ACC & malah ngasih akses ke orang yang ditolak). Jalurnya: tolak
+    # pembayarannya dulu / proses refund, baru pendaftarannya.
+    if decision == BootcampRegistration.Status.REJECTED and keputusan_berubah:
+        from transactions.models import Transaction, PaymentStatus as TxPaymentStatus
+
+        pembayaran = Transaction.objects.filter(
+            bootcamp_registration=reg,
+            payment_status__in=[TxPaymentStatus.PAID, TxPaymentStatus.PENDING],
+        ).first()
+        if pembayaran is not None:
+            pesan = (
+                "Peserta ini sudah membayar lunas. Proses refund-nya dulu sebelum menolak pendaftarannya."
+                if pembayaran.payment_status == TxPaymentStatus.PAID
+                else "Peserta ini punya pembayaran yang menunggu verifikasi. Tolak pembayarannya dulu "
+                     "di halaman Transaksi sebelum menolak pendaftarannya."
+            )
+            return JsonResponse({"detail": pesan}, status=400)
 
     reg.status = decision
     reg.admin_notes = request_data.get("admin_notes", "")
@@ -4093,11 +4404,14 @@ def create_bootcamp_payment(request, registration_id):
         if not proof_file:
             return JsonResponse({"detail": "Bukti pembayaran diperlukan."}, status=400)
 
-        ext = proof_file.name.rsplit(".", 1)[-1].lower() if "." in proof_file.name else ""
-        if ext not in ALLOWED_PAYMENT_PROOF_EXTENSIONS:
-            return JsonResponse({"detail": "Format file tidak didukung."}, status=400)
-        if proof_file.size > MAX_PAYMENT_PROOF_SIZE:
-            return JsonResponse({"detail": "Ukuran file maksimal 5MB."}, status=400)
+        # Validator yang SAMA dengan checkout biasa -- ngecek isi berkasnya
+        # juga (gambar di-parse, PDF dicek penandanya), bukan cuma ekstensi.
+        # Dulu di sini cuma ekstensi, jadi berkas apa pun yang dinamai .pdf lolos.
+        from transactions.views import _validate_checkout_upload
+
+        err = _validate_checkout_upload(proof_file, "Bukti pembayaran")
+        if err:
+            return JsonResponse({"detail": err}, status=400)
     else:
         from transactions.views import _ipaymu_allowed_for_product
 
@@ -4192,16 +4506,20 @@ def create_bootcamp_payment(request, registration_id):
         sub_total - team_discount_amount - discount_amount - invite_discount_amount
     ) + commitment_fee_amount
 
+    from transactions.views import _CheckoutDitolak
+
     try:
         with db_transaction.atomic():
             # Kuota kode dikunci di dalam transaksi (bukan cuma dicek di atas)
             # supaya dua orang yang nembak kode sisa-1 barengan gak dua-duanya lolos.
+            # Penolakan di blok ini WAJIB lewat _CheckoutDitolak (bukan
+            # `return`) supaya kenaikan kuota di bawah ikut di-rollback --
+            # lihat catatan di transactions.views.checkout_product.
             if referral_code is not None:
                 locked_referral = ReferralCode.objects.select_for_update().get(pk=referral_code.pk)
                 if not locked_referral.is_valid_for_product(bootcamp_product.product, user=request.user):
-                    return JsonResponse(
-                        {"detail": "Kode referral tidak berlaku, kuotanya habis, atau sudah pernah kamu pakai."},
-                        status=400,
+                    raise _CheckoutDitolak(
+                        "Kode referral tidak berlaku, kuotanya habis, atau sudah pernah kamu pakai."
                     )
                 locked_referral.used_count += 1
                 locked_referral.save(update_fields=["used_count"])
@@ -4209,7 +4527,7 @@ def create_bootcamp_payment(request, registration_id):
             # Stok di-reserve begitu bayar, sama pola-nya kayak checkout_product
             # biasa buat MODULE/BOOTCAMP -- sold_count baru nambah pas admin approve.
             #
-            # Lepas dulu reservasi IPAYMU yang sudah lewat 5 menit tanpa dibayar
+            # Lepas dulu reservasi IPAYMU yang sudah lewat batas waktunya tanpa dibayar
             # (kalau ada) sebelum ngecek stok -- konsisten sama checkout_product,
             # lihat catatan lengkap di sana (transactions/views.py).
             from transactions.views import _release_expired_transactions, RESERVATION_MINUTES
@@ -4221,7 +4539,7 @@ def create_bootcamp_payment(request, registration_id):
                 product_id=bootcamp_product.product_id
             )
             if detail_locked.stock <= 0:
-                return JsonResponse({"detail": "Stok produk habis."}, status=400)
+                raise _CheckoutDitolak("Stok produk habis.")
             detail_locked.stock -= 1
             detail_locked.save(update_fields=["stock"])
 
@@ -4244,7 +4562,7 @@ def create_bootcamp_payment(request, registration_id):
                 commitment_fee_amount=commitment_fee_amount,
                 gateway=payment_gateway,
                 # MANUAL: None (bukti sudah dilampirkan, tinggal nunggu admin
-                # tinjau). IPAYMU: 5 menit -- lihat RESERVATION_MINUTES &
+                # tinjau). IPAYMU: 15 menit -- lihat RESERVATION_MINUTES &
                 # catatan di Transaction.expires_at.
                 expires_at=(
                     timezone.now() + timedelta(minutes=RESERVATION_MINUTES)
@@ -4269,6 +4587,8 @@ def create_bootcamp_payment(request, registration_id):
             # Baris BootcampReferredInvitee TIDAK dibuat di sini lagi -- sudah
             # dicatat waktu pendaftaran (lihat register_bootcamp). Di tahap
             # bayar tinggal dipakai buat menghitung potongannya saja.
+    except _CheckoutDitolak as ditolak:
+        return JsonResponse({"detail": ditolak.pesan}, status=ditolak.status)
     except Exception:
         # Sama alasannya kayak di transactions.views.checkout_product: pesan
         # exception mentah bocorin struktur DB / konfigurasi storage ke klien.
@@ -4443,7 +4763,7 @@ def assign_bootcamp_team_member(request, team_id):
 
     try:
         library = UserLibrary.objects.get(id=request_data.get("user_library_id"), product_id=team.bootcamp_id)
-    except UserLibrary.DoesNotExist:
+    except (UserLibrary.DoesNotExist, DjangoValidationError, ValueError):
         return JsonResponse({"detail": "Peserta tidak ditemukan di bootcamp ini."}, status=404)
 
     if not (library.package and library.package.benefit_team_pairing):

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { LayoutGrid, LogOut } from "lucide-react";
-import { api, ApiError, clearTokens, getRefreshToken } from "@/lib/api";
+import { api, ApiError, clearTokens, getAccessToken, getRefreshToken } from "@/lib/api";
 import GlassShine from "@/component/GlassShine";
 import NotificationBell from "@/component/NotificationBell";
 
@@ -37,6 +37,14 @@ export default function Navbar({ variant = "glass" }) {
 
   useEffect(() => {
     async function fetchCurrentUser() {
+      // Pengunjung yang belum login gak punya token -- jangan tanya server.
+      // Dulu tetap dipanggil, dibalas 401, dan tiap halaman publik jadi
+      // nyetak error merah di console browser (ketahuan lewat tes E2E).
+      if (!getAccessToken() && !getRefreshToken()) {
+        setIsLoggedIn(false);
+        setAuthLoading(false);
+        return;
+      }
       try {
         setAuthLoading(true);
         const json = await api.get("/api/accounts/me/", { auth: true });

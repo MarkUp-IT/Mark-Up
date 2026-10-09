@@ -169,7 +169,7 @@ export default function Certificates() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
         <StatCard label="Total Diterbitkan" value={certificates.length} unit="sertifikat" loading={loading} />
         <StatCard label="Sertifikat Peserta" value={participantCount} unit="sertifikat" loading={loading} />
         <StatCard label="Sertifikat Pemateri" value={instructorCount} unit="sertifikat" variant="primary" loading={loading} />

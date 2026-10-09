@@ -23,12 +23,10 @@ Pola & kehati-hatian di sini meniru mark_up/zoom.py:
   - Kegagalan dikembalikan sebagai (None, ..., pesan), bukan exception liar --
     satu percobaan bikin sesi yang gagal gak boleh bikin endpoint balik 500.
 
-CATATAN buat implementasi lanjutan: casing field body request (product vs
-Product, buyerName, dst) dan resep persis penyusunan data yang di-hash buat
-signature callback MASUK belum 100% terverifikasi dari dokumentasi publik --
-keduanya WAJIB dicocokkan ke panggilan sandbox sungguhan sebelum dipercaya di
-production (lihat rencana verifikasi di plan). verify_webhook_signature
-sengaja gagal TERTUTUP (return False) kalau ada apa pun yang meragukan.
+CATATAN: resep signature callback MASUK (verify_webhook_signature) gak
+pernah terverifikasi & terbukti salah di production -- jadi webhook gak lagi
+dipercaya dari signature-nya. Status bayar SELALU dikonfirmasi ulang ke API
+iPaymu (fetch_paid_entry), yang request-nya kita tanda tangani sendiri.
 """
 from __future__ import annotations
 
@@ -141,7 +139,7 @@ def _product_title(product):
 
 def _create_session_raw(setting, *, products, qtys, prices, descriptions, reference_id,
                          buyer_name, buyer_phone, buyer_email,
-                         return_url, notify_url, cancel_url, expired_hours):
+                         return_url, notify_url, cancel_url, expired_hours, expired_type="hours"):
     """Inti pembuatan sesi, dipisah dari create_payment_session supaya
     test_connection bisa memakainya tanpa perlu bikin baris Transaction
     sungguhan di database cuma buat uji koneksi.
@@ -172,7 +170,10 @@ def _create_session_raw(setting, *, products, qtys, prices, descriptions, refere
         "buyerPhone": buyer_phone or "",
         "buyerEmail": buyer_email or "",
         "expired": expired_hours,
-        "expiredType": "hours",
+        # "minutes" juga diterima iPaymu (dicek ke production, Okt 2026) --
+        # dipakai create_payment_session biar halaman bayar iPaymu ikut
+        # kedaluwarsa bareng reservasi kita, bukan 2 jam lebih lama.
+        "expiredType": expired_type,
     }
     body_str = json.dumps(body, separators=(",", ":"))
     signature = _signature("POST", setting.va_number, body_str, api_key)
@@ -210,7 +211,7 @@ def _create_session_raw(setting, *, products, qtys, prices, descriptions, refere
 
 
 def create_payment_session(setting, *, transaction, buyer_name, buyer_phone, buyer_email,
-                            return_url, notify_url, cancel_url, expired_hours):
+                            return_url, notify_url, cancel_url, expired_hours, expired_type="hours"):
     """Bikin sesi pembayaran buat satu Transaction sungguhan -- produk/qty/
     harga diambil dari TransactionItem miliknya, referenceId = transaction.id
     (sudah human-readable: TRX-YYYYMMDDHHMMSS-XXXXXX, ini yang dipakai
@@ -233,7 +234,7 @@ def create_payment_session(setting, *, transaction, buyer_name, buyer_phone, buy
         reference_id=transaction.id,
         buyer_name=buyer_name, buyer_phone=buyer_phone, buyer_email=buyer_email,
         return_url=return_url, notify_url=notify_url, cancel_url=cancel_url,
-        expired_hours=expired_hours,
+        expired_hours=expired_hours, expired_type=expired_type,
     )
 
 
@@ -325,6 +326,77 @@ def create_qris_payment(setting, *, transaction, buyer_name, buyer_phone, buyer_
 
 
 # --------------------------------------------------------------------------
+# Cek status pembayaran langsung ke API iPaymu (sumber kebenaran)
+# --------------------------------------------------------------------------
+
+def fetch_paid_entry(setting, reference_id):
+    """Tanya iPaymu langsung: apakah ada pembayaran LUNAS buat referenceId
+    (= Transaction.id kita) ini? Pakai /history yang bisa dicari per
+    referenceId -- satu referenceId bisa punya BEBERAPA transaksi iPaymu
+    (mis. QR pertama kedaluwarsa, lalu pembeli bayar lewat sesi redirect
+    baru), makanya semua entrinya diperiksa, bukan cuma yang pertama.
+
+    Ini SUMBER KEBENARAN status bayar -- request-nya kita yang bikin &
+    tanda tangani pakai API Key kita sendiri ke server iPaymu, jadi gak bisa
+    dipalsukan pihak luar (beda dari isi webhook masuk, yang siapa pun bisa
+    kirim ke URL publik kita). Response-nya sudah dicocokkan ke panggilan
+    production sungguhan (field Status/PaidStatus/ReferenceId/Amount).
+
+    Return (entry|None, None) -- entry = dict data transaksi iPaymu yang
+    lunas -- atau (None, pesan_error) kalau gagal menghubungi iPaymu.
+    Gak pernah raise ke pemanggil."""
+    import requests
+
+    try:
+        api_key = decrypt_secret(setting.api_key_encrypted)
+    except IpaymuCredentialError as exc:
+        return None, str(exc)
+    if not setting.va_number or not api_key:
+        return None, "VA Number / API Key iPaymu belum diisi."
+
+    body_str = json.dumps({"referenceId": str(reference_id)}, separators=(",", ":"))
+    signature = _signature("POST", setting.va_number, body_str, api_key)
+    try:
+        resp = requests.post(
+            f"{_base_url(setting)}/history",
+            data=body_str,
+            headers={
+                "Content-Type": "application/json",
+                "va": setting.va_number,
+                "signature": signature,
+                "timestamp": str(int(time.time())),
+            },
+            timeout=TIMEOUT,
+        )
+    except Exception as exc:
+        return None, f"Tidak bisa menghubungi iPaymu: {exc}"
+
+    if resp.status_code != 200:
+        return None, _pesan_error(resp, "Gagal cek status pembayaran")
+
+    try:
+        data = resp.json().get("Data")
+    except Exception:
+        return None, "Respons iPaymu tidak bisa dibaca (bukan JSON)."
+
+    if isinstance(data, dict):
+        data = data.get("Transaction") or [data]
+    if not isinstance(data, list):
+        return None, None
+
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+        # Disaring ulang per ReferenceId -- jaga-jaga kalau /history suatu
+        # saat balikin riwayat lain di luar referenceId yang diminta.
+        if str(entry.get("ReferenceId") or "") != str(reference_id):
+            continue
+        if str(entry.get("Status")) == "1" and str(entry.get("PaidStatus") or "").lower() == "paid":
+            return entry, None
+    return None, None
+
+
+# --------------------------------------------------------------------------
 # Webhook masuk
 # --------------------------------------------------------------------------
 
@@ -332,9 +404,12 @@ def verify_webhook_signature(setting, headers, raw_body: bytes) -> bool:
     """Prinsip: GAGAL TERTUTUP. Header hilang, format gak dikenal, exception
     apa pun -- balikin False, jangan pernah True secara default.
 
-    Secret buat callback MASUK adalah va_number (BEDA dari signature
-    keluar yang secretnya api_key) -- lihat catatan di kepala file soal
-    resep ini masih perlu dicocokkan ke webhook sandbox sungguhan."""
+    PERHATIAN: resep ini (HMAC-SHA256 body mentah, secret = va_number) cuma
+    tebakan dan TERBUKTI GAK COCOK sama webhook production asli -- semua
+    callback iPaymu ditolak olehnya (lihat log Okt 2026). Makanya hasil
+    fungsi ini sekarang cuma DICATAT di log, BUKAN penentu: ipaymu_webhook
+    selalu konfirmasi status bayar langsung ke API iPaymu (fetch_paid_entry)
+    sebelum ngasih akses apa pun."""
     try:
         secret = (setting.va_number or "").strip()
         if not secret:

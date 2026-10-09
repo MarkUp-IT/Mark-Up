@@ -77,7 +77,7 @@ export default function ModuleOrders() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
         <StatCard label="Total Modul" value={modules.length} unit="modul" loading={loading} />
         <StatCard label="Aktif" value={activeCount} unit="modul" variant="success" loading={loading} />
         <StatCard label="Nonaktif" value={inactiveCount} unit="modul" variant="warning" loading={loading} />

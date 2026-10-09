@@ -142,8 +142,8 @@ export default function PromoPopupPanel() {
         </select>
       </div>
 
-      <div className="flex gap-2">
-        <div className="flex-1 flex flex-col gap-1">
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
           <FieldLabel>Mulai Tayang</FieldLabel>
           <input
             type="datetime-local"
@@ -154,7 +154,7 @@ export default function PromoPopupPanel() {
           />
           <span className="text-[#94A3B8] text-[10.5px]">Kosong = langsung tayang.</span>
         </div>
-        <div className="flex-1 flex flex-col gap-1">
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
           <FieldLabel>Selesai Tayang</FieldLabel>
           <input
             type="datetime-local"

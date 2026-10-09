@@ -1246,10 +1246,17 @@ class MentoringSession(models.Model):
         related_name="mentoring_sessions",
     )
     order = models.PositiveIntegerField(default=1)
+    # Nullable: biasanya keisi dari slot yang dipilih pas checkout, tapi
+    # boleh kosong kalau pembeli belum milih mentor -- mis. pembayaran yang
+    # dipulihkan setelah kedaluwarsa (slot & mentor pilihannya sudah dilepas).
+    # Pembeli lalu milih mentor + jadwal sendiri dari dashboard; mentor dari
+    # slot pertama yang dipilih otomatis dipasang ke semua sesi paket itu.
     mentor = models.ForeignKey(
         MentorProfile,
         on_delete=models.CASCADE,
         related_name="product_mentoring_sessions",
+        blank=True,
+        null=True,
     )
     start_time = models.DateTimeField(blank=True, null=True)
     availability_slot = models.ForeignKey(
@@ -1360,12 +1367,28 @@ class RefundRequest(models.Model):
         related_name="refund_requests",
     )
     reason = models.TextField()
+    # Rekening tujuan pengembalian dana, diisi pembeli saat mengajukan.
+    # Kosong di pengajuan lama (sebelum Okt 2026) -- admin hubungi manual.
+    bank_name = models.CharField(max_length=100, blank=True, default="")
+    bank_account = models.CharField(max_length=50, blank=True, default="")
+    bank_account_holder = models.CharField(max_length=150, blank=True, default="")
+    # Bukti transfer pengembalian dana, diunggah admin setelah menyetujui &
+    # mentransfer. Bisa dilihat pembeli di halaman Transaksi.
+    transfer_proof = models.FileField(upload_to="refund_proofs/%Y/%m/", blank=True, null=True)
+    transferred_at = models.DateTimeField(blank=True, null=True)
     status = models.CharField(
         max_length=20,
         choices=RefundStatus.choices,
         default=RefundStatus.PENDING,
     )
+    # Potongan biaya admin dari total bayar. Default 10% sesuai Refund Policy,
+    # tapi bisa diubah admin per pengajuan saat menyetujui (mis. 0% kalau
+    # kendalanya dari sisi kita).
     admin_fee_percent = models.PositiveIntegerField(default=10)
+    # Nominal FINAL yang harus ditransfer admin ke pembeli -- dihitung &
+    # dicatat permanen saat disetujui (total bayar x (100 - persen) / 100).
+    # Null selama belum disetujui.
+    refund_amount = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     admin_notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(blank=True, null=True)

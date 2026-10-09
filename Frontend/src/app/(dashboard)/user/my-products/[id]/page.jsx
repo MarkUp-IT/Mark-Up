@@ -98,6 +98,9 @@ function mapProductDetail(raw) {
     resources: raw.resources,
     chapters: raw.chapters,
     team: raw.team,
+    // Kelayakan refund dihitung server (aturan Refund Policy) --
+    // {eligible, reason, deadline, last_request}.
+    refund: raw.refund || null,
   };
 }
 
@@ -135,6 +138,11 @@ export default function ProductDetail() {
   const [refundMenuOpen, setRefundMenuOpen] = useState(false);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
   const [refundReason, setRefundReason] = useState("");
+  const [refundRekening, setRefundRekening] = useState({
+    bank_name: "",
+    bank_account: "",
+    bank_account_holder: "",
+  });
   const [refundSubmitting, setRefundSubmitting] = useState(false);
   const [refundSuccess, setRefundSuccess] = useState(false);
 
@@ -146,6 +154,12 @@ export default function ProductDetail() {
   const [availableSlots, setAvailableSlots] = useState([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsError, setSlotsError] = useState("");
+  // Sesi mentoring yang belum punya mentor (mis. pembayaran yang dipulihkan
+  // setelah kedaluwarsa) -- pembeli milih mentornya dulu di modal yang sama,
+  // baru slot mentor itu dimuat.
+  const [mentorOptions, setMentorOptions] = useState([]);
+  const [mentorsLoading, setMentorsLoading] = useState(false);
+  const [selectedMentor, setSelectedMentor] = useState(null);
   const [openSessionMenuKey, setOpenSessionMenuKey] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -236,17 +250,13 @@ export default function ProductDetail() {
         ? "Mentoring"
         : "Modul";
 
-  // Eligibility refund LEVEL PRODUK: dihitung dari sesi terjadwal PALING
-  // DEKAT. Kalau belum ada sesi yang dijadwalin sama sekali, refund selalu
-  // boleh (belum ada yang "mepet waktu"). Modul nggak pernah nampilin ini
-  // sama sekali (instant delivery, nggak bisa di-refund per kebijakan).
-  const nextScheduled = hasSessions
-    ? product.sessions
-        .filter((s) => s.status === "scheduled" && s.startTime)
-        .sort((a, b) => new Date(a.startTime) - new Date(b.startTime))[0]
-    : null;
-  const refundEligible =
-    !nextScheduled || hoursUntil(nextScheduled.startTime) > CUTOFF_HOURS;
+  // Eligibility refund LEVEL PRODUK dihitung server (products.views.
+  // _kelayakan_refund): 48 jam setelah lunas, mentoring maks 24 jam sebelum
+  // sesi, bootcamp final begitu sesi ke-2 dimulai. Modul nggak pernah
+  // nampilin ini sama sekali (instant delivery).
+  const refundInfo = product.refund;
+  const refundEligible = !!refundInfo?.eligible;
+  const refundTerakhir = refundInfo?.last_request;
 
   const openScheduleModal = (session, sessionKey, isInitial) => {
     setOpenSessionMenuKey(null);
@@ -255,10 +265,34 @@ export default function ProductDetail() {
     setScheduleSuccess(false);
     setAvailableSlots([]);
     setSlotsError("");
+    setSelectedMentor(null);
+    setMentorOptions([]);
 
     if (session.mentorId) {
+      loadSlots(session.mentorId, session);
+    } else {
+      // Belum ada mentor -- tampilin mentor yang boleh dipilih buat produk
+      // ini (aturan keahlian yang sama persis dengan halaman checkout).
+      setMentorsLoading(true);
+      apiRequest(`/api/mentors/?product_id=${params.id}`, { auth: false })
+        .then((res) => setMentorOptions(res?.mentors || []))
+        .catch((err) => setSlotsError(err?.message || "Gagal memuat daftar mentor."))
+        .finally(() => setMentorsLoading(false));
+    }
+  };
+
+  const chooseMentor = (mentor) => {
+    setSelectedMentor(mentor);
+    setSelectedSlotId("");
+    setSlotsError("");
+    loadSlots(mentor.id, scheduleModal?.session);
+  };
+
+  const loadSlots = (mentorId, session) => {
+    setAvailableSlots([]);
+    if (mentorId) {
       setSlotsLoading(true);
-      apiRequest(`/api/mentors/${session.mentorId}/availability/`, { auth: false })
+      apiRequest(`/api/mentors/${mentorId}/availability/`, { auth: false })
         .then((res) => {
           const all = res?.availability || [];
           // Batas urutan waktu: sesi ini harus SETELAH sesi sebelumnya yang
@@ -339,11 +373,19 @@ export default function ProductDetail() {
           method: "POST",
           body: {
             reason: refundReason,
+            ...refundRekening,
           },
         }
       );
 
       setRefundSuccess(true);
+      fetchDetail(false);
+    } catch (err) {
+      // Dulu gak ada catch -- kalau server menolak (mis. lewat batas waktu),
+      // pembeli gak dikasih tahu apa-apa.
+      toast.error("Pengajuan Refund Gagal", {
+        description: extractErrorMessage(err, "Terjadi kesalahan, coba lagi."),
+      });
     } finally {
       setRefundSubmitting(false);
     }
@@ -373,7 +415,7 @@ export default function ProductDetail() {
           onClick={() => openScheduleModal(session, sessionKey, true)}
           className="px-4 py-2 rounded-[8px] bg-[#148F89] text-white text-[12px] font-semibold hover:bg-[#117A75] transition-colors whitespace-nowrap"
         >
-          Pilih Jadwal
+          {session.mentorId ? "Pilih Jadwal" : "Pilih Mentor & Jadwal"}
         </button>
       );
     }
@@ -534,6 +576,28 @@ export default function ProductDetail() {
         </p>
       </div>
 
+      {refundTerakhir && (
+        <div
+          className={`rounded-[12px] border px-5 py-4 text-[13px] leading-relaxed ${
+            refundTerakhir.status === "approved"
+              ? "bg-[#10B981]/10 border-[#10B981]/30 text-[#6EE7B7]"
+              : refundTerakhir.status === "rejected"
+                ? "bg-red-500/10 border-red-500/30 text-red-300"
+                : "bg-[#F59E0B]/10 border-[#F59E0B]/30 text-[#FCD34D]"
+          }`}
+        >
+          {refundTerakhir.status === "approved"
+            ? `Refund disetujui${
+                refundTerakhir.refund_amount != null
+                  ? `: Rp${Math.round(refundTerakhir.refund_amount).toLocaleString("id-ID")} akan ditransfer ke rekeningmu`
+                  : ""
+              }.`
+            : refundTerakhir.status === "rejected"
+              ? "Pengajuan refund kamu ditolak admin. Cek notifikasi untuk detailnya."
+              : `Pengajuan refund kamu (${formatDateTime(refundTerakhir.created_at)}) sedang ditinjau admin.`}
+        </div>
+      )}
+
       {hasSessions ? (
         <>
           {/* Progress */}
@@ -623,7 +687,9 @@ export default function ProductDetail() {
                         </h4>
                         <p className="text-[#9CA3AF] text-[12px] flex items-center gap-1.5">
                           <Users size={12} />
-                          {session.mentor}
+                          {session.mentor || (
+                            <span className="italic">Mentor belum dipilih</span>
+                          )}
                         </p>
                         {session.startTime && (
                           <p className="text-[#9CA3AF] text-[12px] flex items-center gap-1.5">
@@ -845,7 +911,11 @@ export default function ProductDetail() {
               <form onSubmit={handleSubmitSchedule} className="flex flex-col overflow-hidden">
                 <div className="shrink-0 bg-[#170F26] px-6 py-5 border-b border-[#2D2342] flex items-center justify-between">
                   <h3 className="text-white font-bold text-[16px]">
-                    {scheduleModal.isInitial ? "Pilih Jadwal" : "Ganti Jadwal"}
+                    {!scheduleModal.session?.mentorId
+                      ? "Pilih Mentor & Jadwal"
+                      : scheduleModal.isInitial
+                        ? "Pilih Jadwal"
+                        : "Ganti Jadwal"}
                   </h3>
                   <button
                     type="button"
@@ -857,14 +927,75 @@ export default function ProductDetail() {
                   </button>
                 </div>
 
-                <div className="shrink-0 px-6 pt-5 pb-3">
-                  <label className="text-[#E2E8F0] text-[13px] font-medium">
-                    Slot tersedia dari {scheduleModal.session?.mentor}
-                  </label>
-                </div>
+                {!scheduleModal.session?.mentorId && (
+                  // Langkah 1 (cuma buat sesi yang belum punya mentor): pilih
+                  // mentor dulu. Mentor yang dipilih otomatis dipakai juga
+                  // buat sesi-sesi lain di paket ini (diatur backend).
+                  <div className="shrink-0 px-6 pt-5 pb-1 flex flex-col gap-2">
+                    <label className="text-[#E2E8F0] text-[13px] font-medium">
+                      1. Pilih mentor kamu
+                    </label>
+                    <p className="text-[#9CA3AF] text-[11.5px] leading-relaxed">
+                      Mentor yang kamu pilih akan menemani semua sesi di paket ini.
+                    </p>
+                    {mentorsLoading ? (
+                      <p className="text-[#9CA3AF] text-[12px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
+                        Memuat daftar mentor...
+                      </p>
+                    ) : mentorOptions.length === 0 ? (
+                      <p className="text-[#9CA3AF] text-[12px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
+                        Belum ada mentor yang tersedia untuk produk ini. Hubungi tim kami ya.
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-2 max-h-[22vh] overflow-y-auto">
+                        {mentorOptions.map((mentor) => (
+                          <button
+                            key={mentor.id}
+                            type="button"
+                            onClick={() => chooseMentor(mentor)}
+                            className={`flex items-center justify-between gap-3 px-4 py-2.5 rounded-[8px] border text-left transition-colors ${
+                              selectedMentor?.id === mentor.id
+                                ? "border-[#148F89] bg-[#148F89]/10"
+                                : "border-[#2D2342] hover:border-[#148F89]/50"
+                            }`}
+                          >
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-white text-[13px] font-semibold truncate">
+                                {mentor.name}
+                              </span>
+                              {mentor.headline && (
+                                <span className="text-[#9CA3AF] text-[11.5px] truncate">
+                                  {mentor.headline}
+                                </span>
+                              )}
+                            </div>
+                            {selectedMentor?.id === mentor.id && (
+                              <Check size={16} className="text-[#148F89] shrink-0" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {(scheduleModal.session?.mentorId || selectedMentor) && (
+                  <div className="shrink-0 px-6 pt-5 pb-3">
+                    <label className="text-[#E2E8F0] text-[13px] font-medium">
+                      {!scheduleModal.session?.mentorId && "2. "}Slot tersedia dari{" "}
+                      {scheduleModal.session?.mentor || selectedMentor?.name}
+                    </label>
+                  </div>
+                )}
 
                 <div className="overflow-y-auto max-h-[40vh] px-6 pb-2">
-                  {slotsLoading ? (
+                  {!scheduleModal.session?.mentorId && !selectedMentor ? (
+                    slotsError ? (
+                      <p className="text-[#F87171] text-[12px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
+                        {slotsError}
+                      </p>
+                    ) : null
+                  ) : slotsLoading ? (
                     <p className="text-[#9CA3AF] text-[12px] bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3">
                       Memuat jadwal mentor...
                     </p>
@@ -979,8 +1110,7 @@ export default function ProductDetail() {
                   <div className="p-6 flex flex-col gap-4">
                     <p className="flex items-start gap-2 text-[#F59E0B] text-[12px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3 leading-relaxed">
                       <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                      Refund ditutup karena sesi berikutnya kurang dari 3 jam lagi.
-                      Coba ajukan lagi setelah sesi itu lewat.
+                      {refundInfo?.reason || "Refund tidak tersedia untuk produk ini."}
                     </p>
                   </div>
                 ) : (
@@ -998,6 +1128,12 @@ export default function ProductDetail() {
                         Refund Policy
                       </Link>{" "}
                       kami.
+                      {refundInfo?.deadline && (
+                        <>
+                          {" "}Bisa diajukan sampai{" "}
+                          <span className="text-white font-semibold">{formatDateTime(refundInfo.deadline)}</span>.
+                        </>
+                      )}
                     </p>
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[#E2E8F0] text-[13px] font-medium">
@@ -1011,6 +1147,27 @@ export default function ProductDetail() {
                         placeholder="Ceritakan alasanmu mengajukan refund..."
                         className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[13px] text-white placeholder:text-[#6B7280] outline-none focus:border-[#148F89]/60 transition-colors resize-none"
                       />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[#E2E8F0] text-[13px] font-medium">
+                        Rekening Tujuan Pengembalian Dana
+                      </label>
+                      {[
+                        { key: "bank_name", placeholder: "Nama bank / e-wallet (mis. BCA, DANA)" },
+                        { key: "bank_account", placeholder: "Nomor rekening / nomor e-wallet", inputMode: "numeric" },
+                        { key: "bank_account_holder", placeholder: "Nama pemilik rekening" },
+                      ].map((f) => (
+                        <input
+                          key={f.key}
+                          type="text"
+                          required
+                          inputMode={f.inputMode}
+                          value={refundRekening[f.key]}
+                          onChange={(e) => setRefundRekening((r) => ({ ...r, [f.key]: e.target.value }))}
+                          placeholder={f.placeholder}
+                          className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-2.5 text-[13px] text-white placeholder:text-[#6B7280] outline-none focus:border-[#148F89]/60 transition-colors"
+                        />
+                      ))}
                     </div>
                     <button
                       type="submit"

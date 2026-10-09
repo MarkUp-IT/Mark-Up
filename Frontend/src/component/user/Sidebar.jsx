@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutGrid, ShieldCheck, Briefcase, Settings, X } from "lucide-react";
-import { api } from "@/lib/api";
 import NotifBadge from "@/component/NotifBadge";
+import { useSidebarBadges } from "@/lib/sidebarBadges";
 
 // badgeKey nyambung ke response /api/accounts/me/sidebar-badges/ -- Sertifikat
 // gak punya konsep "butuh tindakan" yang jelas, jadi gak dikasih badge.
@@ -18,14 +17,7 @@ const menuList = [
 
 export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const pathname = usePathname() || "/user/my-products";
-  const [badges, setBadges] = useState({});
-
-  useEffect(() => {
-    api
-      .get("/api/accounts/me/sidebar-badges/")
-      .then((data) => data && setBadges(data))
-      .catch(() => {});
-  }, []);
+  const badges = useSidebarBadges("/api/accounts/me/sidebar-badges/", pathname);
 
   return (
     <div

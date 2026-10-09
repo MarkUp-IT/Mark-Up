@@ -16,6 +16,7 @@ from .models import (
 )
 from .forms import MentorAvailabilityForm, MentorProfileForm, MentorExperienceForm
 from .utils import get_request_data
+from accounts.utils import tanggal_indo
 
 
 def _serialize_mentor_slot(availability):
@@ -137,15 +138,27 @@ def get_mentors(request):
                     mentor_expertises__expertise_id__in=expertise_ids
                 ).distinct()
 
-    # Mentor yang profilnya belum lengkap (lihat MentorProfile.is_profile_complete)
-    # nggak ditampilin publik -- masih nyembunyiin diri sampai data wajibnya keisi.
+    # Mentor yang profilnya belum lengkap ATAU dinonaktifkan admin sebagai
+    # mentor (lihat MentorProfile.mentor_status) nggak ditampilin publik.
     # Admin (lihat requester_is_admin di atas) tetap lihat semua mentor.
     data = [
         _serialize_mentor(mentor, request)
         for mentor in mentors
-        if requester_is_admin or mentor.is_profile_complete()
+        if requester_is_admin or mentor.bisa_dipesan()
     ]
     return JsonResponse({"mentors": data}, status=200)
+
+
+def _slot_bentrok(mentor_profile, mulai, selesai, abaikan_id=None):
+    """Slot milik mentor ini yang waktunya beririsan dengan [mulai, selesai),
+    atau None. Bersentuhan pas di batas (11:00 selesai, 11:00 mulai) bukan
+    bentrok."""
+    qs = MentorAvailability.objects.filter(
+        mentor_profile=mentor_profile, start_time__lt=selesai, end_time__gt=mulai,
+    )
+    if abaikan_id is not None:
+        qs = qs.exclude(id=abaikan_id)
+    return qs.first()
 
 
 @csrf_exempt
@@ -186,6 +199,17 @@ def add_availability(request):
     if existing:
         availability = existing
     else:
+        # Tolak slot yang BERTABRAKAN dengan slot lain (bukan cuma yang jam
+        # mulainya persis sama) -- dulu 10:00-11:00 & 10:30-11:30 dua-duanya
+        # bisa dibuat, jadi mentor bisa dibooking dua orang di jam yang sama.
+        bentrok = _slot_bentrok(mentor_profile, availability.start_time, availability.end_time)
+        if bentrok is not None:
+            mulai = tanggal_indo(bentrok.start_time)
+            selesai = timezone.localtime(bentrok.end_time).strftime("%H:%M")
+            return JsonResponse(
+                {"errors": {"non_field_errors": [f"Bertabrakan dengan jadwal kamu yang lain ({mulai}-{selesai} WIB)."]}},
+                status=400,
+            )
         availability.save()
 
     return JsonResponse(
@@ -646,29 +670,31 @@ def get_my_reviews(request):
 @role_required(UserRole.MENTOR)
 def get_mentor_sidebar_badges(request):
     """Angka notifikasi buat sidebar dashboard mentor -- Active Classes
-    (sesi sendiri yang belum dijadwalkan/link belum dibagikan) & Settings
+    (sesi terjadwal yang link meeting-nya belum ada) & Settings
     (profil belum lengkap, lihat MentorProfile.is_profile_complete)."""
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])
 
-    from django.db.models import Q
     from products.models import MentoringSession, BootcampSession
 
     mentor_profile, error = _get_mentor_profile_or_404(request)
     if error:
         return error
 
+    # Cuma yang BISA dikerjakan mentor: sesi terjadwal (belum lewat) yang
+    # belum punya link meeting. Sesi "menunggu pembeli pilih jadwal" dulu
+    # ikut dihitung -- padahal mentor gak bisa berbuat apa-apa, jadi
+    # badge-nya nyangkut terus walau halamannya sudah dibuka.
+    sekarang = timezone.now()
     active_classes_pending = (
         MentoringSession.objects.filter(
-            mentor=mentor_profile, user_library__is_revoked=False
-        )
-        .filter(Q(status="waiting_schedule") | Q(status="scheduled", zoom_link=""))
-        .count()
+            mentor=mentor_profile, user_library__is_revoked=False,
+            status="scheduled", zoom_link="", start_time__gte=sekarang,
+        ).count()
         + BootcampSession.objects.filter(
-            mentors=mentor_profile, user_library__is_revoked=False
-        )
-        .filter(Q(status="waiting_schedule") | Q(status="scheduled", meeting_link=""))
-        .count()
+            mentors=mentor_profile, user_library__is_revoked=False,
+            status="scheduled", meeting_link="", start_time__gte=sekarang,
+        ).count()
     )
 
     data = {
@@ -734,13 +760,17 @@ def add_availability_bulk(request):
     # Ambil dulu slot yang udah ada di rentang ini biar gak query berkali-kali.
     range_start_dt = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
     range_end_dt = timezone.make_aware(datetime.combine(end_date + timedelta(days=1), datetime.min.time()))
-    existing = set(
+    # Rentang waktu slot yang SUDAH ada (diperlebar sejam di kedua sisi biar
+    # slot yang beririsan di tepi rentang ikut kebaca) -- dipakai buat nolak
+    # slot baru yang bertabrakan, bukan cuma yang jam mulainya persis sama.
+    terpakai = list(
         MentorAvailability.objects.filter(
             mentor_profile=mentor_profile,
-            start_time__gte=range_start_dt,
-            start_time__lt=range_end_dt,
-        ).values_list("start_time", flat=True)
+            start_time__lt=range_end_dt + timedelta(hours=1),
+            end_time__gt=range_start_dt - timedelta(hours=1),
+        ).values_list("start_time", "end_time")
     )
+    sekarang = timezone.now()
 
     to_create = []
     day = start_date
@@ -752,9 +782,13 @@ def add_availability_bulk(request):
             except (ValueError, TypeError):
                 continue
             start_dt = timezone.make_aware(datetime.combine(day, slot_time))
-            if start_dt in existing:
-                continue
             end_dt = start_dt + timedelta(hours=1)
+            # Lewati jam yang sudah lewat & yang bertabrakan dengan slot lain
+            # (termasuk slot lain di permintaan yang sama, mis. 10:00 & 10:30).
+            if start_dt <= sekarang:
+                continue
+            if any(s < end_dt and e > start_dt for s, e in terpakai):
+                continue
             to_create.append(
                 MentorAvailability(
                     mentor_profile=mentor_profile,
@@ -762,7 +796,7 @@ def add_availability_bulk(request):
                     end_time=end_dt,
                 )
             )
-            existing.add(start_dt)
+            terpakai.append((start_dt, end_dt))
         day += timedelta(days=1)
 
     if to_create:

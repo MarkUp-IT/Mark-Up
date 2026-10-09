@@ -127,6 +127,9 @@ class MentorAvailabilityForm(forms.ModelForm):
                 "Waktu selesai harus lebih besar dari waktu mulai."
             )
 
+        if start_datetime <= timezone.now():
+            raise forms.ValidationError("Jadwal harus di waktu yang akan datang.")
+
         cleaned_data["start_datetime"] = start_datetime
         cleaned_data["end_datetime"] = end_datetime
         return cleaned_data

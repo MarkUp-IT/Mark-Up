@@ -353,7 +353,7 @@ export default function ReferralCodes() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
         <StatCard label="Total Kode" value={codes.length} unit="kode" loading={loading} />
         <StatCard label="Kode Aktif" value={activeCount} unit="kode" variant="success" loading={loading} />
         <StatCard label="Total Terpakai" value={totalUsed} unit="kali" variant="primary" loading={loading} />

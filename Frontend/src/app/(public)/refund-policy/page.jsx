@@ -50,18 +50,18 @@ const pengecualian = [
 const prosedur = [
   {
     step: "1",
-    title: "Hubungi Support",
-    desc: 'Kirim email ke markup.ofc@gmail.com dengan subjek "Refund Request - [No. Transaksi]".',
+    title: "Buka Produkmu",
+    desc: 'Masuk ke akunmu, buka halaman My Products, lalu pilih produk yang ingin direfund. Klik ikon titik tiga di kartu produk dan pilih "Ajukan Refund". Batas waktu pengajuan tertera di sana.',
   },
   {
     step: "2",
-    title: "Lampirkan Bukti",
-    desc: "Sertakan bukti pembayaran (bisa diunduh dari halaman Transaksi) dan alasan pengajuan refund secara jelas.",
+    title: "Isi Alasan & Rekening",
+    desc: "Tuliskan alasan pengajuan refund dan rekening tujuan pengembalian dana (nama bank, nomor rekening, dan nama pemilik rekening).",
   },
   {
     step: "3",
     title: "Verifikasi Internal",
-    desc: "Tim kami akan meninjau status transaksi dan riwayat aktivitasmu untuk memastikan pengajuan memenuhi syarat.",
+    desc: "Tim kami meninjau pengajuanmu. Status dan nominal refund bisa kamu pantau di halaman produk tersebut, dan kamu akan menerima notifikasi begitu pengajuan diputuskan.",
   },
 ];
 

@@ -169,20 +169,20 @@ export default function MentoringOrderDetail() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-wrap max-w-full">
                 <span className={`inline-flex px-3 py-1.5 text-[10px] rounded-full font-bold whitespace-nowrap ${STATUS_META[session.status].className}`}>
                   {STATUS_META[session.status].label}
                 </span>
 
                 {session.status === "scheduled" && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 max-w-full">
                     <input
                       type="text"
                       placeholder="Masukkan link zoom..."
                       value={links[session.id] || ""}
                       onChange={(e) => setLinks((prev) => ({ ...prev, [session.id]: e.target.value }))}
                       style={{ width: "200px", height: "38px" }}
-                      className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-3 text-[12px] text-[#334155] outline-none focus:border-[#148F89] transition-colors"
+                      className="min-w-0 shrink bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-3 text-[12px] text-[#334155] outline-none focus:border-[#148F89] transition-colors"
                     />
                     <button
                       onClick={() => saveLink(session.id)}

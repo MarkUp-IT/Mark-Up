@@ -80,6 +80,21 @@ def get_client_ip(request):
     return request.META.get("REMOTE_ADDR")
 
 
+def adalah_uuid(nilai):
+    """True kalau `nilai` UUID yang sah. Dipakai sebelum mencari data pakai
+    ID yang dikirim di ISI request (bukan dari URL -- yang itu sudah dijamin
+    router `<uuid:...>`). Tanpa ini, ID ngawur bikin query Django melempar
+    ValidationError dan server balas 500 (ketahuan lewat
+    mark_up/test_asap_tulis.py, Okt 2026)."""
+    import uuid
+
+    try:
+        uuid.UUID(str(nilai))
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
 def is_rate_limited(key, limit, window_seconds):
     """Fixed-window rate limiter pakai Django cache framework. Return True
     kalau `key` ini sudah lewat `limit` hit dalam `window_seconds` terakhir
@@ -225,3 +240,18 @@ def notify_team(subject, message):
             pass
 
     threading.Thread(target=_send, daemon=True).start()
+
+
+BULAN_INDONESIA = ("Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus",
+                   "September", "Oktober", "November", "Desember")
+
+
+def tanggal_indo(dt, jam=True):
+    """'12 Oktober 2026, 10:00' (zona waktu lokal, WIB). Pengganti
+    strftime('%d %B %Y') yang di server ini menghasilkan nama bulan bahasa
+    Inggris ('12 October 2026') di notifikasi & pesan ke pengguna."""
+    from django.utils import timezone
+
+    lokal = timezone.localtime(dt)
+    teks = f"{lokal.day} {BULAN_INDONESIA[lokal.month - 1]} {lokal.year}"
+    return f"{teks}, {lokal:%H:%M}" if jam else teks

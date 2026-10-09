@@ -67,6 +67,12 @@ class MentorProfile(models.Model):
                    "Kosong = pakai persentase global dari CommissionSetting.",
     )
 
+    # Saklar admin "aktif sebagai mentor" -- TERPISAH dari status akun
+    # (User.status). Dimatikan: mentor tetap bisa login & menuntaskan sesi
+    # yang sudah ada, tapi hilang dari halaman /mentors & gak bisa dipesan
+    # lagi. Status efektifnya lihat mentor_status() di bawah.
+    is_mentor_active = models.BooleanField(default=True)
+
     created_at = models.DateTimeField(
         auto_now_add=True
     )
@@ -100,6 +106,22 @@ class MentorProfile(models.Model):
 
     def is_profile_complete(self):
         return not self.missing_profile_fields()
+
+    def mentor_status(self):
+        """Status efektif sebagai mentor (bukan status akun):
+        DISABLED   -- dinonaktifkan admin lewat Manajemen User;
+        INCOMPLETE -- data wajib belum lengkap (otomatis aktif begitu lengkap);
+        ACTIVE     -- tampil di /mentors & mentoringnya bisa dibeli."""
+        if not self.is_mentor_active:
+            return "DISABLED"
+        if not self.is_profile_complete():
+            return "INCOMPLETE"
+        return "ACTIVE"
+
+    def bisa_dipesan(self):
+        """Mentor ini boleh dipilih pembeli baru (checkout / pilih mentor).
+        Status AKUN (User.status) & peran dicek terpisah oleh pemanggilnya."""
+        return self.mentor_status() == "ACTIVE"
 
 
 class MentorExperience(models.Model):

@@ -186,6 +186,9 @@ function BootcampRegisterPageInner() {
   }, [packages, selectedPackageId]);
 
   const registeredPackageIds = new Set(myRegs.map((r) => r.package.id));
+  // Satu orang cuma boleh satu paket per bootcamp (pendaftaran yang ditolak
+  // gak dihitung) -- sama dengan aturan backend register_bootcamp.
+  const regAktif = myRegs.find((r) => r.status !== "rejected");
   const singlePackageMode = packages.length === 1;
 
   const handleSubmit = async () => {
@@ -503,8 +506,9 @@ function BootcampRegisterPageInner() {
             {(() => {
               const renderPackageCard = (pkg, { interactive }) => {
                 const alreadyReg = registeredPackageIds.has(pkg.id);
+                const terkunciPaketLain = !alreadyReg && !!regAktif;
                 const locked = pkg.registration_status !== "open";
-                const disabled = alreadyReg || locked;
+                const disabled = alreadyReg || terkunciPaketLain || locked;
                 const selected = selectedPackageId === pkg.id;
                 const Wrapper = interactive ? "button" : "div";
                 return (
@@ -571,12 +575,17 @@ function BootcampRegisterPageInner() {
                     {alreadyReg && (
                       <span className="text-[11px] text-[#9CA3AF] italic mt-1">Kamu sudah mendaftar paket ini.</span>
                     )}
-                    {!alreadyReg && pkg.registration_status === "not_open_yet" && (
+                    {terkunciPaketLain && (
+                      <span className="text-[11px] text-[#9CA3AF] italic mt-1">
+                        Kamu sudah terdaftar di paket {regAktif.package.name}. Satu orang hanya bisa mendaftar satu paket.
+                      </span>
+                    )}
+                    {!alreadyReg && !terkunciPaketLain && pkg.registration_status === "not_open_yet" && (
                       <span className="text-[11px] text-[#F59E0B] italic mt-1">
                         Pendaftaran dibuka mulai {formatFullDate(pkg.registration_opens_at)}.
                       </span>
                     )}
-                    {!alreadyReg && pkg.registration_status === "closed" && (
+                    {!alreadyReg && !terkunciPaketLain && pkg.registration_status === "closed" && (
                       <span className="text-[11px] text-[#EF4444] italic mt-1">Pendaftaran paket ini sudah ditutup.</span>
                     )}
                   </Wrapper>

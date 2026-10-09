@@ -219,7 +219,6 @@ export default function BootcampOrderDetail() {
   const [participantSearch, setParticipantSearch] = useState("");
   const [participantTypeFilter, setParticipantTypeFilter] = useState("Semua");
   const [participantStatusFilter, setParticipantStatusFilter] = useState("Semua");
-  const [participantSourceFilter, setParticipantSourceFilter] = useState("Semua");
   const [selectedParticipant, setSelectedParticipant] = useState(null);
   const [participantDetail, setParticipantDetail] = useState(null);
   const [participantLoading, setParticipantLoading] = useState(false);
@@ -233,6 +232,7 @@ export default function BootcampOrderDetail() {
       const nextDrafts = {};
       (res?.sessions || []).forEach((s) => {
         nextDrafts[s.id] = {
+          title: s.title || "",
           mentor_ids: s.mentor_ids || [],
           meeting_link: s.meeting_link || "",
         };
@@ -319,23 +319,33 @@ export default function BootcampOrderDetail() {
   };
 
   const saveAllSessions = async () => {
+    const kosong = sessions.find((s) => !(drafts[s.id]?.title || "").trim());
+    if (kosong) {
+      toast.error("Judul Sesi Gak Boleh Kosong", {
+        description: `Isi dulu judul buat "${kosong.title}" sebelum nyimpan.`,
+      });
+      return;
+    }
+
     setSaving(true);
     try {
-      // Simpan semua sesi sekaligus (mentor + link) -- gantiin tombol panah
-      // per-baris. Dikirim berurutan biar gak nembak rate-limit rame-rame.
+      // Simpan semua sesi sekaligus (judul + mentor + link) -- gantiin
+      // tombol panah per-baris. Dikirim berurutan biar gak nembak
+      // rate-limit rame-rame.
       for (const s of sessions) {
         const draft = drafts[s.id];
         if (!draft) continue;
         await apiRequest(`/api/programs/bootcamp-sessions/${s.id}/`, {
           method: "PATCH",
           body: {
+            title: draft.title.trim(),
             mentor_ids: draft.mentor_ids || [],
             meeting_link: draft.meeting_link,
           },
         });
       }
       await fetchDetail();
-      toast.success("Tersimpan", { description: "Semua sesi (mentor & link) berhasil disimpan." });
+      toast.success("Tersimpan", { description: "Semua sesi (judul, mentor & link) berhasil disimpan." });
     } catch (err) {
       toast.error("Gagal Menyimpan", {
         description: extractErrorMessage(err, "Terjadi kesalahan."),
@@ -426,17 +436,13 @@ export default function BootcampOrderDetail() {
     if (participantStatusFilter === "Belum Dijadwalkan" && p.unscheduled_sessions === 0) return false;
     if (participantStatusFilter === "Link Tertunda" && p.pending_links === 0) return false;
     if (participantStatusFilter === "Semua Terjadwal" && (p.unscheduled_sessions > 0 || p.pending_links > 0)) return false;
-    if (participantStatusFilter === "Semua Sesi Selesai" && p.completed_sessions !== p.total_sessions) return false;
-    if (participantSourceFilter === "Impor Manual WA" && !p.is_manual_import) return false;
-    if (participantSourceFilter === "Reguler" && p.is_manual_import) return false;
     return true;
   });
   const groupedParticipants = groupByTeam(filteredParticipants);
   const isParticipantFilterActive =
     participantSearch.trim() !== "" ||
     participantTypeFilter !== "Semua" ||
-    participantStatusFilter !== "Semua" ||
-    participantSourceFilter !== "Semua";
+    participantStatusFilter !== "Semua";
 
   return (
     <>
@@ -501,7 +507,16 @@ export default function BootcampOrderDetail() {
                   const flags = needsAction(item);
                   return (
                     <tr key={item.id} className="hover:bg-[#F8FAFC] transition-colors">
-                      <td className="px-4 py-4 text-left text-[#1E293B] font-medium">{item.title}</td>
+                      <td className="px-4 py-4 text-left">
+                        <input
+                          type="text"
+                          placeholder="Judul sesi..."
+                          value={drafts[item.id]?.title ?? ""}
+                          onChange={(e) => updateDraft(item.id, "title", e.target.value)}
+                          style={{ width: "180px", height: "36px" }}
+                          className="bg-[#F8FAFC] rounded-[6px] px-3 text-[13px] font-medium outline-none border border-[#E2E8F0] text-[#1E293B] focus:border-[#148F89] transition-colors"
+                        />
+                      </td>
                       <td className="px-4 py-4">
                         <MentorMultiSelect
                           mentors={mentors}
@@ -774,28 +789,12 @@ export default function BootcampOrderDetail() {
             <div className="flex flex-col gap-1.5">
               <label className="text-[#64748B] text-[11px] uppercase font-bold tracking-wider">Status Sesi</label>
               <div className="bg-[#F1F5F9] px-1 rounded-[8px] flex items-center gap-1 flex-wrap" style={{ minHeight: "38px" }}>
-                {["Semua", "Belum Dijadwalkan", "Link Tertunda", "Semua Terjadwal", "Semua Sesi Selesai"].map((f) => (
+                {["Semua", "Belum Dijadwalkan", "Link Tertunda", "Semua Terjadwal"].map((f) => (
                   <button
                     key={f}
                     onClick={() => setParticipantStatusFilter(f)}
                     className={`px-3 py-1.5 rounded-[6px] font-medium text-[12.5px] whitespace-nowrap transition-colors ${
                       participantStatusFilter === f ? "bg-white text-[#0F172A] shadow-sm" : "text-[#64748B] hover:bg-white/60"
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[#64748B] text-[11px] uppercase font-bold tracking-wider">Sumber Pendaftaran</label>
-              <div className="bg-[#F1F5F9] px-1 rounded-[8px] flex items-center gap-1" style={{ height: "38px" }}>
-                {["Semua", "Reguler", "Impor Manual WA"].map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setParticipantSourceFilter(f)}
-                    className={`px-3 py-1.5 rounded-[6px] font-medium text-[12.5px] whitespace-nowrap transition-colors ${
-                      participantSourceFilter === f ? "bg-white text-[#0F172A] shadow-sm" : "text-[#64748B] hover:bg-white/60"
                     }`}
                   >
                     {f}
@@ -809,7 +808,6 @@ export default function BootcampOrderDetail() {
                   setParticipantSearch("");
                   setParticipantTypeFilter("Semua");
                   setParticipantStatusFilter("Semua");
-                  setParticipantSourceFilter("Semua");
                 }}
                 className="h-[38px] px-3 rounded-[6px] text-[#64748B] text-[12.5px] font-semibold hover:text-[#148F89] hover:bg-[#148F89]/5 transition-colors shrink-0"
               >
@@ -849,9 +847,6 @@ export default function BootcampOrderDetail() {
                   <div className="flex flex-col gap-1">
                     <p className="font-bold text-[15px] text-[#1E293B] flex items-center gap-2 flex-wrap">
                       {pkg.user_name}
-                      <span className="text-[#148F89] text-[12px] font-semibold">
-                        ({pkg.completed_sessions}/{pkg.total_sessions} sesi selesai)
-                      </span>
                       {pkg.team?.role === "leader" && (
                         <span
                           title={`Ketua tim ${pkg.team.target_size} orang -- anggota: ${(pkg.team.members || []).map((m) => m.name).join(", ") || "-"}`}
@@ -866,14 +861,6 @@ export default function BootcampOrderDetail() {
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E0E7FF] text-[#3730A3]"
                         >
                           <Users size={10} /> Anggota Tim
-                        </span>
-                      )}
-                      {pkg.is_manual_import && (
-                        <span
-                          title="Pendaftaran ini diimpor manual dari bukti transfer WA, bukan dari form bootcamp di web."
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF3C7] text-[#92400E]"
-                        >
-                          Impor Manual WA
                         </span>
                       )}
                     </p>

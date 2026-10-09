@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { segarkanBadgeSidebar } from "@/lib/sidebarBadges";
 
 const STATUS_META = {
   new: { label: "BARU", className: "bg-[#DBEAFE] text-[#1D4ED8]" },
@@ -56,6 +57,7 @@ export default function ContactMessages() {
       try {
         await apiRequest(`/api/accounts/contact-messages/${msg.id}/`);
         setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, status: "read" } : m)));
+        segarkanBadgeSidebar();
       } catch (err) {
         console.error(err);
       }
@@ -77,7 +79,7 @@ export default function ContactMessages() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
         <StatCard label="Total Pesan" value={messages.length} unit="pesan" loading={loading} />
         <StatCard label="Belum Dibaca" value={newCount} unit="pesan" variant="warning" loading={loading} />
         <StatCard label="Sudah Dibaca" value={messages.length - newCount} unit="pesan" variant="success" loading={loading} />

@@ -60,6 +60,15 @@ export default function RefundRequests() {
   const [adminNotes, setAdminNotes] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deciding, setDeciding] = useState(false);
+  const [uploadingProof, setUploadingProof] = useState(false);
+  // Potongan biaya admin (%) buat pengajuan yang lagi dibuka. Default dari
+  // data (10% sesuai Refund Policy), bisa diubah admin sebelum menyetujui.
+  const [feePercent, setFeePercent] = useState("10");
+
+  const feeValid = /^\d+$/.test(feePercent) && Number(feePercent) >= 0 && Number(feePercent) <= 100;
+  const paidAmount = selectedRequest?.paid_amount != null ? Number(selectedRequest.paid_amount) : null;
+  const previewRefund =
+    paidAmount != null && feeValid ? Math.round((paidAmount * (100 - Number(feePercent))) / 100) : null;
 
   function showToast(type, title, message) {
     if (type === "error") toast.error(title, { description: message });
@@ -93,16 +102,22 @@ export default function RefundRequests() {
   const openDetail = (req) => {
     setSelectedRequest(req);
     setAdminNotes(req.admin_notes || "");
+    setFeePercent(String(req.admin_fee_percent ?? 10));
     setIsModalOpen(true);
   };
 
   async function handleDecision(decision) {
     if (!selectedRequest) return;
+    if (decision === "approved" && !feeValid) {
+      showToast("error", "Potongan Tidak Valid", "Isi potongan biaya admin dengan angka bulat 0 sampai 100.");
+      return;
+    }
     setDeciding(true);
     try {
-      await api.patch(`/api/products/refund-requests/${selectedRequest.id}/`, {
+      const hasil = await api.patch(`/api/products/refund-requests/${selectedRequest.id}/`, {
         decision,
         admin_notes: adminNotes,
+        ...(decision === "approved" ? { admin_fee_percent: Number(feePercent) } : {}),
       });
       setIsModalOpen(false);
       await fetchRequests();
@@ -110,7 +125,9 @@ export default function RefundRequests() {
         "success",
         decision === "approved" ? "Refund Disetujui" : "Refund Ditolak",
         decision === "approved"
-          ? "Akses produk user sudah dicabut & transaksi ditandai refund."
+          ? hasil?.refund_amount != null
+            ? `Transfer ${formatIDR(hasil.refund_amount)} ke user secara manual. Akses produknya sudah dicabut.`
+            : "Akses produk user sudah dicabut & transaksi ditandai refund."
           : "Pengajuan refund berhasil ditolak."
       );
     } catch (err) {
@@ -121,6 +138,23 @@ export default function RefundRequests() {
       );
     } finally {
       setDeciding(false);
+    }
+  }
+
+  async function handleUploadProof(file) {
+    if (!selectedRequest || !file) return;
+    setUploadingProof(true);
+    try {
+      const form = new FormData();
+      form.append("transfer_proof", file);
+      const hasil = await api.post(`/api/products/refund-requests/${selectedRequest.id}/proof/`, form);
+      setSelectedRequest(hasil);
+      await fetchRequests();
+      showToast("success", "Bukti Transfer Tersimpan", "User sudah dikabari & bisa melihat buktinya di halaman Transaksi.");
+    } catch (err) {
+      showToast("error", "Gagal Mengunggah Bukti", extractErrorMessage(err, "Terjadi kesalahan."));
+    } finally {
+      setUploadingProof(false);
     }
   }
 
@@ -150,7 +184,7 @@ export default function RefundRequests() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
         <StatCard
           label="Menunggu Review"
           value={pendingCount}
@@ -226,6 +260,9 @@ export default function RefundRequests() {
                       DIAJUKAN
                     </th>
                     <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
+                      NOMINAL REFUND
+                    </th>
+                    <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
                       STATUS
                     </th>
                     <th className="px-6 py-3.5 text-center font-bold text-[#64748B] tracking-wider text-[11px]">
@@ -249,6 +286,18 @@ export default function RefundRequests() {
                       </td>
                       <td className="px-6 py-4 text-center text-[#64748B] font-medium whitespace-nowrap">
                         {formatDateTime(item.created_at)}
+                      </td>
+                      <td className="px-6 py-4 text-center whitespace-nowrap">
+                        {item.refund_amount != null ? (
+                          <>
+                            <p className="text-[#1E293B] font-semibold">{formatIDR(item.refund_amount)}</p>
+                            <p className="text-[#94A3B8] text-[11px] mt-0.5">
+                              {item.status === "pending" ? "perkiraan, " : ""}potongan {item.admin_fee_percent}%
+                            </p>
+                          </>
+                        ) : (
+                          <span className="text-[#94A3B8]">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span
@@ -344,12 +393,152 @@ export default function RefundRequests() {
                 </p>
               </div>
 
+              <div className="flex flex-col gap-2">
+                <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                  Rekening Tujuan Refund
+                </span>
+                {selectedRequest?.bank_account ? (
+                  <div className="text-[#334155] text-[13px] leading-relaxed bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3">
+                    <p className="font-semibold">
+                      {selectedRequest.bank_name} &middot; {selectedRequest.bank_account}
+                    </p>
+                    <p className="text-[#64748B]">a.n. {selectedRequest.bank_account_holder}</p>
+                  </div>
+                ) : (
+                  <p className="text-[#94A3B8] text-[12.5px] italic">
+                    Belum diisi (pengajuan lama). Hubungi pembeli untuk menanyakan rekening tujuan.
+                  </p>
+                )}
+              </div>
+
+              {selectedRequest?.status === "pending" && (
+                <div className="flex flex-col gap-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-4">
+                  <div className="flex items-center justify-between text-[13px]">
+                    <span className="text-[#64748B]">Total dibayar user</span>
+                    <span className="text-[#1E293B] font-bold">
+                      {paidAmount != null ? formatIDR(paidAmount) : "Tidak ditemukan"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[#334155] text-[13px] font-medium">
+                      Potongan biaya admin (%)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        inputMode="numeric"
+                        value={feePercent}
+                        onChange={(e) => setFeePercent(e.target.value.trim())}
+                        className={`w-24 h-[38px] bg-white border rounded-[8px] px-3 text-[13px] text-[#1E293B] outline-none transition-colors ${
+                          feeValid ? "border-[#E2E8F0] focus:border-[#148F89]" : "border-[#FCA5A5]"
+                        }`}
+                      />
+                      {[0, 10].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setFeePercent(String(preset))}
+                          className={`h-[38px] px-3 rounded-[8px] text-[12px] font-semibold border transition-colors ${
+                            feePercent === String(preset)
+                              ? "bg-[#148F89] text-white border-[#148F89]"
+                              : "bg-white text-[#475569] border-[#E2E8F0] hover:border-[#148F89]"
+                          }`}
+                        >
+                          {preset === 0 ? "0% (penuh)" : `${preset}% (kebijakan)`}
+                        </button>
+                      ))}
+                    </div>
+                    {!feeValid && (
+                      <p className="text-[#DC2626] text-[11.5px]">Isi angka bulat 0 sampai 100.</p>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[13px] pt-2 border-t border-[#E2E8F0]">
+                    <span className="text-[#64748B]">Nominal yang harus ditransfer</span>
+                    <span className="text-[#148F89] font-bold text-[15px]">
+                      {previewRefund != null ? formatIDR(previewRefund) : "-"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {selectedRequest?.status === "approved" && (
+                <div className="flex flex-col gap-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-4 text-[13px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#64748B]">Total dibayar user</span>
+                    <span className="text-[#1E293B] font-medium">
+                      {selectedRequest?.paid_amount != null ? formatIDR(selectedRequest.paid_amount) : "-"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#64748B]">Potongan biaya admin</span>
+                    <span className="text-[#1E293B] font-medium">{selectedRequest?.admin_fee_percent}%</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-[#E2E8F0]">
+                    <span className="text-[#64748B]">Nominal refund</span>
+                    <span className="text-[#148F89] font-bold">
+                      {selectedRequest?.refund_amount != null ? formatIDR(selectedRequest.refund_amount) : "-"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {selectedRequest?.status === "approved" && (
+                <div className="flex flex-col gap-2">
+                  <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">
+                    Bukti Transfer Refund
+                  </span>
+                  {selectedRequest.transfer_proof_url ? (
+                    <a
+                      href={selectedRequest.transfer_proof_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#148F89] text-[13px] font-semibold hover:underline w-fit"
+                    >
+                      Lihat bukti transfer
+                      {selectedRequest.transferred_at
+                        ? ` (diunggah ${new Date(selectedRequest.transferred_at).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })})`
+                        : ""}
+                    </a>
+                  ) : (
+                    <p className="text-[#94A3B8] text-[12.5px]">
+                      Belum ada. Setelah mentransfer dana ke rekening user, unggah buktinya di sini supaya user bisa melihatnya.
+                    </p>
+                  )}
+                  <label
+                    className={`w-fit px-4 py-2 rounded-[8px] border border-[#148F89]/40 text-[#148F89] text-[12.5px] font-semibold transition-colors ${
+                      uploadingProof ? "opacity-50 cursor-wait" : "cursor-pointer hover:bg-[#148F89]/10"
+                    }`}
+                  >
+                    {uploadingProof
+                      ? "Mengunggah..."
+                      : selectedRequest.transfer_proof_url
+                        ? "Ganti Bukti Transfer"
+                        : "Unggah Bukti Transfer"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,application/pdf"
+                      className="hidden"
+                      disabled={uploadingProof}
+                      onChange={(e) => {
+                        handleUploadProof(e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  <span className="text-[#94A3B8] text-[11px]">JPG, PNG, atau PDF, maksimal 5MB.</span>
+                </div>
+              )}
+
               {selectedRequest?.status === "pending" && (
                 <>
                   <p className="flex items-start gap-2 text-[#92400E] text-[11px] bg-[#FEF3C7] border border-[#FDE68A] rounded-[8px] px-3.5 py-2.5 leading-relaxed">
                     <AlertCircle size={13} className="shrink-0 mt-0.5" />
                     Menyetujui refund akan langsung mencabut akses produk user
-                    dan menandai transaksi terkait sebagai REFUNDED.
+                    dan menandai transaksi terkait sebagai REFUNDED. Dananya
+                    tetap kamu transfer manual sesuai nominal di atas.
                   </p>
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[#334155] text-[13px] font-medium">

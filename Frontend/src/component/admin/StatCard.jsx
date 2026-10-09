@@ -38,8 +38,7 @@ export default function StatCard({ label, value, unit, variant = "default", load
 
   return (
     <div
-      style={{ height: "128px" }}
-      className={`rounded-[12px] border shadow-sm px-6 flex flex-col justify-center gap-1.5 ${v.bg} ${v.border}`}
+      className={`h-[96px] sm:h-[128px] min-w-0 rounded-[12px] border shadow-sm px-5 sm:px-6 flex flex-col justify-center gap-1.5 ${v.bg} ${v.border}`}
     >
       <p className={`font-bold text-[12px] tracking-wide uppercase ${v.label}`}>
         {label}
@@ -52,7 +51,7 @@ export default function StatCard({ label, value, unit, variant = "default", load
           <div className="h-[28px] w-14 rounded-md bg-current opacity-10 animate-pulse" />
         ) : (
           <>
-            <p className={`font-bold text-[28px] leading-none ${v.value}`}>{value}</p>
+            <p className={`font-bold text-[24px] sm:text-[28px] leading-none ${v.value}`}>{value}</p>
             {unit && (
               <span className={`text-[13px] font-medium ${v.unit}`}>{unit}</span>
             )}

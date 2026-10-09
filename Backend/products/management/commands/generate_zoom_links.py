@@ -20,7 +20,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from accounts.utils import notify_user
+from accounts.utils import notify_user, tanggal_indo
 from mark_up.zoom import create_meeting
 from products.models import MentoringSession, ZoomAccount
 
@@ -148,7 +148,7 @@ class Command(BaseCommand):
             # Sesi ini dibuat OTOMATIS lewat cron, di luar aksi user mana pun --
             # tanpa notifikasi, peserta/mentor bisa gak sadar link-nya udah ada
             # sampai mepet jadwal (link dibuat cuma H-lead_hours sebelum mulai).
-            mulai_str = timezone.localtime(mulai).strftime("%d %B %Y, %H:%M")
+            mulai_str = tanggal_indo(mulai)
             notify_user(
                 sesi.user_library.user,
                 "Link Zoom Sesi Mentoring Siap",

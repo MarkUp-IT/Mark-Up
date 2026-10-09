@@ -17,6 +17,9 @@
 node_modules/
 .next/
 Frontend/.next/
+# folder sementara deploy tanpa downtime (deploy-frontend.sh)
+.next-build/
+.next-old/
 
 # production
 /build
@@ -88,4 +91,3 @@ Thumbs.db
 # Data pribadi peserta -- JANGAN pernah masuk git, apalagi Frontend/public/
 bootcamp.xlsx
 Frontend/public/bukti-bootcamp/
-Frontend/public/boot/

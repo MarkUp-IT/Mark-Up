@@ -44,7 +44,7 @@ export default function BootcampOrders() {
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
         <StatCard label="Total Butuh Tindakan" value={totalActionRequired} unit="sesi" variant="warning" />
         <StatCard label="Mentor Belum Ditentukan" value={totalUnassigned} unit="sesi" />
         <StatCard label="Link Belum Dibagikan" value={totalPending} unit="sesi" />

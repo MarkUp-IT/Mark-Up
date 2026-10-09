@@ -1,5 +1,7 @@
 import logging
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 from django.conf import settings
 from django.db.models import Case, DecimalField, ExpressionWrapper, F, Sum, When
@@ -30,8 +32,8 @@ from products.models import (
 from programs.models import BootcampSession as BootcampSessionTemplate
 from django.utils.dateparse import parse_date
 from accounts.decorators import jwt_required, role_required
-from accounts.models import UserRole, AuditAction
-from accounts.utils import log_audit, notify_team, notify_admins, notify_user, is_rate_limited
+from accounts.models import UserRole, UserStatus, AuditAction
+from accounts.utils import log_audit, notify_team, notify_admins, notify_user, is_rate_limited, tanggal_indo
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Sum, Case, When, F, DecimalField
@@ -86,7 +88,6 @@ REVENUE_EXPRESSION = ExpressionWrapper(
     F("price_at_checkout") * F("quantity"),
     output_field=DecimalField(max_digits=14, decimal_places=2),
 )
-
 
 def _serialize_product_detail(product):
     detail = None
@@ -291,7 +292,19 @@ def _mark_transaction_paid(transaction_id):
                 user_library.package = txn.bootcamp_registration.package
                 user_library.save(update_fields=["package"])
 
-            if product.type == ProductType.MENTORING and item.mentor_availability:
+            if product.type == ProductType.MENTORING and not item.mentor_availability:
+                # Slot-nya sudah gak ada (pembayaran dipulihkan setelah
+                # kedaluwarsa) -- sesi dibuat tanpa mentor, pembeli milih
+                # mentor + jadwal sendiri dari dashboard.
+                _create_mentoring_sessions(user_library, detail, None)
+                notify_user(
+                    txn.user,
+                    "Pilih Mentor & Jadwal Mentoring",
+                    f"Akses \"{detail.title if detail else 'mentoring'}\" sudah aktif. Silakan pilih mentor "
+                    f"dan jadwal sesi kamu di halaman Produk Saya.",
+                    url=f"/user/my-products/{product.id}",
+                )
+            elif product.type == ProductType.MENTORING and item.mentor_availability:
                 _create_mentoring_sessions(user_library, detail, item.mentor_availability)
                 # Notifikasi buat MENTOR-nya juga -- ini titik satu-satunya
                 # baris MentoringSession beneran dibuat, jadi mentor yang
@@ -301,7 +314,7 @@ def _mark_transaction_paid(transaction_id):
                     mentor_user,
                     "Booking Baru",
                     f"{txn.user.fullname} baru saja booking sesi \"{detail.title if detail else product.type}\" "
-                    f"pada {timezone.localtime(item.mentor_availability.start_time).strftime('%d %B %Y, %H:%M')} WIB.",
+                    f"pada {tanggal_indo(item.mentor_availability.start_time)} WIB.",
                     url="/mentor/mentoring-schedule",
                 )
             elif product.type == ProductType.BOOTCAMP:
@@ -425,6 +438,9 @@ def verify_transaction(request, transaction_id):
         return JsonResponse(
             {"detail": "Transaksi ini sudah diverifikasi sebelumnya."}, status=400
         )
+    if decision == "failed":
+        # Nyalain badge "Transaksi" pembeli sampai dia membukanya.
+        Transaction.objects.filter(id=txn.id).update(buyer_seen=False)
 
     if decision == "failed":
         # Notifikasi ke pembeli CUMA buat penolakan yang dipicu admin --
@@ -576,6 +592,10 @@ def get_my_transactions(request):
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])
 
+    # Pembeli membuka daftar transaksinya -> penolakan yang ada di situ
+    # dianggap sudah dilihat (badge sidebar "Transaksi" padam).
+    Transaction.objects.filter(user=request.user, buyer_seen=False).update(buyer_seen=True)
+
     items = (
         TransactionItem.objects.filter(transaction__user=request.user)
         .select_related(
@@ -585,9 +605,21 @@ def get_my_transactions(request):
         .order_by("-transaction__created_at")
     )
 
+    # Info refund (nominal & bukti transfer) buat transaksi yang direfund --
+    # akses produknya sudah dicabut, jadi halaman Transaksi satu-satunya
+    # tempat pembeli bisa melihatnya.
+    from products.models import RefundRequest
+    refund_per_produk = {}
+    for r in RefundRequest.objects.filter(
+        user_library__user=request.user, status=RefundRequest.RefundStatus.APPROVED,
+    ).select_related("user_library").order_by("created_at"):
+        refund_per_produk[r.user_library.product_id] = r
+
     data = []
     for item in items:
         product_detail = _serialize_product_detail(item.product)
+        refund = (refund_per_produk.get(item.product_id)
+                  if item.transaction.payment_status == PaymentStatus.REFUNDED else None)
         # Cuma keisi buat item MENTORING yang jadwalnya masih nyambung --
         # transaksi yang dilepas (gagal/kedaluwarsa) sengaja MEMUTUS FK ini
         # (lihat _release_transaction), jadi None di sini itu wajar buat
@@ -614,6 +646,12 @@ def get_my_transactions(request):
                 "notes": item.transaction.notes,
                 "mentor_name": mentor_name,
                 "session_time": session_time,
+                "refund": {
+                    "amount": str(refund.refund_amount) if refund.refund_amount is not None else None,
+                    "admin_fee_percent": refund.admin_fee_percent,
+                    "transfer_proof_url": refund.transfer_proof.url if refund.transfer_proof else None,
+                    "transferred_at": refund.transferred_at.isoformat() if refund.transferred_at else None,
+                } if refund else None,
             }
         )
 
@@ -858,11 +896,16 @@ def _get_checkout_detail(product):
 def _create_mentoring_sessions(user_library, mentoring_detail, first_slot):
     """Bikin baris MentoringSession sejumlah session_count paket. Sesi pertama
     langsung terjadwal sesuai slot yang dipilih saat checkout, sisanya
-    menunggu dijadwalkan user lewat dashboard."""
-    mentor_profile = first_slot.mentor_profile
+    menunggu dijadwalkan user lewat dashboard.
+
+    first_slot=None (mis. pembayaran yang dipulihkan setelah kedaluwarsa,
+    slotnya sudah dilepas): SEMUA sesi dibuat tanpa mentor & menunggu
+    dijadwalkan -- pembeli milih mentor + jadwalnya sendiri dari dashboard
+    (lihat products.views.schedule_my_product_session)."""
+    mentor_profile = first_slot.mentor_profile if first_slot else None
     sessions = []
     for order in range(1, mentoring_detail.session_count + 1):
-        if order == 1:
+        if order == 1 and first_slot is not None:
             sessions.append(
                 MentoringSession(
                     mentoring=mentoring_detail,
@@ -974,7 +1017,9 @@ def _validate_checkout_upload(f, label):
 # Berapa lama transaksi IPAYMU (belum dibayar, tanpa bukti apa pun) boleh
 # menahan reservasi slot mentor / stok sebelum otomatis dilepas lagi.
 # MANUAL sengaja TIDAK pakai ini -- lihat catatan di Transaction.expires_at.
-RESERVATION_MINUTES = 5
+# Dulu 5 menit -- kependekan buat pembeli yang scan QRIS lalu buka app bank
+# dulu, dinaikkan ke 15 menit (Okt 2026).
+RESERVATION_MINUTES = 15
 
 
 def _release_expired_transactions(queryset=None):
@@ -987,6 +1032,15 @@ def _release_expired_transactions(queryset=None):
       2. Lazy, PERSIS di titik kontensi (pas checkout_product/create_bootcamp_payment
          mau reservasi slot/stok yang sama) -- biar reservasi basi langsung
          kelepas SAAT itu juga, gak nunggu jadwal cron berikutnya.
+
+    SEBELUM dilepas, tiap transaksi IPAYMU dicek dulu ke API iPaymu -- kalau
+    ternyata pembelinya SUDAH bayar (webhook-nya telat/gagal sampai), langsung
+    ditandai lunas, BUKAN dikedaluwarsakan. Dulu langkah ini gak ada, dan
+    gara-gara webhook selalu ditolak (signature), pembeli yang sudah bayar
+    malah ke-cap "Kedaluwarsa". Kalau iPaymu-nya gak bisa dihubungi, tetap
+    dilepas seperti biasa (biar reservasi gak ketahan selamanya) -- pembayaran
+    yang ternyata masuk belakangan masih bisa dipulihkan lewat
+    _settle_if_ipaymu_paid saat webhook/polling berikutnya datang.
     Return jumlah yang dilepas."""
     qs = queryset if queryset is not None else Transaction.objects.all()
     kadaluarsa = qs.filter(
@@ -996,6 +1050,11 @@ def _release_expired_transactions(queryset=None):
     )
     dilepas = 0
     for transaction_id in list(kadaluarsa.values_list("id", flat=True)):
+        hasil = _settle_if_ipaymu_paid(transaction_id)
+        if hasil in ("paid", "skip"):
+            # "paid" = ternyata sudah dibayar & barusan ditandai lunas.
+            # "skip" = statusnya sudah bukan PENDING lagi (diproses jalur lain).
+            continue
         try:
             _txn, sudah = _release_transaction(transaction_id, PaymentStatus.EXPIRED)
             if not sudah:
@@ -1003,6 +1062,187 @@ def _release_expired_transactions(queryset=None):
         except Transaction.DoesNotExist:
             continue
     return dilepas
+
+
+def _recover_late_ipaymu_payment(transaction_id):
+    """Pulihkan transaksi IPAYMU yang SUDAH kami cap EXPIRED (reservasinya
+    sudah dilepas) tapi belakangan terbukti LUNAS di iPaymu: ambil lagi
+    stok yang tadi dibalikin, pasang lagi kode referral-nya, lalu tandai
+    lunas lewat _mark_transaction_paid (jalur yang sama persis kayak
+    pembayaran normal).
+
+    MENTORING: slot & mentor pilihannya sudah dilepas waktu kedaluwarsa
+    (link ke slotnya diputus, lihat _release_transaction), jadi sesinya
+    dibuat TANPA mentor & menunggu dijadwalkan -- pembeli milih mentor +
+    jadwal sendiri dari dashboard (lihat _create_mentoring_sessions).
+    Produk ber-stok yang stoknya sekarang sudah habis dikembalikan ke admin.
+
+    Return (berhasil: bool, alasan: str)."""
+    with db_transaction.atomic():
+        txn = Transaction.objects.select_for_update(of=("self",)).get(id=transaction_id)
+        if txn.payment_status != PaymentStatus.EXPIRED:
+            return False, f"status transaksi {txn.payment_status}, bukan EXPIRED"
+
+        items = list(
+            txn.items.select_related(
+                "product__mentoring_detail", "product__module_detail", "product__bootcamp_detail",
+            )
+        )
+
+        terkunci = []
+        for item in items:
+            detail = _get_checkout_detail(item.product)
+            if detail is None or getattr(detail, "stock", None) is None:
+                continue
+            detail_locked = type(detail).objects.select_for_update().get(pk=detail.pk)
+            if (detail_locked.stock or 0) < item.quantity:
+                return False, f"stok \"{getattr(detail_locked, 'title', item.product_id)}\" sudah habis"
+            terkunci.append((detail_locked, item.quantity))
+
+        for detail_locked, qty in terkunci:
+            detail_locked.stock -= qty
+            detail_locked.save(update_fields=["stock"])
+
+        # Kode referral-nya dulu ikut dilepas (_release_transaction hapus
+        # baris usage-nya) -- dipasang lagi biar kuota & riwayat promonya
+        # tetap akurat, persis kayak transaksi yang gak pernah kedaluwarsa.
+        if txn.promo_code and not ReferralCodeUsage.objects.filter(transaction=txn).exists():
+            referral_code = ReferralCode.objects.filter(code__iexact=txn.promo_code).first()
+            if referral_code is not None:
+                ReferralCodeUsage.objects.create(
+                    referral_code=referral_code,
+                    transaction=txn,
+                    user_id=txn.user_id,
+                    discount_amount=txn.discount_amount,
+                )
+                referral_code.used_count = (referral_code.used_count or 0) + 1
+                referral_code.save(update_fields=["used_count"])
+
+        txn.payment_status = PaymentStatus.PENDING
+        txn.save(update_fields=["payment_status"])
+        _mark_transaction_paid(transaction_id)
+        return True, ""
+
+
+def _settle_if_ipaymu_paid(transaction_id):
+    """Konfirmasi status bayar satu transaksi IPAYMU LANGSUNG ke API iPaymu
+    (fetch_paid_entry -- sumber kebenaran, gak bisa dipalsukan), lalu
+    bertindak sesuai hasilnya. Dipakai webhook, polling halaman kembalian,
+    dan cron kedaluwarsa -- jadi pembayaran yang sah PASTI ketangkep dari
+    salah satu jalur itu walau webhook-nya gagal.
+
+    Return salah satu:
+      "paid"     -- terbukti lunas & barusan ditandai lunas (termasuk yang
+                    dipulihkan dari EXPIRED)
+      "manual"   -- terbukti lunas tapi gak bisa dipulihkan otomatis, admin
+                    sudah dikabari buat cek manual
+      "unpaid"   -- iPaymu bilang belum ada pembayaran lunas
+      "error"    -- iPaymu gak bisa dihubungi / respons aneh
+      "skip"     -- bukan transaksi IPAYMU, atau sudah bukan PENDING/EXPIRED"""
+    from mark_up.ipaymu import fetch_paid_entry, map_via_channel_to_payment_method
+
+    try:
+        txn = Transaction.objects.select_related("user").get(id=transaction_id)
+    except Transaction.DoesNotExist:
+        return "skip"
+    if txn.gateway != PaymentGateway.IPAYMU or txn.payment_status not in (
+        PaymentStatus.PENDING, PaymentStatus.EXPIRED,
+    ):
+        return "skip"
+
+    entry, err = fetch_paid_entry(IpaymuSetting.get_solo(), txn.id)
+    if err:
+        logger.warning("iPaymu: gagal cek status transaksi %s: %s", txn.id, err)
+        return "error"
+    if entry is None:
+        return "unpaid"
+
+    try:
+        dibayar = Decimal(str(entry.get("Amount") or 0))
+    except Exception:
+        dibayar = Decimal("0")
+    if dibayar < txn.grand_total:
+        logger.error(
+            "iPaymu: transaksi %s lunas di iPaymu tapi nominalnya Rp %s < tagihan Rp %s -- gak diproses.",
+            txn.id, dibayar, txn.grand_total,
+        )
+        notify_admins(
+            f"[PERLU CEK MANUAL] Nominal iPaymu Kurang ({txn.id})",
+            f"{txn.user.fullname} ({txn.user.email}) bayar Rp {dibayar:,.0f}".replace(",", ".")
+            + f" lewat iPaymu, padahal tagihannya Rp {txn.grand_total:,.0f}".replace(",", ".")
+            + ". Akses produk BELUM dibuka -- mohon dicek manual.",
+            url="/admin/transactions",
+        )
+        return "manual"
+
+    via = entry.get("PaymentMethod")
+    channel = entry.get("PaymentChannel")
+    terlambat = False
+
+    txn, sudah = _mark_transaction_paid(txn.id)
+    if sudah and txn.payment_status == PaymentStatus.EXPIRED:
+        terlambat = True
+        berhasil, alasan = _recover_late_ipaymu_payment(txn.id)
+        if not berhasil:
+            logger.error(
+                "iPaymu: transaksi %s BAYAR SUKSES tapi sudah kedaluwarsa & gak bisa dipulihkan otomatis (%s).",
+                txn.id, alasan,
+            )
+            notify_team(
+                f"[PERLU CEK MANUAL] Pembayaran iPaymu terlambat ({txn.id})",
+                f"Transaksi {txn.id} terbukti LUNAS di iPaymu, tapi sudah keburu kedaluwarsa di "
+                f"sistem dan gak bisa dipulihkan otomatis: {alasan}.\n\n"
+                f"Pembeli: {txn.user.fullname} ({txn.user.email})\n"
+                f"Total: Rp {txn.grand_total}\n\n"
+                f"Uangnya sudah masuk -- mohon diproses manual (kasih aksesnya atau refund).",
+            )
+            notify_admins(
+                f"[PERLU CEK MANUAL] Pembayaran iPaymu Terlambat ({txn.id})",
+                f"{txn.user.fullname} ({txn.user.email}) sudah BAYAR (Rp {txn.grand_total:,.0f}"
+                .replace(",", ".") + f") lewat iPaymu, tapi transaksinya sudah kedaluwarsa dan "
+                f"gak bisa dipulihkan otomatis ({alasan}). Mohon dicek manual.",
+                url="/admin/transactions",
+            )
+            return "manual"
+    elif sudah:
+        # Sudah diproses jalur lain barusan (mis. webhook & polling barengan).
+        return "skip"
+
+    Transaction.objects.filter(pk=txn.pk).update(
+        payment_method=map_via_channel_to_payment_method(via, channel)
+    )
+    logger.info(
+        "iPaymu: transaksi %s LUNAS terkonfirmasi API (via=%s, channel=%s, dipulihkan_dari_expired=%s).",
+        txn.id, via, channel, terlambat,
+    )
+    keterangan = " (sempat tercatat kedaluwarsa, sudah dipulihkan otomatis)" if terlambat else ""
+    notify_team(
+        f"Pembayaran iPaymu diterima ({txn.id})",
+        f"Transaksi {txn.id} lunas otomatis lewat iPaymu{keterangan}.\n\n"
+        f"Pembeli: {txn.user.fullname} ({txn.user.email})\n"
+        f"Total: Rp {txn.grand_total}\n"
+        f"Metode: {via}/{channel}\n\n"
+        f"Akses produk sudah terbuka otomatis, gak perlu ACC manual.",
+    )
+    notify_admins(
+        f"Pembayaran iPaymu Diterima ({txn.id})",
+        f"{txn.user.fullname} ({txn.user.email}) lunas otomatis lewat iPaymu "
+        f"sebesar Rp {txn.grand_total:,.0f}".replace(",", ".") + f" via {via}/{channel}{keterangan}. "
+        "Akses produk sudah terbuka otomatis, gak perlu ACC manual.",
+        url="/admin/transactions",
+    )
+    return "paid"
+
+
+class _CheckoutDitolak(Exception):
+    """Penolakan checkout dari DALAM blok atomic. Wajib dilempar (bukan
+    `return JsonResponse`) supaya perubahan yang sudah terjadi di blok itu
+    ikut di-rollback -- lihat penanganannya di checkout_product."""
+
+    def __init__(self, pesan, status=400):
+        super().__init__(pesan)
+        self.pesan = pesan
+        self.status = status
 
 
 @csrf_exempt
@@ -1056,7 +1296,7 @@ def checkout_product(request):
         product = Product.objects.select_related(
             "mentoring_detail", "module_detail", "bootcamp_detail"
         ).get(id=product_id)
-    except Product.DoesNotExist:
+    except (Product.DoesNotExist, DjangoValidationError, ValueError):
         return JsonResponse({"detail": "Produk tidak ditemukan."}, status=404)
 
     if payment_gateway == PaymentGateway.MANUAL:
@@ -1127,24 +1367,40 @@ def checkout_product(request):
             if referral_code is not None:
                 locked_referral = ReferralCode.objects.select_for_update().get(pk=referral_code.pk)
                 if not locked_referral.is_valid_for_product(product, user=request.user):
-                    return JsonResponse(
-                        {"detail": "Kode referral tidak berlaku, kuotanya habis, atau sudah pernah kamu pakai."},
-                        status=400,
+                    raise _CheckoutDitolak(
+                        "Kode referral tidak berlaku, kuotanya habis, atau sudah pernah kamu pakai."
                     )
                 locked_referral.used_count += 1
                 locked_referral.save()
 
             if product.type == ProductType.MENTORING:
                 try:
-                    mentor_availability = MentorAvailability.objects.select_for_update().get(
-                        id=mentor_availability_id
-                    )
-                except MentorAvailability.DoesNotExist:
-                    return JsonResponse({"detail": "Slot jadwal tidak ditemukan."}, status=404)
+                    mentor_availability = MentorAvailability.objects.select_for_update().select_related(
+                        "mentor_profile__user"
+                    ).get(id=mentor_availability_id)
+                except (MentorAvailability.DoesNotExist, DjangoValidationError, ValueError):
+                    raise _CheckoutDitolak("Slot jadwal tidak ditemukan.", status=404)
+
+                if mentor_availability.start_time <= timezone.now():
+                    raise _CheckoutDitolak("Jadwal ini sudah lewat, silakan pilih jadwal lain.")
+
+                # Mentornya harus aktif & keahliannya cocok sama kategori
+                # produk -- aturan yang sama persis dengan widget pilih-mentor
+                # di checkout (mentors.views.get_mentors). Dulu cuma disaring
+                # di tampilan, API-nya nerima slot mentor mana pun.
+                mentor_user = mentor_availability.mentor_profile.user
+                if (mentor_user.role != UserRole.MENTOR or mentor_user.status != UserStatus.ACTIVE
+                        or not mentor_availability.mentor_profile.bisa_dipesan()):
+                    raise _CheckoutDitolak("Mentor ini sedang tidak aktif, silakan pilih mentor lain.")
+                expertise_ids = list(detail.expertise.values_list("id", flat=True))
+                if expertise_ids and not mentor_availability.mentor_profile.mentor_expertises.filter(
+                    expertise_id__in=expertise_ids
+                ).exists():
+                    raise _CheckoutDitolak("Mentor ini tidak tersedia untuk produk mentoring ini.")
 
                 # Cek ulang PERSIS di sini, di dalam kuncinya -- kalau slot ini
                 # kelihatan "dibooking" tapi ternyata itu reservasi IPAYMU yang
-                # udah lewat 5 menit tanpa dibayar, lepas dulu sebelum ditolak.
+                # udah lewat batas waktunya tanpa dibayar, lepas dulu sebelum ditolak.
                 # Ini yang bikin "klik Bayar" beneran ngecek ulang ketersediaan,
                 # bukan cuma percaya status is_booked yang mungkin sudah basi.
                 if mentor_availability.is_booked:
@@ -1154,7 +1410,7 @@ def checkout_product(request):
                     mentor_availability.refresh_from_db()
 
                 if mentor_availability.is_booked:
-                    return JsonResponse({"detail": "Slot ini sudah dibooking orang lain."}, status=400)
+                    raise _CheckoutDitolak("Slot ini sudah dibooking orang lain.")
 
                 mentor_availability.is_booked = True
                 mentor_availability.save()
@@ -1178,7 +1434,7 @@ def checkout_product(request):
 
                 if getattr(detail_locked, "stock", None) is not None:
                     if detail_locked.stock <= 0:
-                        return JsonResponse({"detail": "Stok produk habis."}, status=400)
+                        raise _CheckoutDitolak("Stok produk habis.")
                     detail_locked.stock -= 1
                     detail_locked.save()
 
@@ -1224,6 +1480,13 @@ def checkout_product(request):
             # di-reserve dulu supaya nggak direbut orang lain selama nunggu
             # verifikasi.
 
+    except _CheckoutDitolak as ditolak:
+        # Penolakan "wajar" (slot keisi, stok habis, dst). Dilempar sebagai
+        # exception -- BUKAN `return` di dalam blok atomic -- supaya semua yang
+        # sudah diubah sebelumnya (mis. kuota kode referral) ikut dibatalkan.
+        # Dulu `return` biasa bikin perubahan itu tetap tersimpan: kuota kode
+        # referral kepakai padahal checkout-nya gagal.
+        return JsonResponse({"detail": ditolak.pesan}, status=ditolak.status)
     except Exception:
         # Detail exception-nya SENGAJA nggak dikirim ke klien. str(e) di sini
         # bisa berisi nama tabel/kolom/constraint dari psycopg, atau nama
@@ -1277,9 +1540,13 @@ def checkout_product(request):
 @jwt_required
 def get_transaction_status(request, transaction_id):
     """Status ringkas satu transaksi milik sendiri -- dipakai halaman
-    kembalian iPaymu (2.4) buat polling tanpa perlu narik seluruh daftar
-    transaksi. Webhook, BUKAN halaman ini, yang benar-benar mengubah status;
-    endpoint ini cuma baca."""
+    kembalian iPaymu (2.4) & halaman QRIS buat polling tanpa perlu narik
+    seluruh daftar transaksi.
+
+    Selagi masih PENDING, endpoint ini juga ikut konfirmasi ke API iPaymu
+    (paling sering sekali per 8 detik per transaksi) -- jadi pembeli yang
+    barusan bayar langsung kelihatan lunas walau webhook-nya telat/gagal
+    sampai, gak nunggu cron."""
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])
 
@@ -1287,6 +1554,14 @@ def get_transaction_status(request, transaction_id):
         txn = Transaction.objects.get(id=transaction_id, user=request.user)
     except Transaction.DoesNotExist:
         return JsonResponse({"detail": "Transaksi tidak ditemukan."}, status=404)
+
+    if (
+        txn.gateway == PaymentGateway.IPAYMU
+        and txn.payment_status == PaymentStatus.PENDING
+        and not is_rate_limited(f"rl:ipaymu-status-check:{txn.id}", limit=1, window_seconds=8)
+    ):
+        if _settle_if_ipaymu_paid(txn.id) == "paid":
+            txn.refresh_from_db()
 
     return JsonResponse(
         {
@@ -1326,6 +1601,18 @@ def cancel_transaction(request, transaction_id):
     if txn.payment_status != PaymentStatus.PENDING:
         return JsonResponse(
             {"detail": "Transaksi ini sudah tidak bisa dibatalkan."}, status=400
+        )
+
+    # Cuma transaksi iPaymu (belum ada uang masuk) yang boleh dibatalkan
+    # sendiri. Transfer manual = bukti transfernya sudah diunggah, artinya
+    # uangnya sudah dikirim -- kalau dibatalkan, transaksinya jadi GAGAL dan
+    # hilang dari antrean verifikasi admin padahal dananya sudah masuk. Tombol
+    # di UI memang cuma muncul buat iPaymu; ini nutup jalur lewat API langsung.
+    if txn.gateway != PaymentGateway.IPAYMU:
+        return JsonResponse(
+            {"detail": "Transfer manual yang buktinya sudah kamu kirim tidak bisa dibatalkan sendiri. "
+                       "Tim kami akan memverifikasinya -- hubungi kami kalau ada kesalahan."},
+            status=400,
         )
 
     txn, sudah = _release_transaction(transaction_id, PaymentStatus.FAILED)
@@ -1393,6 +1680,20 @@ def create_ipaymu_session(request, transaction_id):
     return_url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/payment/ipaymu/return/?transaction_id={txn.id}"
     notify_url = request.build_absolute_uri(reverse("api_ipaymu_webhook"))
 
+    # Halaman bayar iPaymu ikut kedaluwarsa BARENG sisa reservasi kita
+    # (expires_at), bukan default_expired_hours (2 jam) -- dulu pembeli
+    # bisa bayar di halaman iPaymu yang masih valid padahal reservasinya
+    # di sisi kita sudah dilepas, ujungnya ke-cap "Kedaluwarsa" walau lunas.
+    if txn.expires_at:
+        sisa_detik = (txn.expires_at - timezone.now()).total_seconds()
+        if sisa_detik < 60:
+            return JsonResponse(
+                {"detail": "Waktu pembayaran transaksi ini sudah habis. Silakan checkout ulang."}, status=400
+            )
+        expired_value, expired_type = int(sisa_detik // 60), "minutes"
+    else:
+        expired_value, expired_type = setting.default_expired_hours, "hours"
+
     session_id, url, err = create_payment_session(
         setting,
         transaction=txn,
@@ -1402,7 +1703,8 @@ def create_ipaymu_session(request, transaction_id):
         return_url=return_url,
         notify_url=notify_url,
         cancel_url=return_url,
-        expired_hours=setting.default_expired_hours,
+        expired_hours=expired_value,
+        expired_type=expired_type,
     )
     if err:
         logger.error("iPaymu: gagal bikin sesi buat transaksi %s: %s", txn.id, err)
@@ -1454,7 +1756,7 @@ def create_ipaymu_qris(request, transaction_id):
     # Reservasinya (expires_at) masih berlaku & QR lama masih ada -> gak
     # perlu minta yang baru, biar pembeli yang reload halaman bayar tetap
     # lihat QR yang SAMA (nominal & kode QR yang sama persis) selama masih
-    # dalam jendela 5 menitnya.
+    # dalam jendela RESERVATION_MINUTES-nya.
     if txn.ipaymu_qr_string and txn.expires_at and txn.expires_at > timezone.now():
         return JsonResponse(
             {"qr_string": txn.ipaymu_qr_string, "total": int(txn.grand_total), "expires_at": txn.expires_at.isoformat()},
@@ -1545,17 +1847,15 @@ def ipaymu_webhook(request):
         setting = IpaymuSetting.get_solo()
         raw_body = request.body
 
-        from mark_up.ipaymu import verify_webhook_signature, map_via_channel_to_payment_method
+        from mark_up.ipaymu import verify_webhook_signature
 
-        if not verify_webhook_signature(setting, request.headers, raw_body):
-            logger.warning(
-                "iPaymu webhook: signature TIDAK VALID, diabaikan. body[:300]=%r", raw_body[:300]
-            )
-            return HttpResponse(status=200)
+        # Signature CUMA dicatat, BUKAN penentu -- resepnya terbukti gak
+        # cocok sama webhook production (lihat verify_webhook_signature).
+        # Keamanannya sekarang di langkah konfirmasi API di bawah: isi
+        # webhook gak pernah dipercaya buat ngasih akses, cuma dipakai
+        # sebagai "colekan" supaya kita nanya status aslinya ke iPaymu.
+        signature_ok = verify_webhook_signature(setting, request.headers, raw_body)
 
-        # get_request_data aman dipakai SETELAH verifikasi signature (yang
-        # sudah baca request.body mentah) -- Django cache body-nya, jadi bisa
-        # dibaca ulang tanpa masalah lewat request.POST/json.loads di sini.
         payload = get_request_data(request)
         if payload is None:
             try:
@@ -1564,6 +1864,10 @@ def ipaymu_webhook(request):
             except Exception:
                 logger.warning("iPaymu webhook: body gak bisa di-parse sama sekali.")
                 return HttpResponse(status=200)
+        # Webhook iPaymu dikirim form-urlencoded (QueryDict) -- diratakan
+        # jadi dict biasa biar aman disimpan ke JSONField.
+        if hasattr(payload, "keys"):
+            payload = {k: payload.get(k) for k in payload.keys()}
 
         reference_id = str(payload.get("reference_id") or "").strip()
         status_code = str(payload.get("status_code") or "").strip()
@@ -1580,63 +1884,22 @@ def ipaymu_webhook(request):
         # kalau nanti ada sengketa pembayaran.
         Transaction.objects.filter(pk=txn.pk).update(ipaymu_last_webhook=payload)
 
-        if status_code == "1":
-            txn, sudah = _mark_transaction_paid(reference_id)
-            if not sudah:
-                via = payload.get("via")
-                channel = payload.get("channel")
-                txn.payment_method = map_via_channel_to_payment_method(via, channel)
-                txn.save(update_fields=["payment_method"])
-                logger.info("iPaymu webhook: transaksi %s LUNAS (via=%s, channel=%s).", txn.id, via, channel)
-                notify_team(
-                    f"Pembayaran iPaymu diterima ({txn.id})",
-                    f"Transaksi {txn.id} lunas otomatis lewat iPaymu.\n\n"
-                    f"Pembeli: {txn.user.fullname} ({txn.user.email})\n"
-                    f"Total: Rp {txn.grand_total}\n"
-                    f"Metode: {via}/{channel}\n\n"
-                    f"Akses produk sudah terbuka otomatis, gak perlu ACC manual.",
-                )
-                notify_admins(
-                    f"Pembayaran iPaymu Diterima ({txn.id})",
-                    f"{txn.user.fullname} ({txn.user.email}) lunas otomatis lewat iPaymu "
-                    f"sebesar Rp {txn.grand_total:,.0f}".replace(",", ".") + f" via {via}/{channel}. "
-                    "Akses produk sudah terbuka otomatis, gak perlu ACC manual.",
-                    url="/admin/transactions",
-                )
-            elif txn.payment_status == PaymentStatus.EXPIRED:
-                # Kasus langka tapi serius: pembeli BENERAN bayar di iPaymu,
-                # tapi baru sampai SETELAH reservasinya kami lepas duluan
-                # (lewat 5 menit) -- uangnya sudah masuk, tapi slot/stoknya
-                # mungkin sudah diambil orang lain. Sengaja TIDAK otomatis
-                # dipaksa PAID lagi di sini (bisa nabrak reservasi baru punya
-                # orang lain) -- butuh admin cek manual & putuskan sendiri.
-                logger.error(
-                    "iPaymu webhook: transaksi %s BAYAR SUKSES tapi reservasinya SUDAH KEDALUWARSA -- perlu cek manual.",
-                    txn.id,
-                )
-                notify_team(
-                    f"[PERLU CEK MANUAL] Pembayaran iPaymu terlambat ({txn.id})",
-                    f"Transaksi {txn.id} baru dikonfirmasi LUNAS oleh iPaymu, tapi reservasinya "
-                    f"(slot mentor/stok) SUDAH kami lepas duluan karena lewat {RESERVATION_MINUTES} "
-                    f"menit tanpa kabar dari iPaymu.\n\n"
-                    f"Pembeli: {txn.user.fullname} ({txn.user.email})\n"
-                    f"Total: Rp {txn.grand_total}\n\n"
-                    f"Uangnya sudah masuk -- mohon dicek manual apakah slot/stoknya masih bisa "
-                    f"dikasih ke pembeli ini, atau perlu diproses refund kalau sudah terlanjur "
-                    f"diambil orang lain.",
-                )
-                notify_admins(
-                    f"[PERLU CEK MANUAL] Pembayaran iPaymu Terlambat ({txn.id})",
-                    f"{txn.user.fullname} ({txn.user.email}) sudah BAYAR (Rp {txn.grand_total:,.0f}"
-                    .replace(",", ".") + f") lewat iPaymu, tapi reservasi slot/stoknya sudah kami "
-                    f"lepas duluan (lewat {RESERVATION_MINUTES} menit). Mohon dicek manual.",
-                    url="/admin/transactions",
-                )
-        elif status_code == "-2":
-            _release_transaction(reference_id, PaymentStatus.EXPIRED)
-            logger.info("iPaymu webhook: transaksi %s KEDALUWARSA.", txn.id)
-        else:
-            logger.info("iPaymu webhook: transaksi %s status_code=%r, belum final, no-op.", txn.id, status_code)
+        # Batasi berapa kali satu transaksi bisa memicu panggilan API iPaymu
+        # lewat URL webhook publik ini -- biar gak bisa dipakai buat
+        # nge-spam kuota API kita.
+        if is_rate_limited(f"rl:ipaymu-webhook:{txn.id}", limit=20, window_seconds=600):
+            logger.warning("iPaymu webhook: %s kebanyakan dipanggil, dilewati sementara.", txn.id)
+            return HttpResponse(status=200)
+
+        hasil = _settle_if_ipaymu_paid(txn.id)
+        logger.info(
+            "iPaymu webhook: %s status_code=%r signature_ok=%s -> hasil konfirmasi API: %s",
+            txn.id, status_code, signature_ok, hasil,
+        )
+        # status_code "-2" (kedaluwarsa) SENGAJA gak langsung melepas
+        # reservasi di sini -- isi webhook gak terverifikasi, dan cron
+        # _release_expired_transactions sudah ngurus pelepasan tepat waktu
+        # berdasarkan expires_at kita sendiri.
 
         return HttpResponse(status=200)
     except Exception:
@@ -1798,6 +2061,51 @@ def get_referral_codes(request):
     )
 
 
+def _validasi_referral_code(rc):
+    """Cek nilai kode referral (sudah diisi ke instance) masuk akal SEBELUM
+    disimpan. Balikin dict errors (kosong = valid) & sekaligus menormalkan
+    tipe angkanya. Dulu gak ada validasi sama sekali: diskon 150% (produk jadi
+    gratis), diskon MINUS (pembeli malah bayar lebih mahal), dan kuota minus /
+    bukan angka (server crash 500) semuanya lolos."""
+    errors = {}
+    if not (rc.code or "").strip():
+        errors["code"] = ["Kode wajib diisi."]
+    elif ReferralCode.objects.filter(code__iexact=rc.code).exclude(pk=rc.pk).exists():
+        errors["code"] = ["Kode ini sudah dipakai."]
+
+    if rc.discount_type not in DiscountType.values:
+        errors["discount_type"] = ["Tipe diskon tidak valid."]
+
+    try:
+        rc.discount_value = Decimal(str(rc.discount_value))
+        if rc.discount_value <= 0:
+            errors["discount_value"] = ["Nilai diskon harus lebih dari 0."]
+        elif rc.discount_type == DiscountType.PERCENTAGE and rc.discount_value > 100:
+            errors["discount_value"] = ["Diskon persen maksimal 100%."]
+    except (InvalidOperation, ValueError, TypeError):
+        errors["discount_value"] = ["Nilai diskon harus berupa angka."]
+
+    if rc.max_discount not in (None, ""):
+        try:
+            rc.max_discount = Decimal(str(rc.max_discount))
+            if rc.max_discount <= 0:
+                errors["max_discount"] = ["Maksimal potongan harus lebih dari 0."]
+        except (InvalidOperation, ValueError, TypeError):
+            errors["max_discount"] = ["Maksimal potongan harus berupa angka."]
+    else:
+        rc.max_discount = None
+
+    try:
+        rc.quota = int(str(rc.quota))
+        if rc.quota < 1:
+            errors["quota"] = ["Kuota minimal 1."]
+        elif rc.quota < (rc.used_count or 0):
+            errors["quota"] = ["Kuota tidak boleh kurang dari jumlah yang sudah terpakai."]
+    except (ValueError, TypeError):
+        errors["quota"] = ["Kuota harus berupa angka bulat."]
+    return errors
+
+
 def _apply_referral_code_data(referral_code, data):
     referral_code.code = data.get("code", referral_code.code).strip().upper()
     referral_code.discount_type = data.get("discount_type", referral_code.discount_type)
@@ -1818,23 +2126,17 @@ def add_referral_code(request):
     if request_data is None:
         return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
-    code_value = (request_data.get("code") or "").strip().upper()
-    if not code_value:
-        return JsonResponse({"errors": {"code": ["Kode wajib diisi."]}}, status=400)
-    if ReferralCode.objects.filter(code__iexact=code_value).exists():
-        return JsonResponse({"errors": {"code": ["Kode ini sudah dipakai."]}}, status=400)
-
-    if request_data.get("discount_type") not in DiscountType.values:
-        return JsonResponse({"errors": {"discount_type": ["Tipe diskon tidak valid."]}}, status=400)
-
     referral_code = ReferralCode(
-        code=code_value,
-        discount_type=request_data["discount_type"],
-        discount_value=request_data.get("discount_value") or 0,
+        code=(request_data.get("code") or "").strip().upper(),
+        discount_type=request_data.get("discount_type"),
+        discount_value=request_data.get("discount_value"),
         max_discount=request_data.get("max_discount") or None,
-        quota=request_data.get("quota") or 0,
+        quota=request_data.get("quota"),
         applies_to_all=request_data.get("applies_to_all", True),
     )
+    errors = _validasi_referral_code(referral_code)
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
     referral_code.save()
 
     if not referral_code.applies_to_all:
@@ -1870,19 +2172,15 @@ def update_referral_code(request, referral_code_id):
 
     old_data = _serialize_referral_code(referral_code)
 
-    new_quota = request_data.get("quota")
-    if new_quota is not None and int(new_quota) < referral_code.used_count:
-        return JsonResponse(
-            {"errors": {"quota": ["Kuota tidak boleh kurang dari jumlah yang sudah terpakai."]}},
-            status=400,
-        )
-
     if "is_active" in request_data and len(request_data) == 1:
         referral_code.is_active = request_data["is_active"]
     else:
         _apply_referral_code_data(referral_code, request_data)
         if "is_active" in request_data:
             referral_code.is_active = request_data["is_active"]
+        errors = _validasi_referral_code(referral_code)
+        if errors:
+            return JsonResponse({"errors": errors}, status=400)
 
     referral_code.save()
 

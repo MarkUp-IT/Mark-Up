@@ -16,6 +16,12 @@ import { apiRequest } from "@/lib/api";
 
 const ROLE_LABEL = { ADMIN: "Admin", MENTOR: "Mentor", STUDENT: "User" };
 
+const MENTOR_STATUS = {
+  ACTIVE: { label: "MENTOR AKTIF", cls: "bg-[#CCFBF1] text-[#0F766E]" },
+  INCOMPLETE: { label: "DATA BELUM LENGKAP", cls: "bg-[#FEF3C7] text-[#92400E]" },
+  DISABLED: { label: "MENTOR NONAKTIF", cls: "bg-[#F1F5F9] text-[#475569]" },
+};
+
 function formatDate(dateStr) {
   if (!dateStr) return "-";
   return new Date(dateStr).toLocaleDateString("id-ID", {
@@ -101,8 +107,15 @@ export default function UserDetail() {
             <span
               className={`inline-flex px-2.5 py-1 text-[10px] rounded-full font-bold ${profile.status === "ACTIVE" ? "bg-[#DCFCE7] text-[#166534]" : "bg-[#FEE2E2] text-[#991B1B]"}`}
             >
-              {profile.status === "ACTIVE" ? "AKTIF" : "NONAKTIF"}
+              {profile.status === "ACTIVE" ? "AKUN AKTIF" : "AKUN NONAKTIF"}
             </span>
+            {isMentor && MENTOR_STATUS[profile.mentor_status] && (
+              <span
+                className={`inline-flex px-2.5 py-1 text-[10px] rounded-full font-bold ${MENTOR_STATUS[profile.mentor_status].cls}`}
+              >
+                {MENTOR_STATUS[profile.mentor_status].label}
+              </span>
+            )}
           </div>
           {isMentor && mentorProfile?.headline && (
             <p className="text-[#64748B] text-[13.5px]">{mentorProfile.headline}</p>
@@ -125,6 +138,25 @@ export default function UserDetail() {
 
       {isMentor ? (
         <>
+          {profile.mentor_status === "INCOMPLETE" && (
+            <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-[12px] p-5 flex flex-col gap-1.5">
+              <p className="text-[#92400E] text-[13.5px] font-semibold">
+                Belum tampil di halaman Mentor &amp; belum bisa dipesan
+              </p>
+              <p className="text-[#92400E] text-[13px]">
+                Data yang belum diisi: {(profile.mentor_missing_fields || []).map((f) => f.label).join(", ")}.
+              </p>
+              <p className="text-[#B45309] text-[12px]">Otomatis aktif begitu mentor melengkapinya.</p>
+            </div>
+          )}
+          {profile.mentor_status === "DISABLED" && (
+            <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-[12px] p-5">
+              <p className="text-[#475569] text-[13px]">
+                Dinonaktifkan sebagai mentor oleh admin: disembunyikan dari halaman Mentor dan tidak bisa dipesan.
+                Ubah lewat tombol edit di Manajemen User.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-3 gap-5">
             <div className="bg-white border border-[#E2E8F0] rounded-[12px] p-5 shadow-sm">
               <p className="text-[#64748B] font-bold text-[11px] tracking-wide uppercase">Rating</p>

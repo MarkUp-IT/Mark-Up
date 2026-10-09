@@ -2,15 +2,16 @@
 
 import { TrendingUp, TrendingDown, Download } from "lucide-react";
 import {
-  BarChart,
+  ComposedChart,
   Bar,
+  Line,
   XAxis,
   YAxis,
   Cell,
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { api, ApiError } from "@/lib/api";
@@ -55,7 +56,6 @@ export default function AdminDashboard() {
   const [activePeriod, setActivePeriod] = useState("all");
 
   const [revenue, setRevenue] = useState(null);
-  const chartScrollRef = useRef(null);
   const [counts, setCounts] = useState(null);
   const [userSummary, setUserSummary] = useState(null);
   const [logs, setLogs] = useState([]);
@@ -135,22 +135,14 @@ export default function AdminDashboard() {
     fetchDashboard(activePeriod);
   }, [activePeriod, fetchDashboard]);
 
-  // Defaultnya nunjukin data TERBARU (paling kanan, tanggal sekarang),
-  // bukan yang tertua -- geser ke kiri buat mundur lihat histori. Dipicu
-  // begitu chart-nya udah beneran ke-render dgn lebar barunya (bukan pas
-  // masih loading), makanya nunggu 1 tick lewat requestAnimationFrame.
-  useEffect(() => {
-    if (!revenue?.daily_chart?.length) return;
-    const frame = requestAnimationFrame(() => {
-      const el = chartScrollRef.current;
-      if (el) el.scrollLeft = el.scrollWidth;
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [revenue?.daily_chart]);
-
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
+
+  // Biar label tanggal di bawah chart gak numpuk tumpang-tindih pas
+  // filter "Bulan Ini"/"Semua Waktu" (bisa 30+ batang) -- interval Recharts
+  // (0 = tampil semua) dihitung ulang supaya label yang kelihatan kira-kira
+  // 8 biji aja, berapa pun jumlah hari/batangnya.
 
   return (
     <>
@@ -166,8 +158,8 @@ export default function AdminDashboard() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="adm-h-42 bg-[#F1F5F9] px-1.5 rounded-[8px] flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-3 flex-wrap max-w-full">
+          <div className="adm-h-42 bg-[#F1F5F9] px-1.5 rounded-[8px] flex items-center gap-1 max-w-full overflow-x-auto">
             {PERIOD_FILTERS.map((f) => (
               <button
                 key={f.key}
@@ -199,7 +191,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
         <StatCard
           label="Penjualan Mentoring"
           value={loading ? "…" : String(counts?.counts_by_type?.MENTORING ?? 0)}
@@ -216,7 +208,7 @@ export default function AdminDashboard() {
           unit="unit"
         />
 
-        <div className="col-span-2 row-span-2 bg-white border border-[#E2E8F0] shadow-sm rounded-[12px] p-6 flex flex-col">
+        <div className="col-span-2 lg:row-span-2 bg-white border border-[#E2E8F0] shadow-sm rounded-[12px] p-4 sm:p-6 flex flex-col min-w-0">
           <div className="flex flex-col mb-4">
             <div className="flex items-center justify-between">
               <p className="text-[12px] font-bold text-[#64748B] tracking-wide uppercase">
@@ -224,63 +216,75 @@ export default function AdminDashboard() {
               </p>
               <TrendBadge trend={revenue?.trend_percentage} />
             </div>
-            <p className="font-bold text-[28px] text-[#0F172A] mt-1">
+            <p className="font-bold text-[22px] sm:text-[28px] text-[#0F172A] mt-1">
               {loading ? "…" : formatRupiah(revenue?.total_revenue ?? 0)}
             </p>
           </div>
-          {/* overflow-x-auto + lebar minimum PER BATANG -- sebelumnya
-              ResponsiveContainer dipaksa width="100%" selalu, jadi pas filter
-              "Semua Waktu" (bisa puluhan hari) batangnya kepepet numpuk atau
-              malah ke-crop di kanan tanpa cara buat digeser lihat sisanya.
-              min-width: 100% (dari CSS) + width dari JS (px) -- kalau
-              datanya dikit, 100% menang (persis kayak sebelumnya, penuh
-              sejajar); kalau datanya banyak, lebar px menang dan pembungkus
-              di luar jadi bisa discroll horizontal. Auto-scroll ke ujung
-              kanan (data terbaru) diatur di useEffect chartScrollRef di atas. */}
-          <div ref={chartScrollRef} className="flex-1 overflow-x-auto" style={{ minHeight: "220px" }}>
-            <div
-              className="h-full"
-              style={{ minWidth: "100%", width: (revenue?.daily_chart?.length ?? 0) * 36 }}
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={revenue?.daily_chart ?? []}
-                  barCategoryGap={30}
-                  // left: 0 (BUKAN -20 kayak sebelumnya) -- margin negatif
-                  // itu dulu buat "menutupi" YAxis yang di-hide, aman waktu
-                  // ResponsiveContainer selalu pas 100%. Begitu dibungkus
-                  // overflow-x-auto, margin negatif ini malah nutupin/
-                  // motong sisi kiri batang PERTAMA di dalam area scroll.
-                  margin={{ top: 10, right: 0, left: 0, bottom: 0 }}
-                >
-                  <XAxis
-                    dataKey="day"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: "#94A3B8", fontSize: 12, fontWeight: 600 }}
-                    dy={10}
-                  />
-                  <YAxis hide />
-                  <Tooltip
-                    cursor={{ fill: "#F8FAFC" }}
-                    formatter={(value) => [formatRupiah(value), "Pendapatan"]}
-                    contentStyle={{
-                      borderRadius: "8px",
-                      border: "1px solid #E2E8F0",
-                      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                    }}
-                  />
-                  <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
-                    {(revenue?.daily_chart ?? []).map((entry, index, arr) => (
-                      <Cell
-                        key={index}
-                        fill={index === arr.length - 1 ? "#148F89" : "#CDEEEB"}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+          {/* Selalu width="100%" FIXED (gak ada scroll/lebar dinamis per
+              batang lagi kayak sebelumnya) -- itu sumber flicker-nya: tiap
+              ganti filter periode, jumlah hari berubah -> lebar kontainer
+              ke-hitung ulang -> browser scroll ke-reset paksa lewat
+              requestAnimationFrame -> numplang bareng animasi masuk bawaan
+              Recharts, keliatan "kedip". Sekarang gak ada scroll sama
+              sekali: makin banyak hari (mis. "Bulan Ini"), batang otomatis
+              makin ramping ngikut lebar kartu -- Recharts emang didesain
+              buat itu, gak perlu bikinan sendiri. */}
+          <div style={{ height: "220px" }}>
+            <ResponsiveContainer width="100%" height={220}>
+              <ComposedChart
+                data={revenue?.daily_chart ?? []}
+                barCategoryGap={30}
+                margin={{ top: 10, right: 0, left: 0, bottom: 0 }}
+              >
+                <XAxis
+                  dataKey="day"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#94A3B8", fontSize: 12, fontWeight: 600 }}
+                  dy={10}
+                  // Recharts sendiri yang melompati label kalau gak muat --
+                  // jumlah label ngikut lebar kartu (HP vs desktop), bukan
+                  // angka tetap yang bikin label tumpang-tindih di HP.
+                  interval="preserveStartEnd"
+                  minTickGap={14}
+                />
+                <YAxis hide domain={[0, "dataMax"]} />
+                <Tooltip
+                  cursor={{ fill: "#F8FAFC" }}
+                  formatter={(value) => [formatRupiah(value), "Pendapatan"]}
+                  contentStyle={{
+                    borderRadius: "8px",
+                    border: "1px solid #E2E8F0",
+                    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                  }}
+                  isAnimationActive={false}
+                />
+                {/* isAnimationActive={false} di Bar & Line -- ini kunci
+                    hilangin flicker-nya. Default Recharts nge-animasi
+                    SEMUA batang/garis dari 0 tiap kali `data` ganti
+                    identitas (persis yang kejadian tiap ganti filter
+                    periode), keliatan kayak seluruh chart "kedip"
+                    kosong-lalu-keisi. Data dashboard ini murni angka
+                    jadi, gak perlu animasi masuk. */}
+                <Bar dataKey="revenue" radius={[6, 6, 0, 0]} minPointSize={3} isAnimationActive={false}>
+                  {(revenue?.daily_chart ?? []).map((entry, index, arr) => (
+                    <Cell
+                      key={index}
+                      fill={index === arr.length - 1 ? "#148F89" : "#CDEEEB"}
+                    />
+                  ))}
+                </Bar>
+                <Line
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="#0F766E"
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: "#0F766E", strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
+                  isAnimationActive={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
           </div>
         </div>
 

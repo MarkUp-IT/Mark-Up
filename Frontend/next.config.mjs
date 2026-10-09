@@ -33,6 +33,12 @@ const csp = [
 const nextConfig = {
   /* config options here */
   reactCompiler: true,
+  // Deploy tanpa downtime: build baru ditulis ke folder terpisah
+  // (NEXT_DIST_DIR=.next-build) selagi server lama tetap melayani dari
+  // .next, lalu foldernya ditukar & PM2 di-reload bergiliran -- lihat
+  // deploy-frontend.sh. Dulu `npm run build` langsung menimpa .next yang
+  // lagi dipakai, bikin situs balas 502 tiap deploy.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   async headers() {
     return [
       {

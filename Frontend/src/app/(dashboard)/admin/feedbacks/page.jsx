@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { segarkanBadgeSidebar } from "@/lib/sidebarBadges";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
 
@@ -39,6 +40,7 @@ export default function Feedbacks() {
     try {
       const res = await apiRequest("/api/products/reviews/");
       setFeedbacks(res?.reviews || []);
+      segarkanBadgeSidebar();
     } catch (err) {
       console.error(err);
     } finally {
@@ -86,7 +88,7 @@ export default function Feedbacks() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
         <StatCard label="Total Ulasan" value={feedbacks.length} unit="ulasan" loading={loading} />
         <StatCard label="Ulasan Terlihat" value={visibleCount} unit="ulasan" variant="success" loading={loading} />
         <StatCard label="Disembunyikan" value={hiddenCount} unit="ulasan" variant="warning" loading={loading} />

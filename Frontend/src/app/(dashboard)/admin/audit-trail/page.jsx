@@ -87,7 +87,7 @@ export default function AuditTrail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
         <StatCard label="Total Log" value={logs.length} unit="catatan" loading={loading} />
         <StatCard label="Aktivitas (24 Jam)" value={last24h} unit="aksi" variant="primary" loading={loading} />
         <StatCard label="Penghapusan (7 Hari)" value={deletesLast7d} unit="peringatan" variant="warning" loading={loading} />

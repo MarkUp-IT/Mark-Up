@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { api, clearTokens, getRefreshToken } from "@/lib/api";
 import NotifBadge from "@/component/NotifBadge";
+import { useSidebarBadges } from "@/lib/sidebarBadges";
 import {
   LayoutDashboard,
   Package,
@@ -100,14 +100,7 @@ function SectionLabel({ children, badge }) {
 export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [badges, setBadges] = useState({});
-
-  useEffect(() => {
-    api
-      .get("/api/accounts/admin/sidebar-badges/")
-      .then((data) => data && setBadges(data))
-      .catch(() => {});
-  }, []);
+  const badges = useSidebarBadges("/api/accounts/admin/sidebar-badges/", pathname);
 
   const isActivePath = (url) =>
     url === "/admin" ? pathname === "/admin" : pathname?.startsWith(url);

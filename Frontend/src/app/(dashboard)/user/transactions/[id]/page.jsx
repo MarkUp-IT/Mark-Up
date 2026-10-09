@@ -7,6 +7,8 @@ import { ArrowLeft, Download } from "lucide-react";
 import { toast } from "sonner";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { segarkanBadgeSidebar } from "@/lib/sidebarBadges";
+import RefundInfoBox from "@/component/user/RefundInfoBox";
 import { extractErrorMessage } from "@/lib/formErrors";
 
 const statusMeta = {
@@ -79,6 +81,7 @@ export default function TransactionDetail() {
       .then((res) => {
         const found = (res?.transactions || []).find((t) => t.transaction_id === params.id);
         setTx(found || null);
+        segarkanBadgeSidebar();
       })
       .catch(console.error);
   }, [params.id]);
@@ -209,6 +212,7 @@ export default function TransactionDetail() {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          {tx.status === "REFUNDED" && <RefundInfoBox refund={tx.refund} className="w-full" />}
           {tx.status === "PENDING" && tx.gateway === "MANUAL" && (
             <p className="text-[#F59E0B] text-[13px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3">
               Bukti transfer sudah kami terima dan sedang diverifikasi oleh tim kami (maksimal 1x24 jam).

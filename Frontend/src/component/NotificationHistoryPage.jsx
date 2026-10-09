@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, Check, CheckCheck } from "lucide-react";
 import { apiRequest } from "@/lib/api";
+import { segarkanBadgeSidebar } from "@/lib/sidebarBadges";
 
 // 200 -- sama seperti batas maksimum yang diterima backend (lihat
 // get_notifications di accounts/views.py). Cukup buat "histori" yang jauh
@@ -100,6 +101,7 @@ export default function NotificationHistoryPage({ theme = "dark", EmptyState }) 
         method: "POST",
         body: { id },
       });
+      segarkanBadgeSidebar();
     } catch (err) {
       console.error(err);
     } finally {
@@ -117,6 +119,7 @@ export default function NotificationHistoryPage({ theme = "dark", EmptyState }) 
         method: "POST",
         body: { all: true },
       });
+      segarkanBadgeSidebar();
     } catch (err) {
       console.error(err);
     } finally {

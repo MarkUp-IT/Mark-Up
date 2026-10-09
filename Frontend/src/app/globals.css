@@ -137,5 +137,10 @@
   }
   html {
     @apply font-sans;
+    /* Panel drawer yang lagi tertutup diparkir di luar layar
+       (translate-x-full). Tanpa ini, di HP halamannya jadi bisa digeser ke
+       samping sampai panel itu kelihatan. `clip` (bukan `hidden`) supaya
+       gak bikin scroll container baru -- elemen sticky tetap jalan. */
+    overflow-x: clip;
   }
 }

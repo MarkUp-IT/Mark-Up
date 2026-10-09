@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { api, clearTokens, getRefreshToken } from "@/lib/api";
 import NotifBadge from "@/component/NotifBadge";
+import { useSidebarBadges } from "@/lib/sidebarBadges";
 import {
   GraduationCap,
   CalendarDays,
@@ -41,14 +41,7 @@ const menuList = [
 export default function Sidebar({ isOpen = false, onClose = () => {} }) {
   const pathname = usePathname() || "/mentor/active-classes";
   const router = useRouter();
-  const [badges, setBadges] = useState({});
-
-  useEffect(() => {
-    api
-      .get("/api/mentors/me/sidebar-badges/")
-      .then((data) => data && setBadges(data))
-      .catch(() => {});
-  }, []);
+  const badges = useSidebarBadges("/api/mentors/me/sidebar-badges/", pathname);
 
   async function handleLogout() {
     try {

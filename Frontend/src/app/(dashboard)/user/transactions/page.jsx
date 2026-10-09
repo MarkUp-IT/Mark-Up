@@ -7,6 +7,8 @@ import { Search, X } from "lucide-react";
 import { toast } from "sonner";
 import EmptyState from "@/component/user/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { segarkanBadgeSidebar } from "@/lib/sidebarBadges";
+import RefundInfoBox from "@/component/user/RefundInfoBox";
 import { extractErrorMessage } from "@/lib/formErrors";
 import AttentionBanner from "@/component/AttentionBanner";
 
@@ -99,6 +101,8 @@ export default function Transactions() {
     try {
       const res = await apiRequest("/api/transactions/me/transactions/");
       setTransactions(res?.transactions || []);
+      // Server baru saja menandai penolakan sebagai "sudah dilihat".
+      segarkanBadgeSidebar();
     } catch (err) {
       console.error(err);
     } finally {
@@ -388,6 +392,7 @@ export default function Transactions() {
                 </div>
               </div>
 
+              {selectedTx.status === "REFUNDED" && <RefundInfoBox refund={selectedTx.refund} />}
               {selectedTx.status === "PENDING" && selectedTx.gateway === "MANUAL" && (
                 <p className="text-center text-[#F59E0B] text-[12px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3">
                   Bukti transfer sudah kami terima dan sedang diverifikasi oleh tim kami (maksimal 1x24 jam).

@@ -6,7 +6,7 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, AccountDeletionTokenGenerator, get_client_ip, is_rate_limited, notify_team, notify_admins, notify_user, send_mail_async
+from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, AccountDeletionTokenGenerator, get_client_ip, is_rate_limited, notify_team, notify_admins, notify_user, send_mail_async, adalah_uuid
 from .forms import RegisterForm, UpdateProfileForm
 from mark_up.imaging import compress_or_original, is_real_image, MAX_DIM_AVATAR
 from rest_framework_simplejwt.exceptions import TokenError
@@ -400,9 +400,16 @@ def _serialize_user_row(u, request):
 		from mentors.models import MentorProfile
 
 		try:
-			row["mentoring_fee_percent_override"] = u.mentor_profile.mentoring_fee_percent_override
+			mp = u.mentor_profile
 		except MentorProfile.DoesNotExist:
-			row["mentoring_fee_percent_override"] = None
+			mp = None
+		row["mentoring_fee_percent_override"] = mp.mentoring_fee_percent_override if mp else None
+		# Status sebagai MENTOR, terpisah dari status akun di atas. Lihat
+		# MentorProfile.mentor_status: DISABLED (dimatikan admin), INCOMPLETE
+		# (data wajib bolong -- otomatis ACTIVE begitu lengkap), ACTIVE.
+		row["is_mentor_active"] = mp.is_mentor_active if mp else True
+		row["mentor_status"] = mp.mentor_status() if mp else "INCOMPLETE"
+		row["mentor_missing_fields"] = mp.missing_profile_fields() if mp else []
 
 	return row
 
@@ -413,7 +420,7 @@ def get_users(request):
 	if request.method != "GET":
 		return HttpResponseNotAllowed(["GET"])
 
-	users = User.objects.all().order_by("-created_at")
+	users = User.objects.select_related("mentor_profile").order_by("-created_at")
 
 	role = request.GET.get("role")
 	if role and role != "Semua Role":
@@ -496,11 +503,26 @@ def update_user(request, user_id):
 
 	old_data = {"role": user.role, "status": user.status}
 
+	# Divalidasi duluan, sebelum ada yang tersimpan (komisi khusus di bawah
+	# langsung di-save) -- nilai ngawur gak boleh ninggalin perubahan setengah.
+	mentor_active_baru = None
+	if "is_mentor_active" in request_data:
+		mentor_active_baru = request_data.get("is_mentor_active")
+		if isinstance(mentor_active_baru, str):
+			mentor_active_baru = {"true": True, "false": False}.get(mentor_active_baru.strip().lower(), mentor_active_baru)
+		if not isinstance(mentor_active_baru, bool):
+			return JsonResponse({"errors": {"is_mentor_active": ["Harus true atau false."]}}, status=400)
+
 	role = request_data.get("role")
 	if role:
-		role = role.upper()
+		# str() dulu -- nilai non-teks (mis. angka) dulu bikin .upper() crash 500.
+		role = str(role).upper()
 		if role not in UserRole.values:
 			return JsonResponse({"errors": {"role": ["Role tidak valid."]}}, status=400)
+		# Admin gak boleh mencopot peran adminnya sendiri -- bisa bikin gak
+		# ada lagi yang bisa masuk panel admin.
+		if user.pk == request.user.pk and role != UserRole.ADMIN:
+			return JsonResponse({"errors": {"role": ["Kamu tidak bisa mengubah peran akunmu sendiri."]}}, status=400)
 		user.role = role
 		if role == UserRole.MENTOR:
 			from mentors.models import MentorProfile
@@ -511,9 +533,11 @@ def update_user(request, user_id):
 
 	status_value = request_data.get("status")
 	if status_value:
-		status_value = status_value.upper()
+		status_value = str(status_value).upper()
 		if status_value not in UserStatus.values:
 			return JsonResponse({"errors": {"status": ["Status tidak valid."]}}, status=400)
+		if user.pk == request.user.pk and status_value != UserStatus.ACTIVE:
+			return JsonResponse({"errors": {"status": ["Kamu tidak bisa menonaktifkan akunmu sendiri."]}}, status=400)
 		user.status = status_value
 
 	if "mentoring_fee_percent_override" in request_data and user.role == UserRole.MENTOR:
@@ -543,6 +567,20 @@ def update_user(request, user_id):
 		mentor_profile.mentoring_fee_percent_override = override
 		mentor_profile.save(update_fields=["mentoring_fee_percent_override"])
 
+	mentor_active_changed = None
+	if mentor_active_baru is not None and user.role == UserRole.MENTOR:
+		from mentors.models import MentorProfile
+
+		nilai = mentor_active_baru
+		mentor_profile, _ = MentorProfile.objects.get_or_create(
+			user=user, defaults={"bank_name": "", "bank_account": "", "linkedin_url": ""},
+		)
+		if mentor_profile.is_mentor_active != nilai:
+			old_data["is_mentor_active"] = mentor_profile.is_mentor_active
+			mentor_profile.is_mentor_active = nilai
+			mentor_profile.save(update_fields=["is_mentor_active"])
+			mentor_active_changed = mentor_profile
+
 	role_changed = old_data["role"] != user.role
 	status_changed = old_data["status"] != user.status
 
@@ -554,7 +592,9 @@ def update_user(request, user_id):
 		"users",
 		object_id=user.id,
 		old_data=old_data,
-		new_data={"role": user.role, "status": user.status},
+		new_data={"role": user.role, "status": user.status, **(
+			{"is_mentor_active": mentor_active_changed.is_mentor_active} if mentor_active_changed else {}
+		)},
 	)
 
 	if role_changed:
@@ -576,6 +616,22 @@ def update_user(request, user_id):
 			"Akun kamu sudah diaktifkan kembali oleh admin dan bisa dipakai normal.",
 			url="/login",
 		)
+	if mentor_active_changed is not None and user.role == UserRole.MENTOR:
+		if mentor_active_changed.is_mentor_active:
+			if mentor_active_changed.is_profile_complete():
+				pesan = "Admin mengaktifkan kamu kembali sebagai mentor. Profilmu sudah tampil lagi di halaman Mentor dan mentoringmu bisa dipesan."
+			else:
+				pesan = ("Admin mengaktifkan kamu kembali sebagai mentor. Lengkapi dulu data profilmu di Pengaturan "
+						 "supaya profilmu tampil di halaman Mentor dan bisa dipesan.")
+			notify_user(user, "Status Mentor Diaktifkan", pesan, url="/mentor/settings")
+		else:
+			notify_user(
+				user,
+				"Status Mentor Dinonaktifkan",
+				"Admin menonaktifkan sementara status mentormu: profilmu disembunyikan dari halaman Mentor dan "
+				"tidak bisa dipesan pembeli baru. Sesi yang sudah terjadwal tetap berjalan seperti biasa.",
+				url="/mentor/active-classes",
+			)
 
 	return JsonResponse({"detail": "User berhasil diperbarui.", "user": _serialize_user_row(user, request)}, status=200)
 
@@ -1331,17 +1387,19 @@ def get_admin_sidebar_badges(request):
 	from django.db.models import Q
 	from products.models import MentoringSession, RefundRequest, Review, BootcampRegistration
 	from programs.models import BootcampSession as BootcampSessionTemplate
-	from transactions.models import Transaction, PaymentStatus, MentorPayout, PayoutStatus
+	from transactions.models import Transaction, PaymentGateway, PaymentStatus, MentorPayout, PayoutStatus
 
 	bootcamp_pending = (
 		BootcampSessionTemplate.objects.filter(session_mentors__isnull=True).count()
 		+ BootcampSessionTemplate.objects.filter(Q(meeting_link__isnull=True) | Q(meeting_link="")).count()
 	)
 
-	mentoring_pending = (
-		MentoringSession.objects.filter(status="waiting_schedule").count()
-		+ MentoringSession.objects.filter(status="scheduled", zoom_link="").count()
-	)
+	# Sesi terjadwal (belum lewat, akses gak dicabut) yang belum punya link
+	# Zoom. "Menunggu pembeli pilih jadwal" gak dihitung lagi: admin gak bisa
+	# berbuat apa-apa, jadi badge-nya dulu nyangkut terus.
+	mentoring_pending = MentoringSession.objects.filter(
+		status="scheduled", zoom_link="", start_time__gte=timezone.now(), user_library__is_revoked=False,
+	).count()
 
 	data = {
 		"bootcamp": bootcamp_pending,
@@ -1349,7 +1407,11 @@ def get_admin_sidebar_badges(request):
 			status=BootcampRegistration.Status.REGISTERED
 		).count(),
 		"mentoring": mentoring_pending,
-		"transactions": Transaction.objects.filter(payment_status=PaymentStatus.PENDING).count(),
+		# Cuma transfer manual yang nunggu verifikasi admin. Pembayaran iPaymu
+		# yang masih PENDING itu nunggu PEMBELI bayar, bukan tugas admin.
+		"transactions": Transaction.objects.filter(
+			payment_status=PaymentStatus.PENDING, gateway=PaymentGateway.MANUAL,
+		).count(),
 		"refund_requests": RefundRequest.objects.filter(status=RefundRequest.RefundStatus.PENDING).count(),
 		"payouts": MentorPayout.objects.filter(status=PayoutStatus.PENDING).count(),
 		"messages": ContactMessage.objects.filter(status=ContactMessageStatus.NEW).count(),
@@ -1425,13 +1487,12 @@ def get_student_sidebar_badges(request):
 		# BENERAN kelihatan di sidebar -- percuma dihitung kalau gak nongol
 		# di mana pun (itu justru masalah yang mau dibenerin di sini).
 		"my_products": needs_rating + perlu_bayar,
-		# Yang dibatalkan SENDIRI oleh pembeli (tombol Batalkan Pembayaran di
-		# transaksi IPAYMU) sengaja gak dihitung -- badge ini nandain "perlu
-		# ditindaklanjuti pembeli", bukan riwayat batal yang pembeli sendiri
-		# yang minta.
+		# Penolakan admin yang BELUM dilihat pembeli (Transaction.buyer_seen).
+		# Dulu ngitung semua FAILED sepanjang masa -> badge gak pernah padam.
+		# Pembatalan oleh pembeli sendiri gak pernah menyalakan tanda ini.
 		"transactions": Transaction.objects.filter(
-			user=request.user, payment_status=PaymentStatus.FAILED
-		).exclude(notes="Dibatalkan oleh pembeli.").count(),
+			user=request.user, payment_status=PaymentStatus.FAILED, buyer_seen=False,
+		).count(),
 		"settings": 0 if request.user.is_profile_complete() else 1,
 	}
 
@@ -1492,6 +1553,8 @@ def mark_notifications_read(request):
 	if data.get("all"):
 		jumlah = qs.update(is_read=True)
 	elif data.get("id"):
+		if not adalah_uuid(data["id"]):
+			return JsonResponse({"detail": "ID notifikasi tidak valid."}, status=400)
 		jumlah = qs.filter(id=data["id"]).update(is_read=True)
 	else:
 		return JsonResponse({"detail": "Sertakan 'id' atau 'all'."}, status=400)
@@ -1515,13 +1578,13 @@ def _resolve_broadcast_recipients(filter_type, params):
 
 	if filter_type == BroadcastFilterType.BOUGHT_PRODUCT:
 		product_id = params.get("product_id")
-		if not product_id:
+		if not product_id or not adalah_uuid(product_id):
 			return User.objects.none()
 		return User.objects.filter(product_libraries__product_id=product_id).distinct()
 
 	if filter_type == BroadcastFilterType.BOOTCAMP_REGISTERED:
 		bootcamp_id = params.get("bootcamp_id")
-		if not bootcamp_id:
+		if not bootcamp_id or not adalah_uuid(bootcamp_id):
 			return User.objects.none()
 		from products.models import BootcampRegistration
 		from transactions.models import PaymentStatus

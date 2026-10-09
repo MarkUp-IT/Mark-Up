@@ -13,8 +13,23 @@ import { API_BASE } from "@/lib/api";
  * error. keepalive dipakai supaya laporannya tetap terkirim walau pengguna
  * langsung menutup atau memuat ulang halaman.
  */
+// Error yang asalnya dari ekstensi browser / in-app browser pengunjung, BUKAN
+// dari kode kita -- dulu ikut tercatat & bikin log susah dibaca (mis.
+// "Failed to connect to MetaMask", "window.webkit.messageHandlers" dari
+// browser bawaan aplikasi iOS).
+const BUKAN_DARI_KITA = [
+  /metamask/i,
+  /webkit\.messageHandlers/,
+  /chrome-extension:\/\//,
+  /moz-extension:\/\//,
+  /safari-(web-)?extension:\/\//,
+];
+
 export function reportClientError(error, konteks = "render") {
   try {
+    const teks = `${error?.message || ""}\n${error?.stack || ""}`;
+    if (BUKAN_DARI_KITA.some((pola) => pola.test(teks))) return;
+
     const payload = JSON.stringify({
       url: typeof window !== "undefined" ? window.location.href : "",
       message: `[${konteks}] ${error?.message || String(error || "tidak diketahui")}`,

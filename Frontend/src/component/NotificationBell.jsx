@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, CheckCheck, ListChecks } from "lucide-react";
 import { apiRequest } from "@/lib/api";
+import { dengarkanSegarkan, segarkanBadgeSidebar } from "@/lib/sidebarBadges";
 import GlassShine from "@/component/GlassShine";
 
 const POLL_MS = 45000;
@@ -93,7 +94,13 @@ export default function NotificationBell({ theme = "dark", historyUrl }) {
   useEffect(() => {
     fetchAll();
     const id = setInterval(fetchAll, POLL_MS);
-    return () => clearInterval(id);
+    // Notifikasi yang ditandai dibaca di halaman Notifikasi (atau lonceng
+    // lain) langsung tercermin di sini -- dulu nunggu polling 45 detik.
+    const lepas = dengarkanSegarkan(fetchAll);
+    return () => {
+      clearInterval(id);
+      lepas();
+    };
   }, [fetchAll]);
 
   useEffect(() => {
@@ -120,6 +127,7 @@ export default function NotificationBell({ theme = "dark", historyUrl }) {
           method: "POST",
           body: { id: n.id },
         });
+        segarkanBadgeSidebar();
       } catch (err) {
         console.error(err);
       }
@@ -137,6 +145,7 @@ export default function NotificationBell({ theme = "dark", historyUrl }) {
         method: "POST",
         body: { all: true },
       });
+      segarkanBadgeSidebar();
     } catch (err) {
       console.error(err);
     } finally {

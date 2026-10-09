@@ -13,7 +13,7 @@ from mark_up.imaging import compress_or_original, is_real_image, MAX_DIM_POSTER
 from django.utils.dateparse import parse_datetime
 from accounts.decorators import jwt_required, role_required
 from accounts.models import UserRole, AuditAction
-from accounts.utils import log_audit, normalize_and_validate_url
+from accounts.utils import adalah_uuid, log_audit, normalize_and_validate_url
 from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
 from mentors.models import MentorProfile
@@ -417,8 +417,38 @@ def update_bootcamp_session_template(request, session_id):
     if request_data is None:
         return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
+    # SEMUA input divalidasi dulu sebelum ada yang diubah/disimpan. Dulu
+    # tanggal ngawur diam-diam MENGHAPUS jadwal (parse_datetime -> None), dan
+    # mentor_ids yang salah menghapus daftar mentor DULUAN baru ditolak.
+    errors = {}
     if "title" in request_data:
-        session.title = request_data["title"]
+        judul = request_data["title"]
+        if not isinstance(judul, str) or not judul.strip():
+            errors["title"] = ["Judul sesi wajib diisi."]
+    waktu = {}
+    for field in ("start_time", "end_time"):
+        nilai = request_data.get(field)
+        if nilai:
+            hasil = parse_datetime(nilai) if isinstance(nilai, str) else None
+            if hasil is None:
+                errors[field] = ["Format waktu tidak valid."]
+            else:
+                waktu[field] = hasil
+    mentor_ids = None
+    if "mentor_ids" in request_data:
+        mentor_ids = request_data.get("mentor_ids") or []
+        if not isinstance(mentor_ids, list) or not all(adalah_uuid(m) for m in mentor_ids):
+            errors["mentor_ids"] = ["Daftar mentor tidak valid."]
+        else:
+            ada = {str(i) for i in MentorProfile.objects.filter(id__in=mentor_ids).values_list("id", flat=True)}
+            hilang = [str(m) for m in mentor_ids if str(m) not in ada]
+            if hilang:
+                errors["mentor_ids"] = [f"Mentor tidak ditemukan: {', '.join(hilang)}"]
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    if "title" in request_data:
+        session.title = request_data["title"].strip()
     if "description" in request_data:
         session.description = request_data["description"]
     if "meeting_link" in request_data:
@@ -429,10 +459,10 @@ def update_bootcamp_session_template(request, session_id):
                 status=400,
             )
         session.meeting_link = link
-    if request_data.get("start_time"):
-        session.start_time = parse_datetime(request_data["start_time"])
-    if request_data.get("end_time"):
-        session.end_time = parse_datetime(request_data["end_time"])
+    if "start_time" in waktu:
+        session.start_time = waktu["start_time"]
+    if "end_time" in waktu:
+        session.end_time = waktu["end_time"]
     if "required_benefit" in request_data:
         required_benefit = request_data["required_benefit"] or ""
         if required_benefit and required_benefit not in BootcampSessionRequiredBenefit.values:
@@ -443,15 +473,10 @@ def update_bootcamp_session_template(request, session_id):
     session.save()
 
     mentor_profiles = []
-    mentor_changed = "mentor_ids" in request_data
+    mentor_changed = mentor_ids is not None
     if mentor_changed:
-        session.session_mentors.all().delete()
-        mentor_ids = request_data.get("mentor_ids") or []
         mentor_profiles = list(MentorProfile.objects.filter(id__in=mentor_ids))
-        found_ids = {str(m.id) for m in mentor_profiles}
-        missing_ids = [str(mid) for mid in mentor_ids if str(mid) not in found_ids]
-        if missing_ids:
-            return JsonResponse({"errors": {"mentor_ids": [f"Mentor tidak ditemukan: {', '.join(missing_ids)}"]}}, status=404)
+        session.session_mentors.all().delete()
         BootcampSessionMentor.objects.bulk_create([
             BootcampSessionMentor(bootcamp_session=session, mentor_profile=m) for m in mentor_profiles
         ])

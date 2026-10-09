@@ -258,6 +258,14 @@ ZOOM_CRED_KEY = os.getenv("ZOOM_CRED_KEY", "")
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 IPAYMU_CRED_KEY = os.getenv("IPAYMU_CRED_KEY", "")
 
+# JWT: masa berlaku token tetap default simplejwt. Yang diubah cuma aturan
+# "akun ini boleh dapat token baru" saat refresh -- default-nya cuma ngecek
+# is_active, padahal admin menonaktifkan akun lewat kolom `status`. Lihat
+# accounts.decorators.user_boleh_masuk.
+SIMPLE_JWT = {
+    "USER_AUTHENTICATION_RULE": "accounts.decorators.user_boleh_masuk",
+}
+
 # Link Zoom dibuat H-berapa jam sebelum sesi -- BUKAN langsung pas sesi
 # dijadwalkan/dibeli, karena ZoomAccount gak nyimpen tanggal kedaluwarsa
 # terstruktur (cuma is_active manual), jadi ada risiko meeting yang dibuat

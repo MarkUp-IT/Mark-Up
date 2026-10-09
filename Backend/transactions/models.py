@@ -127,6 +127,16 @@ class Transaction(models.Model):
     expires_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(blank=True, null=True)
+    # Batas pengajuan refund KHUSUS -- menggantikan aturan umum "48 jam
+    # setelah lunas" (Refund Policy). Kosong = aturan umum. Dipakai buat
+    # pengecualian, mis. pembeli yang pembayarannya sempat tercatat
+    # kedaluwarsa gara-gara gangguan sistem lalu dipulihkan (Okt 2026).
+    refund_deadline = models.DateTimeField(blank=True, null=True)
+    # False = transaksi ini DITOLAK admin dan pembeli belum membuka halaman
+    # Transaksi sejak itu -> nyalain badge "Transaksi" di sidebar pembeli.
+    # Dulu badge-nya ngitung SEMUA transaksi ditolak sepanjang masa, jadi
+    # gak pernah hilang walau sudah dilihat.
+    buyer_seen = models.BooleanField(default=True)
 
     @property
     def calculated_grand_total(self):
