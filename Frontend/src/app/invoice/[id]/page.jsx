@@ -43,6 +43,17 @@ export default function InvoicePage() {
       .catch((err) => setError(extractErrorMessage(err, "Invoice tidak bisa dimuat.")));
   }, [params.id, router]);
 
+  // Browser memakai judul halaman sebagai nama file saat "Simpan sebagai PDF"
+  // -- jadi diisi nomor invoice + nama pembeli ("/" tidak boleh di nama file).
+  useEffect(() => {
+    if (!inv) return;
+    const sebelumnya = document.title;
+    document.title = `Invoice MARK-UP ${inv.invoice_number.replaceAll("/", "-")} - ${inv.buyer.name}`;
+    return () => {
+      document.title = sebelumnya;
+    };
+  }, [inv]);
+
   if (error) {
     return (
       <div className="min-h-screen bg-[#F1F5F9] flex flex-col items-center justify-center gap-4 px-4 text-center">
