@@ -182,10 +182,6 @@ export default function InvoicePage() {
 
           <div className="pt-6 border-t border-[#E2E8F0] text-[11.5px] text-[#64748B] leading-relaxed">
             <p className="font-semibold text-[#334155]">MARK-UP</p>
-            <p>
-              Jl. Sutorejo Prima Indah Utara VII, No. 20, Kelurahan Dukuh Sutorejo, Kec. Mulyorejo, Kota Surabaya,
-              Jawa Timur
-            </p>
             <p>markup.ofc@gmail.com &middot; mark-up.id</p>
             <p className="mt-2 text-[#94A3B8]">
               Invoice ini dibuat otomatis oleh sistem dan sah tanpa tanda tangan.
