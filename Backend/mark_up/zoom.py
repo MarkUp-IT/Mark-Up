@@ -226,10 +226,32 @@ def check_account(account):
 
     if not hasil["berbayar"]:
         hasil["pesan"] += (
-            " Catatan: akun Basic tidak punya cloud recording, dan meeting "
-            "3 orang atau lebih dibatasi 40 menit."
+            " AKUN GRATIS: rekaman cloud otomatis tidak tersedia dan meeting "
+            "dibatasi 40 menit."
         )
     return hasil
+
+
+def pengaturan_meeting(account):
+    """Pengaturan meeting mentoring: TERBUKA & jalan tanpa host.
+
+    Keputusan tim (Okt 2026): akun Zoom dipegang MarkUp, bukan mentor, jadi
+    tidak pernah ada host yang masuk. Dulu ruang tunggu nyala + peserta tidak
+    boleh masuk sebelum host -> mentor & pembeli sama-sama tertahan. Sekarang
+    siapa pun yang punya link bisa langsung masuk kapan saja, dan rekaman
+    cloud mulai sendiri begitu orang pertama masuk.
+    """
+    return {
+        "join_before_host": True,
+        "jbh_time": 0,                 # boleh masuk kapan saja sebelum jadwal
+        "waiting_room": False,
+        "mute_upon_entry": False,
+        "participant_video": True,
+        "host_video": True,
+        "meeting_authentication": False,
+        "approval_type": 2,            # tanpa registrasi
+        "auto_recording": "cloud" if account.auto_record else "none",
+    }
 
 
 def create_meeting(account, topic, start_time, duration_minutes):
@@ -240,14 +262,7 @@ def create_meeting(account, topic, start_time, duration_minutes):
         "start_time": start_time.astimezone(_utc()).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "duration": max(int(duration_minutes), 15),
         "timezone": "UTC",
-        "settings": {
-            # Ruang tunggu + host harus masuk duluan: link meeting kita simpan
-            # di DB dan ditampilkan ke peserta, jadi jangan sampai orang yang
-            # dapat link bisa nongkrong di ruangan tanpa mentor.
-            "waiting_room": True,
-            "join_before_host": False,
-            "auto_recording": "cloud" if account.auto_record else "none",
-        },
+        "settings": pengaturan_meeting(account),
     }
     resp, err = _request(account, "POST", "/users/me/meetings", json=payload)
     if err:
@@ -260,6 +275,54 @@ def create_meeting(account, topic, start_time, duration_minutes):
     if not join_url:
         return None, "Zoom tidak mengembalikan join_url."
     return {"meeting_id": str(data.get("id")), "join_url": join_url}, None
+
+
+def update_meeting(account, meeting_id, duration_minutes=None):
+    """Terapkan pengaturan terbuka (dan durasi baru, kalau diberikan) ke
+    meeting yang SUDAH ada. Balikin (True, None) atau (False, pesan)."""
+    payload = {"settings": pengaturan_meeting(account)}
+    if duration_minutes:
+        payload["duration"] = max(int(duration_minutes), 15)
+    resp, err = _request(account, "PATCH", f"/meetings/{meeting_id}", json=payload)
+    if err:
+        return False, err
+    if resp.status_code in (200, 204):
+        return True, None
+    return False, _pesan_error(resp, "Gagal memperbarui meeting")
+
+
+# Pengaturan tingkat AKUN supaya peserta bebas beraktivitas tanpa host
+# (share screen, chat, anotasi, dst). Pengaturan per-meeting di atas tidak
+# mencakup ini -- di Zoom, hal-hal ini milik akun.
+IZIN_AKUN_TERBUKA = {
+    "schedule_meeting": {"join_before_host": True, "participants_video": True, "mute_upon_entry": False},
+    "in_meeting": {
+        "waiting_room": False,
+        "screen_sharing": True,
+        "who_can_share_screen": "all",
+        "who_can_share_screen_when_someone_is_sharing": "all",
+        "chat": True,
+        "private_chat": True,
+        "annotation": True,
+        "whiteboard": True,
+        "non_verbal_feedback": True,
+        "allow_participants_to_rename": True,
+        "allow_users_to_unmute_themselves": True,
+    },
+}
+
+
+def buka_izin_akun(account):
+    """Nyalakan izin peserta di tingkat akun. Balikin (True, None) atau
+    (False, pesan) -- gagal biasanya karena scope aplikasi Zoom tidak
+    mengizinkan mengubah pengaturan; saat itu admin perlu menyalakannya
+    manual di zoom.us > Settings."""
+    resp, err = _request(account, "PATCH", "/users/me/settings", json=IZIN_AKUN_TERBUKA)
+    if err:
+        return False, err
+    if resp.status_code in (200, 204):
+        return True, None
+    return False, _pesan_error(resp, "Izin peserta belum bisa dibuka otomatis")
 
 
 def delete_meeting(account, meeting_id):

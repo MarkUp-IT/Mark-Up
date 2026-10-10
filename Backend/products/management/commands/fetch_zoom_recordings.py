@@ -60,7 +60,7 @@ class Command(BaseCommand):
                 start_time__gte=sejak,
                 start_time__lte=sampai,
                 user_library__is_revoked=False,
-            ).select_related("zoom_account", "user_library__user"),
+            ).select_related("zoom_account", "user_library__user", "mentor__user", "mentoring"),
             akun, execute,
         )
         total += self._sapu(
@@ -127,6 +127,9 @@ class Command(BaseCommand):
             if execute:
                 sesi.recording_url = url
                 sesi.save(update_fields=["recording_url"])
+                if jenis == "mentoring":
+                    from products import kabar_mentoring
+                    kabar_mentoring.rekaman_tersedia(sesi)
                 self.stdout.write(self.style.SUCCESS(f"    [OK] {nama} (meeting {mid})"))
             else:
                 self.stdout.write(f"    [DRY-RUN] {nama} (meeting {mid}) -> {url[:70]}")

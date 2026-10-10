@@ -213,6 +213,14 @@ export default function TransactionDetail() {
 
         <div className="flex flex-col sm:flex-row gap-3 pt-2">
           {tx.status === "REFUNDED" && <RefundInfoBox refund={tx.refund} className="w-full" />}
+          {(tx.status === "PAID" || tx.status === "REFUNDED") && (
+                <Link
+                  href={`/invoice/${tx.transaction_id}`}
+                  className="text-center text-[#5EEAD4] text-[12.5px] font-semibold border border-[#148F89]/50 rounded-[8px] px-4 py-2.5 hover:bg-[#148F89]/10 transition-colors"
+                >
+                  Lihat Invoice
+                </Link>
+          )}
           {tx.status === "PENDING" && tx.gateway === "MANUAL" && (
             <p className="text-[#F59E0B] text-[13px] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-[8px] px-4 py-3">
               Bukti transfer sudah kami terima dan sedang diverifikasi oleh tim kami (maksimal 1x24 jam).

@@ -269,3 +269,23 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.title} -> {self.user}"
+
+class PesanTerkirim(models.Model):
+    """Catatan kabar otomatis yang sudah dikirim (pengingat sesi, pengingat
+    pilih jadwal, dst). Dua guna: (1) kunci unik mencegah pengingat terkirim
+    dobel walau cron jalan berulang, (2) jejak "sudah dikabari apa & kapan"
+    saat ada komplain tidak dikabari. Lihat mark_up.emails.sekali()."""
+    id = models.BigAutoField(primary_key=True)
+    jenis = models.CharField(max_length=60)
+    objek_id = models.CharField(max_length=64)
+    penerima = models.CharField(max_length=254, blank=True, default="")
+    dikirim_pada = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["jenis", "objek_id", "penerima"], name="pesan_terkirim_unik"),
+        ]
+        indexes = [models.Index(fields=["objek_id"], name="pesan_terkirim_objek_idx")]
+
+    def __str__(self):
+        return f"{self.jenis} -> {self.penerima or '-'} ({self.objek_id})"

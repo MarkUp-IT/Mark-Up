@@ -83,6 +83,27 @@ export default function MentoringOrderDetail() {
     }
   };
 
+  // Koreksi: sesi yang (otomatis/keliru) ditandai selesai ternyata tidak jadi
+  // berlangsung. Honor mentornya ikut dibatalkan di server.
+  const batalkanSelesai = async (sessionId) => {
+    if (!window.confirm("Batalkan status selesai sesi ini? Honor mentor untuk sesi ini akan ikut dibatalkan.")) return;
+    setSaving(sessionId);
+    try {
+      await apiRequest(`/api/products/mentoring-orders/sessions/${sessionId}/`, {
+        method: "PATCH",
+        body: { status: "scheduled" },
+      });
+      fetchDetail();
+      toast.success("Status Selesai Dibatalkan");
+    } catch (err) {
+      toast.error("Gagal Membatalkan", {
+        description: extractErrorMessage(err, "Terjadi kesalahan."),
+      });
+    } finally {
+      setSaving(null);
+    }
+  };
+
   if (loading) {
     return (
       <>
@@ -128,6 +149,7 @@ export default function MentoringOrderDetail() {
             <span className="text-[#94A3B8] text-[11px] font-bold uppercase tracking-wider">User</span>
             <span className="text-[#1E293B] font-semibold text-[13px]">{pkg.user_name}</span>
             <span className="text-[#94A3B8] text-[11px]">{pkg.user_email}</span>
+            {pkg.user_phone && <span className="text-[#94A3B8] text-[11px]">WA {pkg.user_phone}</span>}
           </div>
           <div className="w-px self-stretch bg-[#E2E8F0]" />
           <div className="flex flex-col">
@@ -205,10 +227,54 @@ export default function MentoringOrderDetail() {
                     </button>
                   </div>
                 )}
+                {session.status === "completed" && (
+                  <button
+                    onClick={() => batalkanSelesai(session.id)}
+                    disabled={saving === session.id}
+                    className="text-[#94A3B8] hover:text-[#DC2626] text-[12px] font-medium underline underline-offset-2 transition-colors disabled:opacity-50"
+                    title="Sesi ternyata tidak berlangsung? Batalkan status selesainya."
+                  >
+                    Batalkan Selesai
+                  </button>
+                )}
+                {session.status === "scheduled" && !session.zoom_link && session.zoom_error && (
+                  <span className="basis-full text-[#B45309] text-[11.5px]">
+                    Link Zoom otomatis gagal dibuat: {session.zoom_error}
+                  </span>
+                )}
               </div>
             </div>
           ))}
         </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-[16px] font-semibold text-[#0F172A]">Riwayat Kabar Otomatis</h2>
+          <p className="text-[#64748B] text-[12.5px] mt-0.5">
+            Pengingat dan kabar yang sudah dikirim sistem (email + notifikasi) untuk paket ini.
+          </p>
+        </div>
+        {(pkg.messages || []).length === 0 ? (
+          <p className="text-[#94A3B8] text-[13px] italic">Belum ada kabar otomatis yang terkirim.</p>
+        ) : (
+          <div className="bg-white border border-[#E2E8F0] rounded-[12px] divide-y divide-[#E2E8F0] shadow-sm">
+            {pkg.messages.map((m, idx) => (
+              <div key={idx} className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap text-[12.5px]">
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[#1E293B] font-medium">
+                    {m.label}
+                    {m.session_order ? ` (Sesi ${m.session_order})` : ""}
+                  </span>
+                  {m.recipient && m.recipient !== "tim" && (
+                    <span className="text-[#94A3B8] text-[11.5px] truncate">ke {m.recipient}</span>
+                  )}
+                </div>
+                <span className="text-[#64748B] whitespace-nowrap">{formatDateTime(m.sent_at)}</span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </>

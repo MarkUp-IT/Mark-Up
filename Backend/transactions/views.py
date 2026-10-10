@@ -271,6 +271,7 @@ def _mark_transaction_paid(transaction_id):
         txn.paid_at = timezone.now()
 
         judul_produk = []
+        sesi_mentoring = []
         for item in items:
             product = item.product
             detail = _get_checkout_detail(product)
@@ -306,19 +307,16 @@ def _mark_transaction_paid(transaction_id):
                 )
             elif product.type == ProductType.MENTORING and item.mentor_availability:
                 _create_mentoring_sessions(user_library, detail, item.mentor_availability)
-                # Notifikasi buat MENTOR-nya juga -- ini titik satu-satunya
-                # baris MentoringSession beneran dibuat, jadi mentor yang
-                # bersangkutan pasti kebagian tahu ada booking baru.
-                mentor_user = item.mentor_availability.mentor_profile.user
-                notify_user(
-                    mentor_user,
-                    "Booking Baru",
-                    f"{txn.user.fullname} baru saja booking sesi \"{detail.title if detail else product.type}\" "
-                    f"pada {tanggal_indo(item.mentor_availability.start_time)} WIB.",
-                    url="/mentor/mentoring-schedule",
-                )
+                # Kabar "Booking Baru" ke mentor (lonceng + email) dikirim
+                # kabar_mentoring.order_lunas di bawah.
             elif product.type == ProductType.BOOTCAMP:
                 _create_bootcamp_sessions(user_library, product)
+
+            if product.type == ProductType.MENTORING:
+                sesi_mentoring += list(
+                    user_library.mentoring_sessions.select_related("mentor__user", "mentoring", "user_library__user")
+                    .order_by("order")
+                )
 
             if detail is not None:
                 detail.sold_count = (detail.sold_count or 0) + item.quantity
@@ -333,14 +331,10 @@ def _mark_transaction_paid(transaction_id):
 
         txn.save()
 
-        notify_user(
-            txn.user,
-            "Pembayaran Lunas",
-            f"Pembayaran kamu sebesar Rp {txn.grand_total:,.0f}".replace(",", ".")
-            + f" untuk \"{', '.join(judul_produk) or txn.id}\" sudah dikonfirmasi. "
-            f"Akses produknya sudah terbuka sekarang.",
-            url="/user/transactions",
-        )
+        # Konfirmasi ke pembeli (lonceng + email + link invoice), dan untuk
+        # mentoring juga ke mentor & tim MarkUp.
+        from products import kabar_mentoring
+        kabar_mentoring.order_lunas(txn, judul_produk, sesi_mentoring)
 
         return txn, False
 
@@ -656,6 +650,63 @@ def get_my_transactions(request):
         )
 
     return JsonResponse({"transactions": data}, status=200)
+
+def nomor_invoice(txn):
+    """INV/2026/10/88DE62 -- diturunkan dari tanggal & ID transaksi, jadi
+    selalu sama untuk transaksi yang sama tanpa perlu kolom/penomoran baru."""
+    waktu = timezone.localtime(txn.paid_at or txn.created_at)
+    return f"INV/{waktu:%Y}/{waktu:%m}/{txn.id.rsplit('-', 1)[-1]}"
+
+
+@jwt_required
+def get_invoice(request, transaction_id):
+    """Data invoice satu transaksi -- buat pemiliknya atau admin. Hanya
+    transaksi yang sudah LUNAS (atau lunas lalu direfund) yang punya invoice."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    try:
+        txn = Transaction.objects.select_related("user").get(id=transaction_id)
+    except Transaction.DoesNotExist:
+        return JsonResponse({"detail": "Transaksi tidak ditemukan."}, status=404)
+    if txn.user_id != request.user.id and request.user.role != UserRole.ADMIN:
+        # 404 (bukan 403) supaya ID transaksi orang lain tidak bisa ditebak-tebak.
+        return JsonResponse({"detail": "Transaksi tidak ditemukan."}, status=404)
+    if txn.payment_status not in (PaymentStatus.PAID, PaymentStatus.REFUNDED):
+        return JsonResponse({"detail": "Invoice baru tersedia setelah pembayaran lunas."}, status=400)
+
+    items = []
+    for item in txn.items.select_related(
+        "product__mentoring_detail", "product__module_detail", "product__bootcamp_detail",
+    ):
+        detail = _serialize_product_detail(item.product)
+        items.append({
+            "title": detail.get("title") if detail else item.product.type,
+            "type": item.product.type,
+            "quantity": item.quantity,
+            "price": str(item.price_at_checkout),
+            "subtotal": str(item.price_at_checkout * item.quantity),
+        })
+
+    return JsonResponse({
+        "invoice_number": nomor_invoice(txn),
+        "transaction_id": txn.id,
+        "status": txn.payment_status,
+        "created_at": txn.created_at.isoformat(),
+        "paid_at": txn.paid_at.isoformat() if txn.paid_at else None,
+        "method": txn.payment_method,
+        "gateway": txn.gateway,
+        "buyer": {"name": txn.user.fullname, "email": txn.user.email, "phone": txn.buyer_phone or txn.user.phone or ""},
+        "items": items,
+        "sub_total": str(txn.sub_total),
+        "promo_code": txn.promo_code or "",
+        "discount_amount": str(txn.discount_amount),
+        "team_discount_amount": str(txn.team_discount_amount),
+        "commitment_fee_amount": str(txn.commitment_fee_amount),
+        "tax": str(txn.tax),
+        "grand_total": str(txn.grand_total),
+    }, status=200)
+
 
 @jwt_required
 @role_required(UserRole.ADMIN)

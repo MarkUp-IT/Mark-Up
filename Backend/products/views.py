@@ -772,6 +772,7 @@ def schedule_my_product_session(request, session_id):
     slot.save()
 
     jadwal_bergeser = session.start_time != slot.start_time
+    jadwal_lama = session.start_time if is_reschedule else None
 
     session.availability_slot = slot
     session.start_time = slot.start_time
@@ -797,15 +798,8 @@ def schedule_my_product_session(request, session_id):
     # Mentor perlu tahu ada sesi baru/berubah jadwal masuk ke kalendernya --
     # beda dari notifikasi "Booking Baru" yang sudah ada (itu dipicu pas
     # checkout produk, bukan pas slot spesifik ini dipilih/diubah).
-    notify_user(
-        session.mentor.user,
-        "Jadwal Sesi Mentoring Diubah" if is_reschedule else "Jadwal Sesi Mentoring Baru",
-        f"{session.user_library.user.fullname} "
-        + ("mengubah jadwal" if is_reschedule else "menjadwalkan")
-        + f" sesi mentoring \"{session.mentoring.title if session.mentoring else '-'}\" "
-        f"(Sesi {session.order}) ke {tanggal_indo(slot.start_time)} WIB.",
-        url="/mentor/mentoring-schedule",
-    )
+    from . import kabar_mentoring
+    kabar_mentoring.jadwal_ditetapkan(session, jadwal_lama=jadwal_lama)
 
     return JsonResponse(_serialize_mentoring_session(session), status=200)
 
@@ -1382,7 +1376,17 @@ def update_refund_request(request, refund_id):
             detail_produk.save(update_fields=["sold_count"])
 
         # Bebasin lagi slot mentor yang masih terjadwal biar bisa dibooking user lain.
-        for session in user_library.mentoring_sessions.filter(status="scheduled", availability_slot__isnull=False):
+        from . import kabar_mentoring
+        for session in user_library.mentoring_sessions.filter(
+            status="scheduled", availability_slot__isnull=False,
+        ).select_related("mentor__user", "mentoring", "user_library__user", "availability_slot", "zoom_account"):
+            # Mentor harus tahu sesinya batal (dulu tidak dikabari sama sekali
+            # -> bisa datang ke sesi yang sudah direfund), dan meeting Zoom-nya
+            # dihapus supaya jendela waktunya tidak terus "dipakai".
+            if session.start_time and session.start_time > timezone.now():
+                kabar_mentoring.sesi_dibatalkan(session, session.start_time)
+            if session.zoom_meeting_id:
+                _lepas_meeting_zoom(session)
             slot = session.availability_slot
             slot.is_booked = False
             slot.save(update_fields=["is_booked"])
@@ -1785,13 +1789,31 @@ def get_mentoring_order_detail(request, user_library_id):
     except UserLibrary.DoesNotExist:
         return JsonResponse({"detail": "Paket mentoring tidak ditemukan."}, status=404)
 
-    sessions = library.mentoring_sessions.select_related("mentor__user").order_by("order")
+    sessions = list(library.mentoring_sessions.select_related("mentor__user").order_by("order"))
     detail = library.product.mentoring_detail
+
+    # Riwayat kabar otomatis (pengingat, penyelesaian otomatis) buat paket ini
+    # -- supaya saat ada komplain "tidak dikabari", admin bisa langsung cek.
+    from accounts.models import PesanTerkirim
+    urutan_sesi = {str(x.id): x.order for x in sessions}
+    riwayat = PesanTerkirim.objects.filter(
+        objek_id__in=list(urutan_sesi) + [str(library.id)]
+    ).order_by("-dikirim_pada")[:50]
 
     return JsonResponse(
         {
             "user_name": library.user.fullname,
             "user_email": library.user.email,
+            "user_phone": library.user.phone or "",
+            "messages": [
+                {
+                    "label": LABEL_PESAN.get(m.jenis, m.jenis),
+                    "session_order": urutan_sesi.get(m.objek_id),
+                    "recipient": m.penerima,
+                    "sent_at": m.dikirim_pada.isoformat(),
+                }
+                for m in riwayat
+            ],
             "product_title": detail.title if detail else None,
             "sessions": [
                 {
@@ -1801,6 +1823,7 @@ def get_mentoring_order_detail(request, user_library_id):
                     "mentor_name": s.mentor.user.fullname if s.mentor else None,
                     "start_time": s.start_time.isoformat() if s.start_time else None,
                     "zoom_link": s.zoom_link,
+                    "zoom_error": s.zoom_error,
                     "recording_url": s.recording_url,
                 }
                 for s in sessions
@@ -1808,6 +1831,64 @@ def get_mentoring_order_detail(request, user_library_id):
         },
         status=200,
     )
+
+
+# Nama yang enak dibaca untuk accounts.PesanTerkirim.jenis (lihat
+# products/management/commands/send_mentoring_reminders.py).
+LABEL_PESAN = {
+    "pengingat_h24": "Pengingat 24 jam sebelum sesi",
+    "pengingat_h3": "Pengingat 3 jam sebelum sesi",
+    "zoom_belum_ada": "Peringatan ke admin: link Zoom belum ada",
+    "belum_jadwal_h1": "Pengingat pilih jadwal (hari ke-1)",
+    "belum_jadwal_h3": "Pengingat pilih jadwal (hari ke-3)",
+    "belum_jadwal_h7": "Pengingat pilih jadwal (hari ke-7)",
+    "belum_jadwal_admin_h3": "Kabar ke admin: pembeli belum pilih jadwal (hari ke-3)",
+    "belum_jadwal_admin_h7": "Kabar ke admin: pembeli belum pilih jadwal (hari ke-7)",
+    "sesi_selesai_otomatis": "Sesi ditandai selesai otomatis",
+}
+
+
+def selesaikan_sesi_mentoring(session, simpan=True):
+    """Tandai sesi selesai + terbitkan honor mentor (sekali saja). Dipakai
+    admin (update_mentoring_order_session) DAN cron penyelesaian otomatis
+    (send_mentoring_reminders). Balikin True kalau statusnya baru berubah."""
+    from transactions.models import MentorPayout, PayoutSourceType, CommissionSetting
+
+    if session.status == MentoringSession.SessionStatus.COMPLETED:
+        return False
+    session.status = MentoringSession.SessionStatus.COMPLETED
+
+    if session.mentor_id and not MentorPayout.objects.filter(mentoring_session=session).exists():
+        # Honor mentor dihitung dari yang BENAR-BENAR dibayar pembeli
+        # (sudah dipotong diskon produk & kode referral) -- keputusan tim
+        # Okt 2026. Dulu pakai harga produk, jadi diskon referral
+        # sepenuhnya ditanggung MarkUp. Fallback ke harga produk kalau
+        # transaksinya gak ketemu (mis. akses yang diberikan manual).
+        txn = _transaksi_produk(session.user_library)
+        if txn is not None:
+            gross = txn.grand_total
+        else:
+            gross = session.mentoring.new_price or session.mentoring.original_price or 0
+        session_count = session.mentoring.session_count or 1
+        # Fee mentoring ngikutin override per-mentor kalau diisi admin di
+        # User Management (mentoring_fee_percent_override), kalau kosong
+        # jatuh ke setelan global (default 25% ke MarkUp, 75% mentor) di
+        # halaman Pencairan Mentor.
+        fee_percent = (
+            session.mentor.mentoring_fee_percent_override
+            if session.mentor.mentoring_fee_percent_override is not None
+            else CommissionSetting.get_solo().mentoring_fee_percent
+        )
+        MentorPayout.objects.create(
+            mentor_profile=session.mentor,
+            source_type=PayoutSourceType.MENTORING,
+            mentoring_session=session,
+            gross_amount=(gross / session_count),
+            fee_percent=fee_percent,
+        )
+    if simpan:
+        session.save(update_fields=["status"])
+    return True
 
 
 @csrf_exempt
@@ -1839,43 +1920,31 @@ def update_mentoring_order_session(request, session_id):
             )
         session.zoom_link = link
 
-    if request_data.get("status") == "completed" and session.status != "completed":
-        session.status = MentoringSession.SessionStatus.COMPLETED
+    status_baru = request_data.get("status")
+    if status_baru == "completed" and session.status != "completed":
+        selesaikan_sesi_mentoring(session, simpan=False)
+    elif status_baru == "scheduled" and session.status == "completed":
+        # Koreksi: sesi yang (otomatis/keliru) ditandai selesai ternyata tidak
+        # jadi berlangsung. Honor mentornya ikut dibatalkan -- kecuali sudah
+        # terlanjur dicairkan, itu harus dibereskan manual dulu.
+        from transactions.models import MentorPayout, PayoutStatus
 
-        from transactions.models import MentorPayout, PayoutSourceType, CommissionSetting
-
-        if session.mentor_id and not hasattr(session, "payout"):
-            # Honor mentor dihitung dari yang BENAR-BENAR dibayar pembeli
-            # (sudah dipotong diskon produk & kode referral) -- keputusan tim
-            # Okt 2026. Dulu pakai harga produk, jadi diskon referral
-            # sepenuhnya ditanggung MarkUp. Fallback ke harga produk kalau
-            # transaksinya gak ketemu (mis. akses yang diberikan manual).
-            txn = _transaksi_produk(session.user_library)
-            if txn is not None:
-                gross = txn.grand_total
-            else:
-                gross = session.mentoring.new_price or session.mentoring.original_price or 0
-            session_count = session.mentoring.session_count or 1
-            # Fee mentoring ngikutin override per-mentor kalau diisi admin di
-            # User Management (mentoring_fee_percent_override), kalau kosong
-            # jatuh ke setelan global (default 25% ke MarkUp, 75% mentor) di
-            # halaman Pencairan Mentor.
-            fee_percent = (
-                session.mentor.mentoring_fee_percent_override
-                if session.mentor.mentoring_fee_percent_override is not None
-                else CommissionSetting.get_solo().mentoring_fee_percent
+        payout = MentorPayout.objects.filter(mentoring_session=session).first()
+        if payout is not None and payout.status != PayoutStatus.PENDING:
+            return JsonResponse(
+                {"detail": "Honor mentor untuk sesi ini sudah dicairkan, jadi status selesainya tidak bisa "
+                           "dibatalkan. Selesaikan dulu urusan pencairannya."},
+                status=400,
             )
-            MentorPayout.objects.create(
-                mentor_profile=session.mentor,
-                source_type=PayoutSourceType.MENTORING,
-                mentoring_session=session,
-                gross_amount=(gross / session_count),
-                fee_percent=fee_percent,
-            )
+        if payout is not None:
+            payout.delete()
+        session.status = (MentoringSession.SessionStatus.SCHEDULED if session.start_time
+                          else MentoringSession.SessionStatus.WAITING_SCHEDULE)
 
     session.save()
 
-    log_audit(request, AuditAction.UPDATE, "mentoring_sessions", object_id=session.id)
+    log_audit(request, AuditAction.UPDATE, "mentoring_sessions", object_id=session.id,
+              new_data={"status": session.status})
 
     return JsonResponse({"detail": "Sesi berhasil diperbarui."}, status=200)
 
@@ -5192,6 +5261,8 @@ def _serialize_zoom_account(acc, sesi_mendatang=0):
         "client_secret_hint": f"****{ekor}",
         "is_active": acc.is_active,
         "auto_record": acc.auto_record,
+        # "pro" / "free" / None (belum pernah dicek)
+        "plan": None if acc.is_licensed is None else ("pro" if acc.is_licensed else "free"),
         "last_check_at": acc.last_check_at.isoformat() if acc.last_check_at else None,
         "last_check_ok": acc.last_check_ok,
         "last_check_note": acc.last_check_note,
@@ -5361,13 +5432,24 @@ def test_zoom_account(request, account_id):
     except ZoomAccount.DoesNotExist:
         return JsonResponse({"detail": "Akun Zoom tidak ditemukan."}, status=404)
 
-    from mark_up.zoom import check_account
+    from mark_up.zoom import buka_izin_akun, check_account
 
     hasil = check_account(acc)
+    if hasil.get("ok"):
+        # Sekalian pastikan izin peserta terbuka (meeting berjalan tanpa
+        # host): share screen, chat, anotasi, dst.
+        izin_ok, izin_err = buka_izin_akun(acc)
+        hasil["pesan"] += (
+            " Izin peserta (share screen, chat, dll) sudah dibuka." if izin_ok else
+            f" PERHATIAN: {izin_err}. Nyalakan manual di zoom.us > Settings: Join before host, "
+            f"matikan Waiting Room, Screen sharing untuk All Participants."
+        )
     acc.last_check_at = timezone.now()
     acc.last_check_ok = bool(hasil.get("ok"))
     acc.last_check_note = (hasil.get("pesan") or "")[:500]
-    acc.save(update_fields=["last_check_at", "last_check_ok", "last_check_note"])
+    if hasil.get("ok"):
+        acc.is_licensed = bool(hasil.get("berbayar"))
+    acc.save(update_fields=["last_check_at", "last_check_ok", "last_check_note", "is_licensed"])
 
     return JsonResponse({"result": hasil, "account": _serialize_zoom_account(acc)}, status=200)
 

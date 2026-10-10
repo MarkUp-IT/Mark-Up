@@ -95,7 +95,12 @@ export default function ZoomAccountPanel() {
     try {
       const res = await apiRequest(`/api/products/zoom-accounts/${acc.id}/test/`, { method: "POST" });
       const r = res?.result || {};
-      if (r.ok) {
+      if (r.ok && !r.berbayar) {
+        toast.warning("Kredensial Valid, tapi Akun GRATIS", {
+          description: `${r.email || "-"}: sesi tidak direkam otomatis dan meeting terputus di menit ke-40. Perpanjang langganan Pro atau ganti akun.`,
+          duration: 10000,
+        });
+      } else if (r.ok) {
         toast.success("Kredensial Valid", {
           description: `${r.email || "-"} · ${r.tipe_akun || "-"}${r.sedang_live ? " · sedang ada meeting berlangsung" : ""}`,
         });
@@ -199,7 +204,21 @@ export default function ZoomAccountPanel() {
                   <span className="text-[#1E293B] font-semibold text-[13px] truncate">
                     {acc.label}
                     {!acc.is_active && <span className="text-[#94A3B8] font-normal"> (nonaktif)</span>}
+                    {acc.plan && (
+                      <span
+                        className={`ml-2 align-middle inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider ${
+                          acc.plan === "pro" ? "bg-[#DCFCE7] text-[#166534]" : "bg-[#FEE2E2] text-[#991B1B]"
+                        }`}
+                      >
+                        {acc.plan === "pro" ? "PRO" : "AKUN GRATIS"}
+                      </span>
+                    )}
                   </span>
+                  {acc.plan === "free" && acc.is_active && (
+                    <span className="text-[#B91C1C] text-[11px] font-medium">
+                      Akun gratis: sesi tidak direkam otomatis dan meeting terputus di menit ke-40.
+                    </span>
+                  )}
                   <span className="text-[#64748B] text-[11px]">
                     Secret {acc.client_secret_hint} &middot; {acc.upcoming_sessions} sesi mendatang
                     {acc.auto_record ? " · rekam otomatis" : ""}

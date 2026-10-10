@@ -279,6 +279,11 @@ ZOOM_GENERATE_LEAD_HOURS = int(os.getenv("ZOOM_GENERATE_LEAD_HOURS", str(24 * 90
 # Jeda antar meeting di satu akun. Satu akun Zoom cuma bisa meng-host SATU
 # meeting live dalam satu waktu, jadi jendela pemakaiannya dikasih bantalan.
 ZOOM_BUFFER_MINUTES = int(os.getenv("ZOOM_BUFFER_MINUTES", "15"))
+# Waktu cadangan di meeting Zoom (di luar durasi mentoringnya) supaya sesi yang
+# molor sedikit tidak terpotong.
+ZOOM_EXTRA_MINUTES = int(os.getenv("ZOOM_EXTRA_MINUTES", "30"))
+# Sesi mentoring ditandai selesai otomatis sekian jam setelah jadwalnya berakhir.
+SESSION_AUTO_COMPLETE_HOURS = int(os.getenv("SESSION_AUTO_COMPLETE_HOURS", "2"))
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/

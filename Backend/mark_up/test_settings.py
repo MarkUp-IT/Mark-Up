@@ -38,3 +38,4 @@ CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 FRONTEND_BASE_URL = "https://mark-up.id"
+EMAIL_SINKRON = True

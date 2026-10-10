@@ -1343,6 +1343,11 @@ class ZoomAccount(models.Model):
     last_check_at = models.DateTimeField(blank=True, null=True)
     last_check_ok = models.BooleanField(blank=True, null=True)
     last_check_note = models.CharField(max_length=500, blank=True, default="")
+    # Paket akun menurut Zoom saat terakhir dicek: True = berbayar (Pro),
+    # False = gratis (Basic), None = belum pernah dicek. Akun gratis tidak bisa
+    # rekam cloud otomatis dan meeting-nya dibatasi 40 menit -- makanya
+    # ditampilkan mencolok di panel admin & dicek ulang tiap hari.
+    is_licensed = models.BooleanField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

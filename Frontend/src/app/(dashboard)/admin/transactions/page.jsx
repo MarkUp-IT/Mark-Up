@@ -385,6 +385,16 @@ export default function Transactions() {
               >
                 {STATUS_META[selectedTx?.status]?.label || selectedTx?.status}
               </span>
+              {(selectedTx?.status === "PAID" || selectedTx?.status === "REFUNDED") && (
+                <a
+                  href={`/invoice/${selectedTx.transaction_id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-center text-[#148F89] text-[12.5px] font-semibold border border-[#148F89]/40 rounded-[8px] px-4 py-2.5 hover:bg-[#148F89]/10 transition-colors"
+                >
+                  Lihat Invoice
+                </a>
+              )}
 
               <div className="grid grid-cols-2 gap-y-4 gap-x-4 text-[13px]">
                 <div className="flex flex-col gap-1">

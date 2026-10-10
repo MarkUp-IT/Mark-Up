@@ -83,6 +83,8 @@ class BrevoAPIEmailBackend(BaseEmailBackend):
             payload["cc"] = [{"email": e} for e in msg.cc]
         if msg.bcc:
             payload["bcc"] = [{"email": e} for e in msg.bcc]
+        if getattr(msg, "reply_to", None):
+            payload["replyTo"] = {"email": msg.reply_to[0]}
 
         # Kalau view ngirim versi HTML (EmailMultiAlternatives), ikutkan.
         for isi, tipe in getattr(msg, "alternatives", []) or []:

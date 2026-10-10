@@ -21,8 +21,19 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from accounts.utils import notify_user, tanggal_indo
-from mark_up.zoom import create_meeting
+from mark_up.zoom import create_meeting, update_meeting
 from products.models import MentoringSession, ZoomAccount
+
+
+def durasi_zoom(session):
+    """Durasi meeting Zoom = durasi mentoring + waktu cadangan
+    (settings.ZOOM_EXTRA_MINUTES, default 30) supaya sesi yang molor sedikit
+    tidak terpotong. Cuma Zoom-nya yang dipanjangkan, jadwal mentoringnya tidak."""
+    durasi = 60
+    mentoring = getattr(session, "mentoring", None)
+    if mentoring and mentoring.duration_minutes:
+        durasi = mentoring.duration_minutes
+    return durasi + getattr(settings, "ZOOM_EXTRA_MINUTES", 30)
 
 
 def jendela_pakai(session, buffer_menit):
@@ -32,12 +43,8 @@ def jendela_pakai(session, buffer_menit):
     rentang ini yang dipakai buat mendeteksi bentrok. Diberi bantalan supaya
     sesi yang mepet-mepetan tidak saling tabrak.
     """
-    durasi = 60
-    mentoring = getattr(session, "mentoring", None)
-    if mentoring and mentoring.duration_minutes:
-        durasi = mentoring.duration_minutes
     mulai = session.start_time
-    return mulai, mulai + timedelta(minutes=durasi + buffer_menit)
+    return mulai, mulai + timedelta(minutes=durasi_zoom(session) + buffer_menit)
 
 
 class Command(BaseCommand):
@@ -56,6 +63,11 @@ class Command(BaseCommand):
             help="Proses satu sesi saja, buat uji coba.",
         )
         parser.add_argument(
+            "--perbarui-yang-ada", action="store_true",
+            help="Terapkan pengaturan terbuka + durasi baru ke meeting yang SUDAH dibuat "
+                 "untuk sesi mendatang, lalu selesai (tidak membuat meeting baru).",
+        )
+        parser.add_argument(
             "--lead-hours", type=int, default=None,
             help="Ambil sesi yang mulai dalam N jam ke depan (default dari settings).",
         )
@@ -67,6 +79,9 @@ class Command(BaseCommand):
 
         sekarang = timezone.now()
         batas = sekarang + timedelta(hours=lead)
+
+        if opts["perbarui_yang_ada"]:
+            return self._perbarui_yang_ada(sekarang, execute)
 
         antre = MentoringSession.objects.filter(
             status=MentoringSession.SessionStatus.SCHEDULED,
@@ -124,8 +139,7 @@ class Command(BaseCommand):
                 continue
 
             topik = f"Mentoring {sesi.mentoring.title} - Sesi {sesi.order}"
-            durasi = int((selesai - mulai).total_seconds() // 60) - buffer_menit
-            hasil, err = create_meeting(akun, topik, mulai, durasi)
+            hasil, err = create_meeting(akun, topik, mulai, durasi_zoom(sesi))
             if err:
                 self.stdout.write(self.style.ERROR(f"  [GAGAL] {label} -- {err}"))
                 sesi.zoom_error = err[:500]
@@ -169,6 +183,21 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(
                 "Ini baru dry-run. Jalankan ulang dengan --execute untuk menerapkan."
             ))
+
+    def _perbarui_yang_ada(self, sekarang, execute):
+        sudah = MentoringSession.objects.filter(
+            start_time__gt=sekarang, zoom_account__isnull=False,
+        ).exclude(zoom_meeting_id="").select_related("mentoring", "zoom_account")
+        self.stdout.write(f"{sudah.count()} meeting mendatang akan diperbarui.")
+        for sesi in sudah:
+            if not execute:
+                self.stdout.write(f"  [DRY-RUN] meeting {sesi.zoom_meeting_id} -> {durasi_zoom(sesi)} menit, terbuka")
+                continue
+            ok, err = update_meeting(sesi.zoom_account, sesi.zoom_meeting_id, durasi_zoom(sesi))
+            self.stdout.write(
+                self.style.SUCCESS(f"  [OK] meeting {sesi.zoom_meeting_id}") if ok
+                else self.style.ERROR(f"  [GAGAL] meeting {sesi.zoom_meeting_id} -- {err}")
+            )
 
     def _pilih_akun(self, akun_aktif, sesi, mulai, selesai, buffer_menit):
         """Akun pertama yang tidak punya sesi lain beririsan jamnya.
