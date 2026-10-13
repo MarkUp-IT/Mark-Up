@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Star } from "lucide-react";
-import DashboardLayout from "@/component/mentor/DashboardLayout";
 import EmptyState from "@/component/mentor/EmptyState";
 import { apiRequest } from "@/lib/api";
 
@@ -76,14 +75,14 @@ export default function MentorReviews() {
 
   if (loading) {
     return (
-      <DashboardLayout title="Reviews">
+      <>
         <p className="text-[#6B7280] text-[13px]">Memuat ulasan...</p>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout title="Reviews">
+    <>
       <motion.div {...sectionReveal} className="flex flex-col gap-1">
         <h1 className="text-[28px] sm:text-[32px] font-bold text-white leading-tight">
           Ulasan Mentee
@@ -104,28 +103,27 @@ export default function MentorReviews() {
         </div>
         <div className="bg-[#170F26] border border-[#2D2342] rounded-[12px] p-6 flex flex-col justify-center shadow-lg">
           <p className="text-[#E2E8F0] font-medium text-[14px]">Total Ulasan</p>
-          <p className="text-[#148F89] font-bold text-[34px] leading-none mt-2">{reviews.length}</p>
+          <p className="text-[#148F89] font-bold text-[34px] leading-none mt-2">{loading ? "-" : reviews.length}</p>
         </div>
       </motion.div>
 
       {hasAny && (
-        <motion.div
-          {...sectionReveal}
-          className="inline-flex items-center gap-1 bg-[#170F26] border border-[#2D2342] rounded-[10px] p-1 w-fit overflow-x-auto no-scrollbar"
-        >
-          {RATING_FILTERS.map((f) => (
-            <button
-              key={f}
-              onClick={() => setActiveFilter(f)}
-              className={`px-4 py-2 rounded-[8px] text-[13px] font-medium whitespace-nowrap transition-colors ${
-                activeFilter === f
-                  ? "bg-[#2D1B4E] text-white shadow-sm"
-                  : "text-[#9CA3AF] hover:text-white"
-              }`}
-            >
-              {f === "Semua" ? f : `${f} ★`}
-            </button>
-          ))}
+        <motion.div {...sectionReveal} className="max-w-full overflow-x-auto no-scrollbar">
+          <div className="inline-flex items-center gap-1 bg-[#170F26] border border-[#2D2342] rounded-[10px] p-1">
+            {RATING_FILTERS.map((f) => (
+              <button
+                key={f}
+                onClick={() => setActiveFilter(f)}
+                className={`px-4 py-2 rounded-[8px] text-[13px] font-medium whitespace-nowrap transition-colors ${
+                  activeFilter === f
+                    ? "bg-[#2D1B4E] text-white shadow-sm"
+                    : "text-[#9CA3AF] hover:text-white"
+                }`}
+              >
+                {f === "Semua" ? f : `${f} ★`}
+              </button>
+            ))}
+          </div>
         </motion.div>
       )}
 
@@ -158,6 +156,6 @@ export default function MentorReviews() {
           ))}
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

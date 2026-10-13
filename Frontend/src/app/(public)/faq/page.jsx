@@ -4,118 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Search, ChevronDown, Headphones, Mail } from "lucide-react";
-import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 
-const categories = [
-  "General",
-  "Bootcamp",
-  "Mentoring",
-  "Modul",
-  "Pembayaran",
-  "Akun",
-];
-
-// Konten asli (bukan placeholder) -- disusun supaya nyambung sama fitur yang
-// beneran ada di produk (rekaman sesi, sertifikat, halaman Settings, dst).
-const faqData = {
-  General: [
-    {
-      q: "Apa itu Mark-Up?",
-      a: "Mark-Up adalah platform mentoring dan pelatihan yang membantu pelajar dan mahasiswa mempersiapkan diri menghadapi kompetisi bisnis, studi kasus, debat, dan ajang sejenis. Kami menyediakan tiga jenis layanan utama: Bootcamp intensif berkelompok, Private Mentoring 1-on-1, dan modul E-Learning yang bisa diakses mandiri kapan saja.",
-    },
-    {
-      q: "Apakah sertifikat Mark-Up diakui secara profesional?",
-      a: "Sertifikat Mark-Up diterbitkan sebagai bukti partisipasi dan penyelesaian program, ditandatangani atas nama mentor pemateri dan Mark-Up. Sertifikat ini bisa kamu cantumkan di CV, LinkedIn, atau portofolio sebagai bukti pengalaman mengikuti pelatihan intensif. Perlu dicatat, ini bukan gelar atau sertifikasi resmi dari lembaga pendidikan formal, melainkan bukti pengalaman dan kompetensi praktis.",
-    },
-    {
-      q: "Apakah pembayaran di Mark-Up bisa dicicil?",
-      a: "Saat ini seluruh pembayaran di Mark-Up dilakukan secara penuh (lunas) lewat transfer bank manual. Sistem cicilan belum tersedia, tapi bisa jadi akan kami hadirkan untuk program Bootcamp bernilai besar di masa mendatang.",
-    },
-    {
-      q: "Bisakah saya melakukan refund jika batal mengikuti kelas?",
-      a: "Bisa, dengan syarat dan ketentuan yang berbeda tergantung jenis produk yang kamu beli. Kebijakan lengkapnya, termasuk berapa lama batas waktu pengajuan dan berapa potongan yang berlaku, bisa kamu baca selengkapnya di halaman Refund Policy kami.",
-    },
-  ],
-  Bootcamp: [
-    {
-      q: "Apa itu program Bootcamp di Mark-Up?",
-      a: "Bootcamp adalah program pelatihan intensif berbasis project nyata yang terdiri dari beberapa sesi pertemuan berurutan, dibimbing langsung oleh mentor praktisi. Cocok untuk kamu yang ingin belajar terstruktur dari dasar sampai siap tampil di kompetisi.",
-    },
-    {
-      q: "Berapa lama durasi satu program Bootcamp?",
-      a: "Durasi bervariasi tergantung paketnya, umumnya terdiri dari 4-8 sesi yang tersebar dalam beberapa minggu. Detail jumlah sesi dan jadwalnya bisa kamu lihat di halaman detail masing-masing produk sebelum membeli.",
-    },
-    {
-      q: "Apakah saya dapat sertifikat setelah menyelesaikan Bootcamp?",
-      a: "Ya. Setelah menyelesaikan seluruh sesi dalam sebuah program Bootcamp, sertifikat akan diterbitkan otomatis dan bisa kamu lihat serta unduh dari halaman Sertifikat di akunmu.",
-    },
-    {
-      q: "Bagaimana jika saya melewatkan salah satu sesi?",
-      a: "Tidak masalah -- setiap sesi Bootcamp yang sudah selesai dilaksanakan akan tersedia rekamannya, dan kamu bisa menontonnya kembali kapan saja lewat halaman Produk Saya.",
-    },
-  ],
-  Mentoring: [
-    {
-      q: "Bagaimana cara memesan sesi Private Mentoring?",
-      a: "Pilih paket mentoring yang sesuai kebutuhanmu di halaman Produk, lalu lakukan pembayaran. Setelah itu, jadwal sesi akan dikoordinasikan dengan mentor terkait dan muncul di halaman Produk Saya begitu terjadwal.",
-    },
-    {
-      q: "Berapa lama durasi satu sesi mentoring?",
-      a: "Umumnya 60 menit per sesi, meskipun beberapa paket bisa memiliki durasi atau jumlah sesi yang berbeda. Rincian lengkapnya selalu tercantum di halaman detail produk sebelum kamu membeli.",
-    },
-    {
-      q: "Apakah saya bisa memilih mentor tertentu?",
-      a: "Beberapa paket mentoring memungkinkanmu memilih mentor sesuai keahliannya -- kamu bisa mengenal lebih jauh profil para mentor kami di halaman Mentors.",
-    },
-    {
-      q: "Bagaimana jika saya perlu mengubah jadwal sesi?",
-      a: "Hubungi tim support kami minimal 24 jam sebelum jadwal sesi berlangsung untuk mengatur ulang jadwal. Perubahan yang diajukan terlalu mendekati waktu sesi mungkin tidak bisa selalu diakomodasi.",
-    },
-  ],
-  Modul: [
-    {
-      q: "Apa itu modul E-Learning Mark-Up?",
-      a: "Modul E-Learning adalah materi pembelajaran mandiri (self-paced) berisi kombinasi e-book, video pembahasan, template siap pakai, dan bank soal, yang bisa kamu pelajari sendiri sesuai waktumu tanpa jadwal sesi langsung.",
-    },
-    {
-      q: "Berapa lama akses modul yang saya beli berlaku?",
-      a: "Selamanya. Begitu pembelian berhasil, modul akan tersimpan permanen di halaman Produk Saya dan bisa kamu akses ulang kapan pun kamu butuhkan.",
-    },
-    {
-      q: "Format apa saja yang tersedia dalam satu modul?",
-      a: "Bervariasi tergantung modulnya, umumnya berupa file PDF, video pembahasan, dan template presentasi/dokumen yang bisa diedit (Canva atau PowerPoint). Rincian isi tiap modul dijelaskan lengkap di halaman produknya.",
-    },
-  ],
-  Pembayaran: [
-    {
-      q: "Metode pembayaran apa saja yang didukung Mark-Up?",
-      a: "Saat ini Mark-Up menerima pembayaran lewat transfer bank manual. Setelah checkout, kamu akan diarahkan ke halaman pembayaran berisi detail rekening tujuan -- transfer sesuai nominal, lalu unggah bukti transfernya langsung di halaman itu.",
-    },
-    {
-      q: "Apakah transaksi di Mark-Up aman?",
-      a: "Aman. Setiap transfer diverifikasi manual oleh tim kami berdasarkan bukti yang kamu unggah, dan status pembayaranmu bisa dipantau langsung dari halaman Transaksi.",
-    },
-    {
-      q: "Bagaimana jika pembayaran saya gagal atau belum terverifikasi?",
-      a: 'Cek dulu status transaksi di halaman Transaksi -- kalau masih berstatus "Menunggu Verifikasi" padahal kamu sudah mengunggah bukti transfer, tunggu proses verifikasi tim kami (maksimal 1x24 jam) atau hubungi tim support kami dengan menyertakan bukti pembayaran agar bisa segera kami tindak lanjuti.',
-    },
-  ],
-  Akun: [
-    {
-      q: "Bagaimana cara mendaftar akun Mark-Up?",
-      a: 'Klik tombol "Daftar" di pojok kanan atas halaman, lalu isi data dirimu. Setelah akun aktif, kamu bisa langsung menjelajahi katalog produk kami.',
-    },
-    {
-      q: "Saya lupa kata sandi, bagaimana cara mengatasinya?",
-      a: 'Gunakan opsi "Lupa Kata Sandi" di halaman masuk untuk menerima tautan reset lewat email terdaftarmu. Kalau sudah masuk ke akun, kamu juga bisa mengubah kata sandi kapan saja lewat menu Pengaturan Akun.',
-    },
-    {
-      q: "Bagaimana cara menghapus akun saya?",
-      a: 'Masuk ke Pengaturan Akun, lalu buka bagian "Zona Berbahaya" di bagian paling bawah. Akunmu akan dinonaktifkan dan nggak bisa dipakai login lagi, tapi riwayat produk, sertifikat, dan transaksimu tetap tersimpan sebagai catatan.',
-    },
-  ],
-};
+import { categories, faqData } from "@/lib/faqData";
 
 const allFaqs = Object.entries(faqData).flatMap(([category, items]) =>
   items.map((item) => ({ ...item, category })),
@@ -166,7 +57,6 @@ export default function FAQPage() {
         />
       </div>
 
-      <Navbar />
 
       <div className="main-content flex flex-col gap-12 md:gap-16 items-center mt-28 md:mt-36 mb-24 relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6">
         {/* Hero */}

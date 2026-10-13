@@ -85,31 +85,42 @@ export default function DarkVeil({
   const ref = useRef(null);
   useEffect(() => {
     const canvas = ref.current;
-    const parent = canvas.parentElement;
+    const parent = canvas?.parentElement;
+    if (!canvas || !parent) return undefined;
 
-    const renderer = new Renderer({
-      dpr: Math.min(window.devicePixelRatio, 2),
-      canvas,
-    });
-
-    const gl = renderer.gl;
-    const geometry = new Triangle(gl);
-
-    const program = new Program(gl, {
-      vertex,
-      fragment,
-      uniforms: {
-        uTime: { value: 0 },
-        uResolution: { value: new Vec2() },
-        uHueShift: { value: hueShift },
-        uNoise: { value: noiseIntensity },
-        uScan: { value: scanlineIntensity },
-        uScanFreq: { value: scanlineFrequency },
-        uWarp: { value: warpAmount },
-      },
-    });
-
-    const mesh = new Mesh(gl, { geometry, program });
+    let renderer, gl, program, mesh;
+    try {
+      // ogl langsung nulis ke hasil getContext() tanpa ngecek null, jadi di
+      // perangkat tanpa WebGL (atau kalau jatah konteks WebGL browser sudah
+      // habis) konstruktornya melempar error -- ditangkap di sini.
+      renderer = new Renderer({
+        dpr: Math.min(window.devicePixelRatio, 2),
+        canvas,
+      });
+      gl = renderer.gl;
+      const geometry = new Triangle(gl);
+      program = new Program(gl, {
+        vertex,
+        fragment,
+        uniforms: {
+          uTime: { value: 0 },
+          uResolution: { value: new Vec2() },
+          uHueShift: { value: hueShift },
+          uNoise: { value: noiseIntensity },
+          uScan: { value: scanlineIntensity },
+          uScanFreq: { value: scanlineFrequency },
+          uWarp: { value: warpAmount },
+        },
+      });
+      mesh = new Mesh(gl, { geometry, program });
+    } catch {
+      // Perangkat gak bisa WebGL -> kanvasnya disembunyikan aja, latar
+      // halaman di belakangnya tetap tampil. Dulu kasus ini bikin beranda
+      // jatuh ke halaman error ("Cannot set properties of null (setting
+      // 'renderer')", tercatat 9x di log error browser produksi Sep-Okt 2026).
+      canvas.style.display = "none";
+      return undefined;
+    }
 
     // Kalau user set "reduce motion" di OS-nya, jangan jalankan animasi
     // terus-terusan -> cukup render satu frame statis.
@@ -170,6 +181,11 @@ export default function DarkVeil({
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", resize);
       observer.disconnect();
+      // Bebaskan konteks WebGL-nya. Tanpa ini, tiap kali beranda dibuka
+      // ulang (navigasi bolak-balik) bikin konteks baru tanpa melepas yang
+      // lama -- browser cuma kasih jatah ~16, sesudahnya getContext() balikin
+      // null & komponen ini crash.
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
     };
   }, [
     hueShift,

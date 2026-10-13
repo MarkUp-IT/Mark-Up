@@ -11,7 +11,6 @@ import {
   Users,
   BookOpen,
 } from "lucide-react";
-import Navbar from "@/component/Navbar";
 import Footer from "@/component/Footer";
 
 const ketentuanUmum = [
@@ -51,18 +50,18 @@ const pengecualian = [
 const prosedur = [
   {
     step: "1",
-    title: "Hubungi Support",
-    desc: 'Kirim email ke support@markup.id dengan subjek "Refund Request - [No. Transaksi]".',
+    title: "Buka Produkmu",
+    desc: 'Masuk ke akunmu, buka halaman My Products, lalu pilih produk yang ingin direfund. Klik ikon titik tiga di kartu produk dan pilih "Ajukan Refund". Batas waktu pengajuan tertera di sana.',
   },
   {
     step: "2",
-    title: "Lampirkan Bukti",
-    desc: "Sertakan bukti pembayaran (bisa diunduh dari halaman Transaksi) dan alasan pengajuan refund secara jelas.",
+    title: "Isi Alasan & Rekening",
+    desc: "Tuliskan alasan pengajuan refund dan rekening tujuan pengembalian dana (nama bank, nomor rekening, dan nama pemilik rekening).",
   },
   {
     step: "3",
     title: "Verifikasi Internal",
-    desc: "Tim kami akan meninjau status transaksi dan riwayat aktivitasmu untuk memastikan pengajuan memenuhi syarat.",
+    desc: "Tim kami meninjau pengajuanmu. Status dan nominal refund bisa kamu pantau di halaman produk tersebut, dan kamu akan menerima notifikasi begitu pengajuan diputuskan.",
   },
 ];
 
@@ -88,16 +87,19 @@ export default function RefundPolicyPage() {
 
   return (
     <div className="w-full min-h-screen bg-[#0F081C] font-inter text-white relative overflow-x-hidden">
-      <div
-        className="fixed top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%] pointer-events-none z-0"
-        style={{
-          background:
-            "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
-          filter: "blur(40px)",
-        }}
-      />
+      {/* Background Glow -- overflow-hidden di-scope ke wrapper kecil ini
+          doang (bukan di root), biar nggak ganggu scroll/sticky halaman. */}
+      <div className="absolute inset-x-0 top-0 h-[400px] overflow-hidden pointer-events-none z-0">
+        <div
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-[150vw] md:w-[120vw] h-[300px] md:h-[400px] rounded-b-[100%]"
+          style={{
+            background:
+              "radial-gradient(ellipse at top, rgba(177, 158, 239, 0.15) 0%, transparent 60%)",
+            filter: "blur(40px)",
+          }}
+        />
+      </div>
 
-      <Navbar />
 
       <div className="main-content flex flex-col gap-16 md:gap-20 items-center mt-28 md:mt-36 mb-24 relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6">
         {/* Hero */}

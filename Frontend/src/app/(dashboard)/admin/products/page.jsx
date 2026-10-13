@@ -20,10 +20,10 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { useState, useEffect } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
+import { useState, useEffect, useCallback } from "react";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
+import PromoPopupPanel from "@/component/admin/PromoPopupPanel";
 import CurrencyInput from "@/component/admin/CurrencyInput";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
@@ -49,6 +49,7 @@ export default function Products() {
 
   const [categoryFilter, setCategoryFilter] = useState("Semua");
   const [statusFilter, setStatusFilter] = useState("Semua");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
@@ -64,9 +65,7 @@ export default function Products() {
   const [loadingSummary, setLoadingSummary] = useState(true);
 
   const [products, setProducts] = useState([]);
-  const [pagination, setPagination] = useState(null);
   const [loadingProducts, setLoadingProducts] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
 
   const [formData, setFormData] = useState({
       type: "BOOTCAMP",
@@ -81,6 +80,10 @@ export default function Products() {
       image_url: "",
       file_pdf_url: "",
       stock: "",
+      expertise: [],
+      community_link: "",
+      owned_description: "",
+      community_message: "",
     });
 
     const [editFormData, setEditFormData] = useState({
@@ -92,9 +95,44 @@ export default function Products() {
     discount_percent: "",
     session_count: 1,
     duration_minutes: 60,
+    // registration_link/image_url/file_pdf_url sebelumnya KELEWAT di sini
+    // (ada di formData/create tapi gak di editFormData) -- form edit gak
+    // pernah nampilin nilai sekarang & gak pernah bisa dipakai buat
+    // ngubahnya. Backend sekarang udah PATCH-semantics (lihat
+    // update_product di products/views.py) jadi gak akan kehapus lagi
+    // walau kosong, tapi tetap harus ada di sini biar bisa DILIHAT & DIUBAH.
+    registration_link: "",
+    image_url: "",
+    file_pdf_url: "",
     stock: "",
     is_active: true,
+    payment_gateway_mode: "AUTO",
+    expertise: [],
+    community_link: "",
+    owned_description: "",
+    community_message: "",
   });
+
+  const [expertiseOptions, setExpertiseOptions] = useState([]);
+
+  // Upload gambar produk: key = path storage yg dikirim ke payload add/update,
+  // preview = URL buat ditampilin. Kepisah antara add & edit modal.
+  const [addImage, setAddImage] = useState({ key: "", preview: "", uploading: false });
+  const [editImage, setEditImage] = useState({ key: "", preview: "", uploading: false });
+
+  const uploadProductImage = async (file, setImageState) => {
+    if (!file) return;
+    setImageState((s) => ({ ...s, uploading: true }));
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const data = await api.post("/api/products/upload-image/", formData);
+      setImageState({ key: data.key, preview: data.url, uploading: false });
+    } catch (err) {
+      showToast("error", "Gagal unggah gambar", err?.message || "Coba lagi.");
+      setImageState((s) => ({ ...s, uploading: false }));
+    }
+  };
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -138,26 +176,40 @@ export default function Products() {
     fetchSummary();
   }, []);
 
+  const fetchExpertiseOptions = async () => {
+    try {
+      const res = await api.get("/api/mentors/expertise/", { auth: false });
+      setExpertiseOptions(res?.expertise || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        setLoadingProducts(true);
+    fetchExpertiseOptions();
+  }, []);
 
-        const data = await api.get(
-          `/api/products/?page=${currentPage}&page_size=10&include_inactive=true`
-        );
+  // Fetch SEMUA produk sekaligus (bukan paginasi server) -- filter kategori/
+  // status/pencarian di bawah ini kerjanya di sisi klien, jadi sebelumnya
+  // cuma nyaring 10 baris yang lagi kebuka di halaman itu doang. Produk
+  // yang cocok sama filter tapi nyasar ke halaman lain jadi keliatan
+  // "hilang" walau sebenarnya ada. Katalog produk platform ini kecil
+  // (puluhan, bukan ribuan), jadi fetch-semua aman dipakai di sini.
+  const fetchProducts = useCallback(async () => {
+    try {
+      setLoadingProducts(true);
+      const data = await api.get("/api/products/?all=true&include_inactive=true");
+      setProducts(data.products ?? []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingProducts(false);
+    }
+  }, []);
 
-        setProducts(data.products ?? []);
-        setPagination(data.pagination ?? null);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoadingProducts(false);
-      }
-    };
-
+  useEffect(() => {
     fetchProducts();
-  }, [currentPage]);
+  }, [fetchProducts]);
 
   const formatIDR = (val) =>
     val == null
@@ -171,11 +223,16 @@ export default function Products() {
   const [exporting, setExporting] = useState(false);
 
   async function handleExportCsv() {
+    if (filtered.length === 0) {
+      showToast("error", "Gak ada data buat diekspor", "Sesuaikan dulu filter/pencariannya.");
+      return;
+    }
     setExporting(true);
     try {
-      const data = await api.get("/api/products/?all=true&include_inactive=true");
-      const allProducts = data.products ?? [];
-
+      // Ekspor persis apa yang lagi kelihatan di tabel (sudah kena filter
+      // kategori/status/pencarian) -- sebelumnya di sini nge-fetch ULANG
+      // seluruh katalog mentah, jadi CSV-nya selalu isi SEMUA produk
+      // walau admin udah milih filter tertentu di tabel.
       const typeLabel = (t) =>
         t === "MENTORING" ? "Mentoring" : t === "BOOTCAMP" ? "Bootcamp" : "Modul";
 
@@ -183,7 +240,7 @@ export default function Products() {
         "ID", "Judul", "Kategori", "Harga Asli", "Harga Setelah Diskon",
         "Diskon (%)", "Status", "Terjual",
       ];
-      const rows = allProducts.map((item) => [
+      const rows = filtered.map((item) => [
         `${item.type.slice(0, 2)}${String(item.id).slice(-4)}`,
         item.title,
         typeLabel(item.type),
@@ -253,14 +310,98 @@ export default function Products() {
         ? p.is_active
         : !p.is_active);
 
-    return matchCategory && matchStatus;
+    const query = searchQuery.trim().toLowerCase();
+    const matchSearch = !query || (p.title || "").toLowerCase().includes(query);
+
+    return matchCategory && matchStatus && matchSearch;
   });
 
   const renderCategorySpecificFields = (data, setData, category) => {
     if (category === "Mentoring") {
       return (
-        <div className="flex gap-4 w-full">
-          <div className="flex flex-col gap-2 flex-1">
+        <div className="flex flex-col gap-4 w-full">
+          <div className="flex gap-4 w-full">
+            <div className="flex flex-col gap-2 flex-1">
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Jumlah Sesi
+              </p>
+              <input
+                type="number"
+                min="1"
+                value={data.session_count}
+                onChange={(e) =>
+                  setData((prev) => ({
+                    ...prev,
+                    session_count: e.target.value,
+                  }))
+                }
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              />
+              <p className="text-[#94A3B8] text-[11px]">
+                Sesi pertama dipilih user pas checkout, sisanya dipilih sendiri dari
+                halaman Produk Saya setelah pembayaran dikonfirmasi.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 flex-1">
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Durasi per Sesi (menit)
+              </p>
+              <input
+                type="number"
+                min="1"
+                value={data.duration_minutes}
+                onChange={(e) =>
+                  setData((prev) => ({
+                    ...prev,
+                    duration_minutes: e.target.value,
+                  }))
+                }
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 w-full">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Kategori Keahlian
+            </p>
+            <p className="text-[#94A3B8] text-[11px] -mt-1">
+              Menentukan mentor mana saja yang dapat dipilih pembeli produk ini (harus sesuai dengan keahlian mentor). Kosongkan jika belum ingin dibatasi.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {expertiseOptions.map((opt) => {
+                const isSelected = data.expertise.includes(opt.id);
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() =>
+                      setData((prev) => ({
+                        ...prev,
+                        expertise: isSelected
+                          ? prev.expertise.filter((x) => x !== opt.id)
+                          : [...prev.expertise, opt.id],
+                      }))
+                    }
+                    className={`px-3.5 py-2 rounded-[8px] text-[12.5px] font-medium border transition-colors ${
+                      isSelected
+                        ? "bg-[#148F89]/10 border-[#148F89] text-[#148F89]"
+                        : "bg-[#F8FAFC] border-[#E2E8F0] text-[#64748B] hover:border-[#94A3B8]"
+                    }`}
+                  >
+                    {opt.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (category === "Bootcamp") {
+      return (
+        <div className="flex flex-col gap-4 w-full">
+          <div className="flex flex-col gap-2 w-full">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
               Jumlah Sesi
             </p>
@@ -277,44 +418,115 @@ export default function Products() {
               className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
             <p className="text-[#94A3B8] text-[11px]">
-              Sesi pertama dipilih user pas checkout, sisanya dipilih sendiri dari
-              halaman Produk Saya setelah pembayaran dikonfirmasi.
+              Sistem otomatis menyiapkan slot sesi kosong sejumlah ini di Kelola
+              Pesanan Bootcamp, tinggal diisi tanggal, mentor, dan tautannya. Jika
+              angkanya dinaikkan saat mengedit, slot baru akan ditambahkan; jika
+              diturunkan, slot yang sudah ada tidak ikut terhapus.
             </p>
           </div>
-          <div className="flex flex-col gap-2 flex-1">
+
+          <div className="flex flex-col gap-2 w-full">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-              Durasi per Sesi (menit)
+              Link Grup Komunitas (WhatsApp)
             </p>
             <input
-              type="number"
-              min="1"
-              value={data.duration_minutes}
+              type="url"
+              placeholder="https://chat.whatsapp.com/..."
+              value={data.community_link}
               onChange={(e) =>
                 setData((prev) => ({
                   ...prev,
-                  duration_minutes: e.target.value,
+                  community_link: e.target.value,
                 }))
               }
               className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
             />
+            <p className="text-[#94A3B8] text-[11px]">
+              Ditampilkan sebagai ajakan gabung begitu peserta submit pembayaran
+              (gak perlu nunggu ACC admin), dan di halaman detail bootcamp mereka
+              di Produk Saya. Kosongkan kalau belum ada grupnya -- ajakannya
+              otomatis gak muncul.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2 w-full">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Deskripsi Setelah Dibeli (opsional)
+            </p>
+            <textarea
+              rows={4}
+              placeholder="Kosongkan buat pakai deskripsi publik yang sama seperti di /produk"
+              value={data.owned_description}
+              onChange={(e) =>
+                setData((prev) => ({
+                  ...prev,
+                  owned_description: e.target.value,
+                }))
+              }
+              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3 outline-none focus:border-[#148F89] transition-all text-[#1E293B] resize-none"
+            />
+            <p className="text-[#94A3B8] text-[11px]">
+              Ditampilkan ke peserta yang SUDAH BELI, menggantikan deskripsi
+              publik di halaman detail bootcamp mereka di Produk Saya -- bisa
+              beda dari deskripsi katalog /produk. Kosongkan buat pakai deskripsi
+              publik yang sama seperti sekarang.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2 w-full">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Teks Ajakan Gabung Grup (opsional)
+            </p>
+            <textarea
+              rows={3}
+              placeholder="Kosongkan buat pakai teks bawaan"
+              value={data.community_message}
+              onChange={(e) =>
+                setData((prev) => ({
+                  ...prev,
+                  community_message: e.target.value,
+                }))
+              }
+              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 py-3 outline-none focus:border-[#148F89] transition-all text-[#1E293B] resize-none"
+            />
+            <p className="text-[#94A3B8] text-[11px]">
+              Teks yang tampil berdampingan dengan tombol gabung grup WhatsApp
+              (di kartu setelah submit pembayaran, dan di halaman Produk Saya).
+              Kosongkan buat pakai teks bawaan.
+            </p>
           </div>
         </div>
       );
     }
     if (category === "Modul") {
+      // ModuleProduct.file_pdf_url itu URLField (link), BUKAN FileField --
+      // sebelumnya di sini cuma <div> hiasan bergaya dropzone, gak ada
+      // <input>/state sama sekali, jadi formData.file_pdf_url SELALU ""
+      // dan submit produk Modul SELALU gagal (field itu wajib di backend).
+      // Disamakan gayanya sama input URL lain di form ini (Link Grup
+      // Komunitas dst) -- tempel link PDF (mis. Google Drive/S3), bukan
+      // upload file langsung.
       return (
         <div className="flex flex-col gap-2">
           <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
-            File PDF Utama
+            Link File PDF Utama
           </p>
-          <div
-            style={{ height: "100px" }}
-            className="bg-[#F8FAFC] w-full rounded-[8px] flex items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:bg-[#F1F5F9] transition-all cursor-pointer"
-          >
-            <p className="text-[#64748B] text-[13px]">
-              Klik untuk unggah PDF materi utama
-            </p>
-          </div>
+          <input
+            type="url"
+            placeholder="https://drive.google.com/... atau link PDF lainnya"
+            value={data.file_pdf_url}
+            onChange={(e) =>
+              setData((prev) => ({
+                ...prev,
+                file_pdf_url: e.target.value,
+              }))
+            }
+            className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+          />
+          <p className="text-[#94A3B8] text-[11px]">
+            Link ke file PDF materi utama modul ini -- wajib diisi, peserta yang
+            sudah beli bakal diarahkan ke sini buat baca/unduh materinya.
+          </p>
         </div>
       );
     }
@@ -336,6 +548,7 @@ export default function Products() {
         session_count: Number(formData.session_count) || 1,
         duration_minutes: Number(formData.duration_minutes) || 60,
         stock: formData.stock === "" ? null : Number(formData.stock),
+        image_key: addImage.key || undefined,
       };
 
       const res = await api.post("/api/products/add/", payload);
@@ -346,10 +559,7 @@ export default function Products() {
 
       showToast("success", "Produk diterbitkan", successMessage);
       setIsAddOpen(false);
-
-      const data = await api.get(`/api/products/?page=${currentPage}&page_size=10&include_inactive=true`);
-      setProducts(data.products ?? []);
-      setPagination(data.pagination ?? null);
+      await fetchProducts();
     } catch (err) {
       console.error(err);
       setAddFieldErrors(extractFieldErrors(err));
@@ -385,6 +595,7 @@ export default function Products() {
         stock:
           editFormData.stock === "" ? null : Number(editFormData.stock),
         is_active: editFormData.is_active,
+        image_key: editImage.key || undefined,
       };
 
       const res = await api.patch(
@@ -399,12 +610,7 @@ export default function Products() {
 
       showToast("success", "Produk diperbarui", successMessage);
       setIsEditOpen(false);
-
-      const data = await api.get(
-        `/api/products/?page=${currentPage}&page_size=10&include_inactive=true`
-      );
-      setProducts(data.products ?? []);
-      setPagination(data.pagination ?? null);
+      await fetchProducts();
     } catch (err) {
       console.error(err);
       setEditFieldErrors(extractFieldErrors(err));
@@ -419,8 +625,10 @@ export default function Products() {
   };
 
   return (
-    <DashboardLayout title="Produk">
+    <>
       <style>{heightFix}</style>
+
+      <PromoPopupPanel />
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
@@ -433,7 +641,10 @@ export default function Products() {
           </p>
         </div>
         <button
-          onClick={() => setIsAddOpen(true)}
+          onClick={() => {
+            setAddImage({ key: "", preview: "", uploading: false });
+            setIsAddOpen(true);
+          }}
           className="adm-h-42 flex items-center gap-2 px-5 rounded-[8px] bg-[#148F89] text-white text-[13px] font-semibold hover:bg-[#117A75] transition-colors"
         >
           <Plus size={16} />
@@ -441,7 +652,7 @@ export default function Products() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
         <StatCard
           label="Mentoring Terjual"
           value={
@@ -575,6 +786,8 @@ export default function Products() {
               />
               <input
                 type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari di tabel..."
                 className="bg-white adm-w-220 adm-h-42 rounded-[8px] pl-9 border border-[#E2E8F0] outline-none focus:border-[#148F89] text-[13px]"
               />
@@ -615,7 +828,7 @@ export default function Products() {
         {loadingProducts ? (
           <EmptyState message="Memuat produk..." />
         ) : filtered.length === 0 ? (
-          <EmptyState message="Nggak ada produk yang cocok sama filter ini." />
+          <EmptyState message="Tidak ada produk yang sesuai dengan filter ini." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
             <div className="overflow-x-auto">
@@ -727,9 +940,18 @@ export default function Products() {
                                 discount_percent: item.discount_percent ?? "",
                                 session_count: item.session_count ?? 1,
                                 duration_minutes: item.duration_minutes ?? 60,
+                                registration_link: item.registration_link ?? "",
+                                image_url: item.image_url ?? "",
+                                file_pdf_url: item.file_pdf_url ?? "",
                                 stock: item.stock ?? "",
                                 is_active: item.is_active,
+                                payment_gateway_mode: item.payment_gateway_mode ?? "AUTO",
+                                expertise: item.expertise ?? [],
+                                community_link: item.community_link ?? "",
+                                owned_description: item.owned_description ?? "",
+                                community_message: item.community_message ?? "",
                               });
+                              setEditImage({ key: "", preview: item.image_url || "", uploading: false });
                               setIsEditOpen(true);
                             }}
                             className="cursor-pointer text-[#94A3B8] hover:text-[#148F89] transition-colors"
@@ -740,31 +962,6 @@ export default function Products() {
                   ))}
                 </tbody>
               </table>
-              {pagination && (
-                <div className="flex items-center justify-between px-6 py-4 border-t border-[#E2E8F0] bg-white">
-                  <p className="text-sm text-[#64748B]">
-                    Halaman {pagination.page} dari {pagination.total_pages}
-                  </p>
-
-                  <div className="flex gap-2">
-                    <button
-                      disabled={!pagination.has_previous}
-                      onClick={() => setCurrentPage((p) => p - 1)}
-                      className="px-4 py-2 border rounded disabled:opacity-40"
-                    >
-                      Sebelumnya
-                    </button>
-
-                    <button
-                      disabled={!pagination.has_next}
-                      onClick={() => setCurrentPage((p) => p + 1)}
-                      className="px-4 py-2 border rounded disabled:opacity-40"
-                    >
-                      Berikutnya
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -800,16 +997,28 @@ export default function Products() {
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
               Thumbnail Produk
             </p>
-            <div
+            <label
               style={{ height: "160px" }}
-              className="bg-[#F8FAFC] w-full rounded-[8px] flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:bg-[#F1F5F9] transition-all cursor-pointer"
+              className="relative bg-[#F8FAFC] w-full rounded-[8px] flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:bg-[#F1F5F9] transition-all cursor-pointer overflow-hidden"
             >
-              <CloudUpload size={22} className="text-[#148F89] mb-2" />
-              <p className="text-[#1E293B] font-semibold text-[14px]">
-                Klik untuk unggah gambar
-              </p>
-              <p className="text-[#94A3B8] text-[12px]">Maks. 5MB</p>
-            </div>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => uploadProductImage(e.target.files?.[0], setAddImage)}
+              />
+              {addImage.preview ? (
+                <img src={addImage.preview} alt="Preview" className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <>
+                  <CloudUpload size={22} className="text-[#148F89] mb-2" />
+                  <p className="text-[#1E293B] font-semibold text-[14px]">
+                    {addImage.uploading ? "Mengunggah..." : "Klik untuk unggah gambar"}
+                  </p>
+                  <p className="text-[#94A3B8] text-[12px]">JPG/PNG/WEBP, maks. 5MB &mdash; otomatis dikompresi agar lebih cepat dimuat</p>
+                </>
+              )}
+            </label>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -1018,6 +1227,34 @@ export default function Products() {
         <div className="px-8 py-6 flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Thumbnail Produk
+            </p>
+            <label
+              style={{ height: "160px" }}
+              className="relative bg-[#F8FAFC] w-full rounded-[8px] flex flex-col items-center justify-center border-2 border-dashed border-[#CBD5E1] hover:bg-[#F1F5F9] transition-all cursor-pointer overflow-hidden"
+            >
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => uploadProductImage(e.target.files?.[0], setEditImage)}
+              />
+              {editImage.preview ? (
+                <img src={editImage.preview} alt="Preview" className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <>
+                  <CloudUpload size={22} className="text-[#148F89] mb-2" />
+                  <p className="text-[#1E293B] font-semibold text-[14px]">
+                    {editImage.uploading ? "Mengunggah..." : "Klik untuk ganti gambar"}
+                  </p>
+                  <p className="text-[#94A3B8] text-[12px]">JPG/PNG/WEBP, maks. 5MB &mdash; otomatis dikompresi agar lebih cepat dimuat</p>
+                </>
+              )}
+            </label>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
               Judul
             </p>
             <input
@@ -1183,6 +1420,36 @@ export default function Products() {
               />
             </div>
           </div>
+
+          <div className="flex flex-col gap-2">
+            <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+              Metode Pembayaran
+            </p>
+            <div className="relative w-full">
+              <select
+                value={editFormData.payment_gateway_mode || "AUTO"}
+                onChange={(e) =>
+                  setEditFormData((prev) => ({
+                    ...prev,
+                    payment_gateway_mode: e.target.value,
+                  }))
+                }
+                className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+              >
+                <option value="AUTO">Otomatis (ikut pengaturan iPaymu)</option>
+                <option value="MANUAL_ONLY">Selalu Transfer Manual</option>
+              </select>
+              <ChevronDown
+                size={18}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none"
+              />
+            </div>
+            <p className="text-[#94A3B8] text-[11px]">
+              &quot;Otomatis&quot; ikut saklar iPaymu di menu Transaksi -- pembeli lihat QRIS kalau
+              iPaymu lagi aktif, otomatis balik ke manual kalau iPaymu mati. &quot;Selalu Transfer
+              Manual&quot; memaksa produk ini tetap manual apa pun kondisi iPaymu-nya.
+            </p>
+          </div>
         </div>
 
         <div className="mt-auto p-6 bg-white border-t border-[#E2E8F0] flex gap-3">
@@ -1345,6 +1612,24 @@ export default function Products() {
               )}
             </div>
 
+            {viewProduct.expertise_names?.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                  Kategori Keahlian
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {viewProduct.expertise_names.map((name, idx) => (
+                    <span
+                      key={idx}
+                      className="px-3 py-1.5 rounded-full text-[12px] font-medium bg-[#148F89]/10 text-[#148F89] border border-[#148F89]/20"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {viewProduct.highlights?.length > 0 && (
               <div className="flex flex-col gap-2">
                 <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
@@ -1390,9 +1675,18 @@ export default function Products() {
                 discount_percent: viewProduct.discount_percent ?? "",
                 session_count: viewProduct.session_count ?? 1,
                 duration_minutes: viewProduct.duration_minutes ?? 60,
+                registration_link: viewProduct.registration_link ?? "",
+                image_url: viewProduct.image_url ?? "",
+                file_pdf_url: viewProduct.file_pdf_url ?? "",
                 stock: viewProduct.stock ?? "",
                 is_active: viewProduct.is_active,
+                payment_gateway_mode: viewProduct.payment_gateway_mode ?? "AUTO",
+                expertise: viewProduct.expertise ?? [],
+                community_link: viewProduct.community_link ?? "",
+                owned_description: viewProduct.owned_description ?? "",
+                community_message: viewProduct.community_message ?? "",
               });
+              setEditImage({ key: "", preview: viewProduct.image_url || "", uploading: false });
               setIsEditOpen(true);
             }}
             className="flex-1 py-3 bg-[#148F89] text-white font-bold rounded-[8px] hover:bg-[#117A75] transition-colors"
@@ -1401,6 +1695,6 @@ export default function Products() {
           </button>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

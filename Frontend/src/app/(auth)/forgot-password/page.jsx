@@ -103,7 +103,7 @@ export default function ForgotPassword() {
                   Cek Email Kamu
                 </p>
                 <p className="text-[13px] text-[#9CA3AF] leading-relaxed">
-                  Kami udah kirim link reset password ke{" "}
+                  Kami sudah mengirim tautan atur ulang kata sandi ke{" "}
                   <span className="text-white font-medium">{email}</span>. Link
                   ini berlaku selama 30 menit.
                 </p>

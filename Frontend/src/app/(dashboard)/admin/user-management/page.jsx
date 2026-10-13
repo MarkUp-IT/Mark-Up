@@ -3,7 +3,6 @@
 import { Search, ChevronDown, PenLine, Eye, X } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
@@ -16,6 +15,14 @@ const ROLE_BADGE = {
   STUDENT: "bg-[#DBEAFE] text-[#1D4ED8] border-[#BFDBFE]",
 };
 const ROLE_LABEL = { ADMIN: "Admin", MENTOR: "Mentor", STUDENT: "User" };
+
+// Status sebagai MENTOR -- terpisah dari status akun. Lihat
+// MentorProfile.mentor_status di backend.
+const MENTOR_STATUS = {
+  ACTIVE: { label: "MENTOR AKTIF", cls: "bg-[#CCFBF1] text-[#0F766E]" },
+  INCOMPLETE: { label: "DATA BELUM LENGKAP", cls: "bg-[#FEF3C7] text-[#92400E]" },
+  DISABLED: { label: "MENTOR NONAKTIF", cls: "bg-[#F1F5F9] text-[#475569]" },
+};
 
 function formatDate(dateStr) {
   if (!dateStr) return "-";
@@ -31,10 +38,13 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("Semua Role");
+  const [mentorStatusFilter, setMentorStatusFilter] = useState("ALL");
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [formRole, setFormRole] = useState("STUDENT");
   const [formStatus, setFormStatus] = useState("ACTIVE");
+  const [formFeeOverride, setFormFeeOverride] = useState("");
+  const [formMentorActive, setFormMentorActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const fetchUsers = useCallback(async () => {
@@ -68,15 +78,24 @@ export default function UserManagement() {
     setSelectedUser(item);
     setFormRole(item.role);
     setFormStatus(item.status);
+    const override = item.mentoring_fee_percent_override;
+    setFormFeeOverride(override === null || override === undefined ? "" : String(override));
+    setFormMentorActive(item.is_mentor_active ?? true);
     setIsEditOpen(true);
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const body = { role: formRole, status: formStatus };
+      if (formRole === "MENTOR") {
+        body.mentoring_fee_percent_override =
+          formFeeOverride === "" ? null : Number(formFeeOverride);
+        body.is_mentor_active = formMentorActive;
+      }
       await apiRequest(`/api/accounts/users/${selectedUser.id}/update/`, {
         method: "PATCH",
-        body: { role: formRole, status: formStatus },
+        body,
       });
       setIsEditOpen(false);
       fetchUsers();
@@ -93,9 +112,15 @@ export default function UserManagement() {
   const totalUsers = users.length;
   const totalStudents = users.filter((u) => u.role === "STUDENT").length;
   const totalMentors = users.filter((u) => u.role === "MENTOR").length;
+  const totalMentorAktif = users.filter((u) => u.role === "MENTOR" && u.mentor_status === "ACTIVE").length;
+
+  const shownUsers =
+    mentorStatusFilter === "ALL"
+      ? users
+      : users.filter((u) => u.role === "MENTOR" && u.mentor_status === mentorStatusFilter);
 
   return (
-    <DashboardLayout title="Manajemen User">
+    <>
       <style>{heightFix}</style>
 
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -117,10 +142,10 @@ export default function UserManagement() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
         <StatCard label="Total User" value={totalUsers} unit="akun" />
         <StatCard label="User Biasa" value={totalStudents} unit="akun" />
-        <StatCard label="Mentor" value={totalMentors} unit="akun" variant="primary" />
+        <StatCard label="Mentor Aktif" value={`${totalMentorAktif}/${totalMentors}`} unit="mentor" variant="primary" />
       </div>
 
       <div className="flex flex-col gap-4">
@@ -139,10 +164,24 @@ export default function UserManagement() {
             </select>
             <ChevronDown size={14} className="absolute right-3 text-[#64748B] pointer-events-none" />
           </div>
+          <div className="relative flex items-center">
+            <span className="text-[#64748B] text-[13px] mr-2">Status Mentor:</span>
+            <select
+              value={mentorStatusFilter}
+              onChange={(e) => setMentorStatusFilter(e.target.value)}
+              className="adm-h-42 pl-3 pr-8 bg-white border border-[#E2E8F0] rounded-[8px] text-[13px] font-semibold text-[#1E293B] appearance-none outline-none cursor-pointer"
+            >
+              <option value="ALL">Semua</option>
+              <option value="ACTIVE">Mentor Aktif</option>
+              <option value="INCOMPLETE">Data Belum Lengkap</option>
+              <option value="DISABLED">Dinonaktifkan Admin</option>
+            </select>
+            <ChevronDown size={14} className="absolute right-3 text-[#64748B] pointer-events-none" />
+          </div>
         </div>
 
-        {!loading && users.length === 0 ? (
-          <EmptyState message="Nggak ada user yang cocok sama filter ini." />
+        {!loading && shownUsers.length === 0 ? (
+          <EmptyState message="Tidak ada pengguna yang sesuai dengan filter ini." />
         ) : (
           <div className="rounded-[12px] overflow-hidden border border-[#E2E8F0] shadow-sm">
             <div className="overflow-x-auto">
@@ -157,7 +196,7 @@ export default function UserManagement() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0] bg-white">
-                  {users.map((item) => (
+                  {shownUsers.map((item) => (
                     <tr key={item.id} className="hover:bg-[#F8FAFC] transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -165,13 +204,11 @@ export default function UserManagement() {
                             style={{ width: "38px", height: "38px" }}
                             className="rounded-full overflow-hidden border border-[#E2E8F0] shrink-0 bg-[#F1F5F9]"
                           >
-                            {item.profile_image && (
-                              <img
-                                src={item.profile_image}
-                                alt={item.fullname}
-                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                              />
-                            )}
+                            <img
+                              src={item.profile_image || "/images/default-avatar.svg"}
+                              alt={item.fullname}
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            />
                           </div>
                           <div className="flex flex-col">
                             <span className="font-bold text-[#1E293B] text-[13.5px]">{item.fullname}</span>
@@ -188,11 +225,26 @@ export default function UserManagement() {
                         <p className="font-semibold text-[#1E293B] text-[12.5px]">{formatDate(item.created_at)}</p>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <span
-                          className={`inline-flex px-3 py-1 text-[11px] rounded-full font-bold ${item.status === "ACTIVE" ? "bg-[#DCFCE7] text-[#166534]" : "bg-[#FEE2E2] text-[#991B1B]"}`}
-                        >
-                          {item.status === "ACTIVE" ? "AKTIF" : "NONAKTIF"}
-                        </span>
+                        <div className="flex flex-col items-center gap-1.5">
+                          <span
+                            title="Status akun (bisa login atau tidak)"
+                            className={`inline-flex px-3 py-1 text-[11px] rounded-full font-bold whitespace-nowrap ${item.status === "ACTIVE" ? "bg-[#DCFCE7] text-[#166534]" : "bg-[#FEE2E2] text-[#991B1B]"}`}
+                          >
+                            {item.status === "ACTIVE" ? "AKUN AKTIF" : "AKUN NONAKTIF"}
+                          </span>
+                          {item.role === "MENTOR" && MENTOR_STATUS[item.mentor_status] && (
+                            <span
+                              title={
+                                item.mentor_status === "INCOMPLETE"
+                                  ? `Belum diisi: ${(item.mentor_missing_fields || []).map((f) => f.label).join(", ")}`
+                                  : "Status sebagai mentor (tampil di halaman Mentor & bisa dipesan)"
+                              }
+                              className={`inline-flex px-3 py-1 text-[10.5px] rounded-full font-bold whitespace-nowrap ${MENTOR_STATUS[item.mentor_status].cls}`}
+                            >
+                              {MENTOR_STATUS[item.mentor_status].label}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex items-center justify-center gap-3">
@@ -229,7 +281,7 @@ export default function UserManagement() {
               <X className="text-[#64748B]" size={20} />
             </button>
           </div>
-          <p className="text-[#64748B] text-[13px]">Atur ulang level akses dan status akun.</p>
+          <p className="text-[#64748B] text-[13px]">Atur ulang level akses, status akun, dan status mentor.</p>
         </div>
 
         <div className="px-8 py-6 flex flex-col gap-5">
@@ -238,13 +290,11 @@ export default function UserManagement() {
               style={{ width: "56px", height: "56px" }}
               className="rounded-full overflow-hidden border border-[#E2E8F0] shrink-0 bg-white"
             >
-              {selectedUser?.profile_image && (
-                <img
-                  src={selectedUser.profile_image}
-                  alt="avatar"
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
-              )}
+              <img
+                src={selectedUser?.profile_image || "/images/default-avatar.svg"}
+                alt="avatar"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-[#1E293B] text-[15px]">{selectedUser?.fullname}</span>
@@ -267,11 +317,75 @@ export default function UserManagement() {
               <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none" />
             </div>
             <p className="text-[#94A3B8] text-[11px] leading-relaxed">
-              Semua orang daftar sebagai User biasa. Naikin ke Mentor kalau udah
-              lolos seleksi jadi pemateri (lengkapin profil mentor-nya
-              belakangan lewat halaman Mentor).
+              Semua orang mendaftar sebagai User biasa. Naikkan menjadi Mentor
+              jika sudah lolos seleksi sebagai pemateri (profil mentor dapat
+              dilengkapi kemudian melalui halaman Mentor).
             </p>
           </div>
+
+          {formRole === "MENTOR" && (
+            <div className="flex flex-col gap-2">
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">
+                Komisi Mentoring Khusus
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="Default"
+                  value={formFeeOverride}
+                  onChange={(e) => setFormFeeOverride(e.target.value)}
+                  style={{ width: "100px" }}
+                  className="adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                />
+                <span className="text-[#64748B] text-[13px] font-medium">% untuk mentor ini</span>
+              </div>
+              <p className="text-[#94A3B8] text-[11px] leading-relaxed">
+                Kosongkan buat pakai persentase komisi global (diatur di halaman
+                Pencairan Mentor).
+              </p>
+            </div>
+          )}
+
+          {formRole === "MENTOR" && (
+            <div className="flex flex-col gap-2">
+              <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Status Mentor</p>
+              <div className="relative w-full">
+                <select
+                  value={formMentorActive ? "ON" : "OFF"}
+                  onChange={(e) => setFormMentorActive(e.target.value === "ON")}
+                  className="w-full adm-h-48 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-4 pr-10 appearance-none outline-none focus:border-[#148F89] transition-all text-[#1E293B]"
+                >
+                  <option value="ON">Aktif sebagai mentor</option>
+                  <option value="OFF">Nonaktifkan sebagai mentor</option>
+                </select>
+                <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none" />
+              </div>
+              {!formMentorActive ? (
+                <p className="text-[#94A3B8] text-[11px] leading-relaxed">
+                  Profilnya disembunyikan dari halaman Mentor dan tidak bisa dipesan pembeli baru. Akunnya tetap
+                  bisa login, dan sesi yang sudah terjadwal tetap berjalan.
+                </p>
+              ) : selectedUser?.role === "MENTOR" && (selectedUser?.mentor_missing_fields || []).length > 0 ? (
+                <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-[8px] p-3 flex flex-col gap-1">
+                  <p className="text-[#92400E] text-[12px] font-semibold">
+                    Belum tampil &amp; belum bisa dipesan, data mentor belum lengkap:
+                  </p>
+                  <p className="text-[#92400E] text-[12px]">
+                    {selectedUser.mentor_missing_fields.map((f) => f.label).join(", ")}
+                  </p>
+                  <p className="text-[#B45309] text-[11px]">
+                    Otomatis aktif begitu mentor melengkapi data ini di halaman Pengaturan-nya.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[#94A3B8] text-[11px] leading-relaxed">
+                  Mentor dengan data lengkap otomatis tampil di halaman Mentor dan bisa dipesan.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <p className="text-[#64748B] text-[12px] uppercase font-bold tracking-wider">Status Akun</p>
@@ -286,6 +400,9 @@ export default function UserManagement() {
               </select>
               <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none" />
             </div>
+            <p className="text-[#94A3B8] text-[11px] leading-relaxed">
+              Akun nonaktif tidak bisa login sama sekali.
+            </p>
           </div>
         </div>
 
@@ -305,6 +422,6 @@ export default function UserManagement() {
           </button>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

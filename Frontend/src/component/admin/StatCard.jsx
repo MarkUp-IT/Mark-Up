@@ -33,21 +33,29 @@ const VARIANTS = {
 // satu komponen ini yang nentuin tinggi/padding/ukuran font, bukan
 // masing-masing halaman nulis ulang style-nya sendiri (itu penyebab
 // ukurannya kemarin nggak konsisten).
-export default function StatCard({ label, value, unit, variant = "default" }) {
+export default function StatCard({ label, value, unit, variant = "default", loading = false }) {
   const v = VARIANTS[variant] || VARIANTS.default;
 
   return (
     <div
-      style={{ height: "128px" }}
-      className={`rounded-[12px] border shadow-sm px-6 flex flex-col justify-center gap-1.5 ${v.bg} ${v.border}`}
+      className={`h-[96px] sm:h-[128px] min-w-0 rounded-[12px] border shadow-sm px-5 sm:px-6 flex flex-col justify-center gap-1.5 ${v.bg} ${v.border}`}
     >
       <p className={`font-bold text-[12px] tracking-wide uppercase ${v.label}`}>
         {label}
       </p>
       <div className="flex items-baseline gap-2">
-        <p className={`font-bold text-[28px] leading-none ${v.value}`}>{value}</p>
-        {unit && (
-          <span className={`text-[13px] font-medium ${v.unit}`}>{unit}</span>
+        {loading ? (
+          // Skeleton -- biar nggak sempet kebaca "0" pas data asli masih
+          // di-fetch (nilai awal state array kosong = 0, padahal bukan
+          // beneran kosong, cuma belum selesai dimuat).
+          <div className="h-[28px] w-14 rounded-md bg-current opacity-10 animate-pulse" />
+        ) : (
+          <>
+            <p className={`font-bold text-[24px] sm:text-[28px] leading-none ${v.value}`}>{value}</p>
+            {unit && (
+              <span className={`text-[13px] font-medium ${v.unit}`}>{unit}</span>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -1,23 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Navbar from "@/component/Navbar";
+import { useState, useEffect, useMemo } from "react";
 import Footer from "@/component/Footer";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { SearchX, Loader2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
-
-
-const categories = [
-  "Semua",
-  "Business Case",
-  "Business Plan",
-  "Debat",
-  "LKTI",
-  "UI/UX",
-  "Hackathon",
-];
 
 // Token card konten, disamakan persis dengan yang dipakai di Homepage:
 // radius kecil (6->8px), hover cuma ganti warna border, tanpa transform apapun.
@@ -36,6 +24,16 @@ export default function InfoLombaPage() {
   const [error, setError] = useState(null);
 
   const shouldReduceMotion = useReducedMotion();
+
+  // Kategori filter ngikutin data lomba yang beneran diinput admin -- bukan
+  // list statis, biar konsisten sama apa yang ada (kalau admin belum input
+  // lomba sama sekali, filternya kosong juga).
+  const categories = useMemo(() => {
+    const unique = Array.from(
+      new Set(lombaData.map((lomba) => lomba.category).filter(Boolean)),
+    ).sort();
+    return ["Semua", ...unique];
+  }, [lombaData]);
 
   // Filter Logic
   const filteredLomba = lombaData.filter((lomba) => {
@@ -79,7 +77,13 @@ export default function InfoLombaPage() {
     async function fetchCompetitions() {
       try {
         setLoading(true);
-        const json = await api.get("/api/programs/?all=true", {
+        // get_competitions gak kenal "all=true" (bukan param yang
+        // dicek backend) -- selalu kepaginasi page_size=12 diam-diam,
+        // jadi lomba ke-13 dst gak pernah kelihatan siapa pun & halaman
+        // ini gak punya UI paginasi buat lanjut ke halaman 2. Dipakai
+        // page_size besar, sama seperti pola yang sudah kepake di
+        // admin/competitions/page.jsx.
+        const json = await api.get("/api/programs/?page_size=200", {
           auth: false,
         });
         const mapped = (json.competitions || []).map(mapApiCompetition);
@@ -117,7 +121,6 @@ export default function InfoLombaPage() {
         />
       </div>
 
-      <Navbar />
 
       <div className="main-content flex flex-col items-center mt-28 md:mt-36 mb-24 relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6">
         {/* HERO SECTION */}
@@ -163,7 +166,9 @@ export default function InfoLombaPage() {
           />
         </div>
 
-        {/* CATEGORY FILTERS */}
+        {/* CATEGORY FILTERS -- disembunyiin kalau belum ada variasi kategori
+            buat difilter (cuma "Semua" doang) */}
+        {categories.length > 1 && (
         <div className="flex flex-wrap justify-center gap-3 mb-10 w-full max-w-[800px]">
           {categories.map((cat, index) => (
             <button
@@ -179,8 +184,9 @@ export default function InfoLombaPage() {
             </button>
           ))}
         </div>
+        )}
 
-        {/* COUNTER */}
+        {/* COUNTER + GRID LOMBA */}
         {loading ? (
           <div className="w-full max-w-[1050px] flex flex-col items-center justify-center gap-3 text-center py-16">
             <Loader2 className="animate-spin text-[#A19DAB]" size={28} />
@@ -196,23 +202,9 @@ export default function InfoLombaPage() {
             <p className="text-[#A19DAB] text-sm max-w-[320px]">
               {searchQuery
                 ? `Lomba dengan kata kunci "${searchQuery}" tidak ditemukan.`
-                : `Belum ada lomba untuk kategori "${activeCategory}".`}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-[1050px]">
-            {/* ...kode grid yang sudah ada, tidak berubah... */}
-          </div>
-        )}
-
-        {/* GRID LOMBA */}
-        {filteredLomba.length === 0 ? (
-          <div className="w-full max-w-[1050px] flex flex-col items-center justify-center gap-3 text-center py-16 px-6 border border-dashed border-[#3A3545] rounded-md md:rounded-lg bg-[#1A1625]/40">
-            <SearchX size={32} className="text-[#A19DAB]" />
-            <p className="text-[#A19DAB] text-sm max-w-[320px]">
-              {searchQuery
-                ? `Lomba dengan kata kunci "${searchQuery}" tidak ditemukan.`
-                : `Belum ada lomba untuk kategori "${activeCategory}".`}
+                : activeCategory === "Semua"
+                  ? "Belum ada lomba yang tersedia saat ini."
+                  : `Belum ada lomba untuk kategori "${activeCategory}".`}
             </p>
           </div>
         ) : (
@@ -238,6 +230,8 @@ export default function InfoLombaPage() {
                         src={lomba.image}
                         alt={`Poster ${lomba.title}`}
                         className="w-full h-full object-cover"
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-[#4A2CA1] to-[#17A9D4]"></div>
@@ -329,7 +323,7 @@ export default function InfoLombaPage() {
             <motion.div
               {...modalMotion}
               onClick={(e) => e.stopPropagation()} // Mencegah modal ketutup pas isi modal diklik
-              className="bg-[#1A1625] w-full max-w-[800px] rounded-md md:rounded-lg border border-white/10 overflow-hidden flex flex-col md:flex-row shadow-2xl relative"
+              className="bg-[#1A1625] w-full max-w-[800px] max-h-[90vh] rounded-md md:rounded-lg border border-white/10 overflow-hidden flex flex-col md:flex-row shadow-2xl relative"
             >
               {/* Tombol Close */}
               <button
@@ -341,7 +335,7 @@ export default function InfoLombaPage() {
               </button>
 
               {/* Kiri: Gambar Modal */}
-              <div className="w-full md:w-[45%] h-[200px] md:h-auto bg-gray-900 relative">
+              <div className="w-full md:w-[45%] h-[200px] md:h-auto bg-gray-900 relative shrink-0">
                 {selectedLomba.image ? (
                   <img
                     src={selectedLomba.image}
@@ -353,63 +347,82 @@ export default function InfoLombaPage() {
                 )}
               </div>
 
-              {/* Kanan: Detail Info */}
-              <div className="w-full md:w-[55%] p-6 md:p-8 flex flex-col">
-                <div className="bg-[#530D8E] px-3 py-1 rounded-md self-start mb-4">
-                  <p className="text-[10px] font-bold text-white tracking-wider">
-                    {selectedLomba.category}
+              {/* Kanan: Detail Info -- dibatasi tinggi & judul/organizer/grid
+                  info digulir sendiri, supaya judul lomba yang panjang atau
+                  layar pendek gak bikin tombol "Daftar Sekarang" kedorong
+                  keluar layar. */}
+              <div className="w-full md:w-[55%] p-6 md:p-8 flex flex-col max-h-[60vh] md:max-h-[90vh]">
+                <div className="flex-1 overflow-y-auto pr-1">
+                  <div className="bg-[#530D8E] px-3 py-1 rounded-md self-start mb-4">
+                    <p className="text-[10px] font-bold text-white tracking-wider">
+                      {selectedLomba.category}
+                    </p>
+                  </div>
+
+                  <h2 className="font-poppins font-bold text-2xl text-white leading-tight mb-2">
+                    {selectedLomba.title}
+                  </h2>
+                  <p className="text-[#A19DAB] text-xs mb-6">
+                    Penyelenggara: {selectedLomba.organizer}
                   </p>
+
+                  {/* Grid 6 Box Info */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <InfoBox
+                      title="Pelaksanaan"
+                      value={selectedLomba.date}
+                      icon={<CalendarIcon />}
+                    />
+                    <InfoBox
+                      title="Tenggat Pendaftaran"
+                      value={selectedLomba.deadline}
+                      icon={<CalendarIcon />}
+                    />
+                    <InfoBox
+                      title="Biaya"
+                      value={formatRupiah(selectedLomba.fee)}
+                      icon={<WalletIcon />}
+                    />
+                    <InfoBox
+                      title="Hadiah"
+                      value={selectedLomba.prize}
+                      icon={<TrophyIcon />}
+                    />
+                    <InfoBox
+                      title="Tingkat"
+                      value={selectedLomba.level}
+                      icon={<GlobeIcon />}
+                    />
+                    <InfoBox
+                      title="Peserta"
+                      value={selectedLomba.target}
+                      icon={<UserIcon />}
+                    />
+                  </div>
                 </div>
 
-                <h2 className="font-poppins font-bold text-2xl text-white leading-tight mb-2">
-                  {selectedLomba.title}
-                </h2>
-                <p className="text-[#A19DAB] text-xs mb-6">
-                  Penyelenggara: {selectedLomba.organizer}
-                </p>
-
-                {/* Grid 6 Box Info */}
-                <div className="grid grid-cols-2 gap-3 mb-8">
-                  <InfoBox
-                    title="Pelaksanaan"
-                    value={selectedLomba.date}
-                    icon={<CalendarIcon />}
-                  />
-                  <InfoBox
-                    title="Tenggat Pendaftaran"
-                    value={selectedLomba.deadline}
-                    icon={<CalendarIcon />}
-                  />
-                  <InfoBox
-                    title="Biaya"
-                    value={formatRupiah(selectedLomba.fee)}
-                    icon={<WalletIcon />}
-                  />
-                  <InfoBox
-                    title="Hadiah"
-                    value={selectedLomba.prize}
-                    icon={<TrophyIcon />}
-                  />
-                  <InfoBox
-                    title="Tingkat"
-                    value={selectedLomba.level}
-                    icon={<GlobeIcon />}
-                  />
-                  <InfoBox
-                    title="Peserta"
-                    value={selectedLomba.target}
-                    icon={<UserIcon />}
-                  />
-                </div>
-
-                <Link
-                  href={selectedLomba.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`w-full bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold py-3 rounded-full transition-colors mt-auto text-center ${focusRing}`}
-                >
-                  Daftar Sekarang
-                </Link>
+                {/* registration_link opsional di backend (blank=True) --
+                    kalau kosong, jangan render <Link> dgn href kosong/null
+                    (bisa dianggap invalid sama Next.js), tampilin tombol
+                    nonaktif aja daripada link yang nunjuk ke mana pun. */}
+                {selectedLomba.link ? (
+                  <Link
+                    href={selectedLomba.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`w-full bg-[#E5DFFF] hover:bg-white text-[#530D8E] font-bold py-3 rounded-full transition-colors mt-6 shrink-0 text-center ${focusRing}`}
+                  >
+                    Daftar Sekarang
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full bg-[#E5DFFF]/40 text-[#530D8E]/50 font-bold py-3 rounded-full mt-6 shrink-0 text-center cursor-not-allowed"
+                  >
+                    Link Pendaftaran Belum Tersedia
+                  </button>
+                )}
               </div>
             </motion.div>
           </motion.div>
@@ -419,6 +432,13 @@ export default function InfoLombaPage() {
   );
 }
 
+// PENTING: get_competitions (Backend/programs/views.py) ngirim field
+// PENDEK -- date/fee/prize/target/link -- BUKAN event_date/
+// registration_fee/prizepool/target_participant/registration_link
+// (nama-nama itu cuma ada di sisi FORM admin, beda dari response GET
+// publik). Sebelumnya salah baca nama field di sini, jadi hampir semua
+// detail lomba (Pelaksanaan/Biaya/Hadiah/Peserta/tombol Daftar) tampil
+// "-" atau link rusak, walau datanya lengkap di database.
 function mapApiCompetition(item) {
   return {
     id: item.id,
@@ -426,17 +446,17 @@ function mapApiCompetition(item) {
     category: item.category?.name ?? item.category ?? "Lainnya",
     organizer: item.organizer ?? "-",
 
-    date: formatDate(item.event_date),
+    date: formatDate(item.date),
     deadline: formatDate(item.deadline),
 
-    fee: item.registration_fee,
-    prize: formatRupiah(item.prizepool),
+    fee: item.fee,
+    prize: formatRupiah(item.prize),
 
     level: item.level ?? "-",
-    target: item.target_participant ?? "-",
+    target: item.target ?? "-",
 
-    image: item.image_url,
-    link: item.registration_link,
+    image: item.image,
+    link: item.link,
   };
 }
 

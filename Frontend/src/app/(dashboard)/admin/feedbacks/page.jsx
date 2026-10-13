@@ -2,10 +2,10 @@
 
 import { Eye, EyeOff, Star } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
+import { segarkanBadgeSidebar } from "@/lib/sidebarBadges";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
 
@@ -33,12 +33,14 @@ function formatDate(dateStr) {
 export default function Feedbacks() {
   const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [togglingId, setTogglingId] = useState(null);
 
   const fetchReviews = useCallback(async () => {
     setLoading(true);
     try {
       const res = await apiRequest("/api/products/reviews/");
       setFeedbacks(res?.reviews || []);
+      segarkanBadgeSidebar();
     } catch (err) {
       console.error(err);
     } finally {
@@ -51,14 +53,24 @@ export default function Feedbacks() {
   }, [fetchReviews]);
 
   const toggleHidden = async (id) => {
+    // Endpoint-nya TOGGLE (server balik-in nilai is_hidden yang lagi ada,
+    // bukan set ke nilai tertentu) -- kalau tombolnya diklik dobel sebelum
+    // request pertama kelar, dua request itu ikut balikin state dua kali
+    // (net gak berubah), jadi kelihatannya "gak ngefek" padahal server
+    // sebenarnya sempat ngubah dua kali. Guard per-id ini nyegah klik kedua
+    // nyampe server selagi yang pertama masih diproses.
+    if (togglingId === id) return;
+    setTogglingId(id);
     try {
       await apiRequest(`/api/products/reviews/${id}/toggle/`, { method: "PATCH" });
-      fetchReviews();
+      await fetchReviews();
       toast.success("Status Ulasan Diperbarui");
     } catch (err) {
       toast.error("Gagal Mengubah Status Ulasan", {
         description: extractErrorMessage(err, "Terjadi kesalahan."),
       });
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -66,7 +78,7 @@ export default function Feedbacks() {
   const hiddenCount = feedbacks.filter((f) => f.is_hidden).length;
 
   return (
-    <DashboardLayout title="Ulasan">
+    <>
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-bold text-[22px] text-[#0F172A]">Ulasan</h1>
@@ -76,10 +88,10 @@ export default function Feedbacks() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total Ulasan" value={feedbacks.length} unit="ulasan" />
-        <StatCard label="Ulasan Terlihat" value={visibleCount} unit="ulasan" variant="success" />
-        <StatCard label="Disembunyikan" value={hiddenCount} unit="ulasan" variant="warning" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
+        <StatCard label="Total Ulasan" value={feedbacks.length} unit="ulasan" loading={loading} />
+        <StatCard label="Ulasan Terlihat" value={visibleCount} unit="ulasan" variant="success" loading={loading} />
+        <StatCard label="Disembunyikan" value={hiddenCount} unit="ulasan" variant="warning" loading={loading} />
       </div>
 
       <div className="flex flex-col gap-4">
@@ -122,8 +134,9 @@ export default function Feedbacks() {
                       <td className="px-6 py-5 align-top text-center">
                         <button
                           onClick={() => toggleHidden(item.id)}
+                          disabled={togglingId === item.id}
                           title={item.is_hidden ? "Tampilkan ulasan" : "Sembunyikan ulasan"}
-                          className={`p-2 rounded-full transition-colors ${
+                          className={`p-2 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                             item.is_hidden ? "text-[#94A3B8] hover:bg-[#F1F5F9]" : "text-[#148F89] hover:bg-[#148F89]/10"
                           }`}
                         >
@@ -138,6 +151,6 @@ export default function Feedbacks() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

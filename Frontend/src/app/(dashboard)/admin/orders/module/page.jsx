@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Eye, EyeOff, Pencil, ExternalLink } from "lucide-react";
 import Link from "next/link";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import StatCard from "@/component/admin/StatCard";
 import EmptyState from "@/component/admin/EmptyState";
 import { apiRequest } from "@/lib/api";
@@ -27,7 +26,11 @@ export default function ModuleOrders() {
   const fetchModules = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiRequest("/api/products/?all=true", { auth: false });
+      // include_inactive=true -- ini halaman admin, modul yang sudah
+      // dinonaktifkan (misal habis dianggap usang) harus tetap kelihatan &
+      // bisa dikelola/diaktifkan lagi dari sini. Butuh token admin, jadi
+      // request-nya WAJIB pakai auth (bukan auth:false kayak sebelumnya).
+      const res = await apiRequest("/api/products/?all=true&include_inactive=true");
       const all = res?.products || [];
       setModules(all.filter((p) => p.type === "MODULE"));
     } catch (err) {
@@ -66,7 +69,7 @@ export default function ModuleOrders() {
   const inactiveCount = modules.filter((m) => !m.is_active).length;
 
   return (
-    <DashboardLayout title="Kelola Pesanan · Modul">
+    <>
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-bold text-[22px] text-[#0F172A]">Manajemen Konten Modul</h1>
@@ -74,10 +77,10 @@ export default function ModuleOrders() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
-        <StatCard label="Total Modul" value={modules.length} unit="modul" />
-        <StatCard label="Aktif" value={activeCount} unit="modul" variant="success" />
-        <StatCard label="Nonaktif" value={inactiveCount} unit="modul" variant="warning" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
+        <StatCard label="Total Modul" value={modules.length} unit="modul" loading={loading} />
+        <StatCard label="Aktif" value={activeCount} unit="modul" variant="success" loading={loading} />
+        <StatCard label="Nonaktif" value={inactiveCount} unit="modul" variant="warning" loading={loading} />
       </div>
 
       <div className="flex flex-col gap-4">
@@ -152,6 +155,6 @@ export default function ModuleOrders() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

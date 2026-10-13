@@ -12,10 +12,15 @@ import {
   Mail,
   Phone,
 } from "lucide-react";
-import DashboardLayout from "@/component/admin/DashboardLayout";
 import { apiRequest } from "@/lib/api";
 
 const ROLE_LABEL = { ADMIN: "Admin", MENTOR: "Mentor", STUDENT: "User" };
+
+const MENTOR_STATUS = {
+  ACTIVE: { label: "MENTOR AKTIF", cls: "bg-[#CCFBF1] text-[#0F766E]" },
+  INCOMPLETE: { label: "DATA BELUM LENGKAP", cls: "bg-[#FEF3C7] text-[#92400E]" },
+  DISABLED: { label: "MENTOR NONAKTIF", cls: "bg-[#F1F5F9] text-[#475569]" },
+};
 
 function formatDate(dateStr) {
   if (!dateStr) return "-";
@@ -44,15 +49,15 @@ export default function UserDetail() {
 
   if (loading) {
     return (
-      <DashboardLayout title="Detail Profil">
+      <>
         <p className="text-[#64748B] text-[14px]">Memuat profil...</p>
-      </DashboardLayout>
+      </>
     );
   }
 
   if (notFound || !profile) {
     return (
-      <DashboardLayout title="Detail Profil">
+      <>
         <Link
           href="/admin/user-management"
           className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#148F89] text-[13px] font-medium transition-colors w-fit"
@@ -61,9 +66,9 @@ export default function UserDetail() {
           Kembali ke Manajemen User
         </Link>
         <p className="text-[#64748B] text-[14px]">
-          Profil dengan ID &ldquo;{params?.id}&rdquo; nggak ditemukan.
+          Profil dengan ID &ldquo;{params?.id}&rdquo; tidak ditemukan.
         </p>
-      </DashboardLayout>
+      </>
     );
   }
 
@@ -71,7 +76,7 @@ export default function UserDetail() {
   const mentorProfile = profile.mentor_profile;
 
   return (
-    <DashboardLayout title="Detail Profil">
+    <>
       <Link
         href="/admin/user-management"
         className="inline-flex items-center gap-2 text-[#64748B] hover:text-[#148F89] text-[13px] font-medium transition-colors w-fit"
@@ -85,13 +90,11 @@ export default function UserDetail() {
           style={{ width: "72px", height: "72px" }}
           className="rounded-full overflow-hidden border border-[#E2E8F0] shrink-0 bg-[#F1F5F9]"
         >
-          {profile.profile_image && (
-            <img
-              src={profile.profile_image}
-              alt={profile.fullname}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          )}
+          <img
+            src={profile.profile_image || "/images/default-avatar.svg"}
+            alt={profile.fullname}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
         </div>
         <div className="flex flex-col gap-1.5 flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -104,8 +107,15 @@ export default function UserDetail() {
             <span
               className={`inline-flex px-2.5 py-1 text-[10px] rounded-full font-bold ${profile.status === "ACTIVE" ? "bg-[#DCFCE7] text-[#166534]" : "bg-[#FEE2E2] text-[#991B1B]"}`}
             >
-              {profile.status === "ACTIVE" ? "AKTIF" : "NONAKTIF"}
+              {profile.status === "ACTIVE" ? "AKUN AKTIF" : "AKUN NONAKTIF"}
             </span>
+            {isMentor && MENTOR_STATUS[profile.mentor_status] && (
+              <span
+                className={`inline-flex px-2.5 py-1 text-[10px] rounded-full font-bold ${MENTOR_STATUS[profile.mentor_status].cls}`}
+              >
+                {MENTOR_STATUS[profile.mentor_status].label}
+              </span>
+            )}
           </div>
           {isMentor && mentorProfile?.headline && (
             <p className="text-[#64748B] text-[13.5px]">{mentorProfile.headline}</p>
@@ -128,6 +138,25 @@ export default function UserDetail() {
 
       {isMentor ? (
         <>
+          {profile.mentor_status === "INCOMPLETE" && (
+            <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-[12px] p-5 flex flex-col gap-1.5">
+              <p className="text-[#92400E] text-[13.5px] font-semibold">
+                Belum tampil di halaman Mentor &amp; belum bisa dipesan
+              </p>
+              <p className="text-[#92400E] text-[13px]">
+                Data yang belum diisi: {(profile.mentor_missing_fields || []).map((f) => f.label).join(", ")}.
+              </p>
+              <p className="text-[#B45309] text-[12px]">Otomatis aktif begitu mentor melengkapinya.</p>
+            </div>
+          )}
+          {profile.mentor_status === "DISABLED" && (
+            <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-[12px] p-5">
+              <p className="text-[#475569] text-[13px]">
+                Dinonaktifkan sebagai mentor oleh admin: disembunyikan dari halaman Mentor dan tidak bisa dipesan.
+                Ubah lewat tombol edit di Manajemen User.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-3 gap-5">
             <div className="bg-white border border-[#E2E8F0] rounded-[12px] p-5 shadow-sm">
               <p className="text-[#64748B] font-bold text-[11px] tracking-wide uppercase">Rating</p>
@@ -188,7 +217,7 @@ export default function UserDetail() {
                   <div key={idx} className="flex flex-col gap-0.5">
                     <p className="text-[#1E293B] font-semibold text-[13.5px]">{exp.title}</p>
                     <p className="text-[#94A3B8] text-[12px]">
-                      {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : "Sekarang"}
+                      {formatMonthYear(exp.start_date)} s.d. {exp.end_date ? formatMonthYear(exp.end_date) : "Sekarang"}
                     </p>
                   </div>
                 ))
@@ -206,7 +235,7 @@ export default function UserDetail() {
               </div>
               <div>
                 <p className="text-[#1E293B] font-semibold text-[14px]">
-                  {mentorProfile?.bank_name || "-"} — {mentorProfile?.bank_account || "-"}
+                  {mentorProfile?.bank_name || "-"} · {mentorProfile?.bank_account || "-"}
                 </p>
                 <p className="text-[#64748B] text-[12.5px]">a.n. {mentorProfile?.bank_account_holder || "-"}</p>
               </div>
@@ -231,6 +260,6 @@ export default function UserDetail() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

@@ -6,15 +6,70 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, get_client_ip, is_rate_limited
+from .utils import get_request_data, log_audit, EmailVerificationTokenGenerator, AccountDeletionTokenGenerator, get_client_ip, is_rate_limited, notify_team, notify_admins, notify_user, send_mail_async, adalah_uuid
 from .forms import RegisterForm, UpdateProfileForm
+from mark_up.imaging import compress_or_original, is_real_image, MAX_DIM_AVATAR
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import User, UserRole, UserStatus, ContactMessage, ContactMessageStatus, AuditAction
+from .models import User, UserRole, UserStatus, ContactMessage, ContactMessageStatus, AuditAction, BroadcastEmail, BroadcastFilterType
 from .decorators import jwt_required, role_required
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 import json
+import logging
+
+logger = logging.getLogger("markup.client")
+
+
+@csrf_exempt
+def report_client_error(request):
+    """Terima laporan error yang terjadi DI BROWSER pengguna.
+
+    Kenapa perlu: error boundary React cuma menampilkan layar "Halaman ini
+    gagal ditampilkan" ke pengguna, sementara pesan aslinya berhenti di console
+    browser mereka. Akibatnya laporan yang masuk selalu berupa screenshot layar
+    merah tanpa satu pun petunjuk teknis, dan penyebabnya cuma bisa ditebak.
+    Sudah dua kali kejadian dan dua kali tidak bisa direproduksi.
+
+    Sengaja TANPA login: error paling sering terjadi di halaman publik, justru
+    saat pengguna belum masuk.
+
+    Karena terbuka, ada tiga pembatas:
+      - rate limit ketat per IP (log flooding = gangguan, bukan sekadar bising)
+      - payload dipotong keras
+      - cuma ditulis ke log, tidak disimpan ke database
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    ip = get_client_ip(request)
+    if is_rate_limited(f"rl:clienterr:ip:{ip}", limit=20, window_seconds=3600):
+        # Diam-diam dianggap sukses: ini cuma telemetri, jangan sampai
+        # pembatasnya sendiri memunculkan error baru di halaman error.
+        return JsonResponse({"ok": True}, status=200)
+
+    data = get_request_data(request) or {}
+
+    def potong(nilai, maks):
+        teks = str(nilai or "")
+        return teks[:maks]
+
+    logger.error(
+        "ERROR DI BROWSER\n"
+        "  halaman   : %s\n"
+        "  pesan     : %s\n"
+        "  digest    : %s\n"
+        "  browser   : %s\n"
+        "  ip        : %s\n"
+        "  stack     : %s",
+        potong(data.get("url"), 300),
+        potong(data.get("message"), 500),
+        potong(data.get("digest"), 100),
+        potong(request.META.get("HTTP_USER_AGENT"), 300),
+        ip,
+        potong(data.get("stack"), 2000),
+    )
+    return JsonResponse({"ok": True}, status=200)
 
 
 def _get_profile_image_url(user, request):
@@ -59,25 +114,47 @@ def register_view(request):
 			errors["non_field_errors"] = list(non_field)
 		return JsonResponse({"errors": errors}, status=400)
 
+	# Foto profil opsional. Divalidasi ketat karena endpoint ini terbuka tanpa
+	# login -- tanpa batas tipe & ukuran, siapa pun bisa numpang nyimpen file
+	# gede di storage kita.
+	photo = request.FILES.get("profile_image")
+	if photo is not None:
+		ext = photo.name.rsplit(".", 1)[-1].lower() if "." in photo.name else ""
+		if ext not in {"jpg", "jpeg", "png", "webp"}:
+			return JsonResponse(
+				{"errors": {"profile_image": ["Foto harus JPG, PNG, atau WEBP."]}}, status=400
+			)
+		if photo.size > 2 * 1024 * 1024:
+			return JsonResponse(
+				{"errors": {"profile_image": ["Ukuran foto maksimal 2MB."]}}, status=400
+			)
+
+	if photo is not None:
+		if not is_real_image(photo):
+			return JsonResponse(
+				{"errors": {"profile_image": ["File ini bukan gambar yang valid."]}}, status=400
+			)
+		photo, _photo_name = compress_or_original(photo, max_dim=MAX_DIM_AVATAR)
+
 	user = form.save(commit=False)
 	user.set_password(form.cleaned_data["password"])
 	user.is_email_verified = False
+	if photo is not None:
+		user.profile_image = photo
 	user.save()
 
 	uid = urlsafe_base64_encode(force_bytes(user.pk))
 	token = _email_verification_token.make_token(user)
 	verify_link = f"{settings.FRONTEND_BASE_URL}/verify-email?uid={uid}&token={token}"
 
-	send_mail(
+	send_mail_async(
 		subject="Verifikasi Email MARK-UP",
 		message=(
 			f"Halo {user.fullname},\n\n"
-			f"Terima kasih sudah mendaftar di MARK-UP. Klik link berikut buat verifikasi email kamu:\n{verify_link}\n\n"
-			"Kalau kamu nggak merasa mendaftar, abaikan email ini."
+			f"Terima kasih sudah mendaftar di MARK-UP. Buka tautan berikut untuk memverifikasi email kamu:\n{verify_link}\n\n"
+			"Jika kamu tidak merasa mendaftar, abaikan email ini."
 		),
-		from_email=settings.DEFAULT_FROM_EMAIL,
 		recipient_list=[user.email],
-		fail_silently=True,
 	)
 
 	return JsonResponse(
@@ -104,17 +181,23 @@ def login_view(request):
 	if request_data is None:
 		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
-	email = request_data.get("email")
+	# Email DIRAPIKAN (strip + lowercase) sebelum dicari -- tanpa ini, email
+	# yang ketikan/paste-nya beda kapitalisasi atau kebawa spasi (mis. hasil
+	# copy dari badan email, atau autocapitalize browser/HP) bakal selalu
+	# dianggap "salah", padahal akunnya ADA dan passwordnya BENAR. Ketemu
+	# nyata: reviewer iPaymu gagal login 5x berturut-turut sampai kena
+	# rate limit, gara-gara ini -- passwordnya udah benar dari awal.
+	email = (request_data.get("email") or "").strip().lower()
 	password = request_data.get("password")
 
-	if email and is_rate_limited(f"rl:login:email:{email.strip().lower()}", limit=5, window_seconds=300):
+	if email and is_rate_limited(f"rl:login:email:{email}", limit=5, window_seconds=300):
 		return JsonResponse(
 			{"detail": "Terlalu banyak percobaan login untuk akun ini. Coba lagi beberapa menit lagi."},
 			status=429,
 		)
 
 	try:
-		user_obj = User.objects.get(email=email)
+		user_obj = User.objects.get(email__iexact=email)
 	except User.DoesNotExist:
 		user_obj = None
 
@@ -136,7 +219,7 @@ def login_view(request):
 	if not user.is_email_verified:
 		return JsonResponse(
 			{
-				"detail": "Email kamu belum diverifikasi. Silakan cek inbox kamu atau minta kirim ulang link verifikasi.",
+				"detail": "Email kamu belum diverifikasi. Silakan periksa kotak masuk email kamu atau minta kirim ulang tautan verifikasi.",
 				"code": "email_not_verified",
 			},
 			status=403,
@@ -144,7 +227,7 @@ def login_view(request):
 
 	if user.status == UserStatus.INACTIVE:
 		return JsonResponse(
-			{"detail": "Akun ini sudah dinonaktifkan. Hubungi tim kami kalau ini keliru."},
+			{"detail": "Akun ini sudah dinonaktifkan. Hubungi tim kami jika ini keliru."},
 			status=403,
 		)
 
@@ -159,16 +242,149 @@ def login_view(request):
 				"id": str(user.id),
 				"email": user.email,
 				"fullname": user.fullname,
-				"role": user.role, 
-				
+				"role": user.role,
+
 			},
 		},
 		status=200,
 	)
 
 
+@csrf_exempt
+def google_login_view(request):
+	"""Register/login pakai akun Google. Frontend pakai tombol custom sendiri
+	(bukan tombol bawaan Google) yang minta access token lewat popup OAuth2
+	(google.accounts.oauth2.initTokenClient), lalu access token itu divalidasi
+	di sini ke Google, dan user dicari/dibuat berdasarkan email yang sudah
+	pasti terverifikasi Google -- diterbitkan JWT kita sendiri, sama persis
+	kayak alur login manual.
+
+	PENTING soal validasi: manggil userinfo doang TIDAK cukup. Endpoint
+	userinfo nerima access token dari OAuth client MANA PUN yang punya scope
+	email/profile -- jadi kalau cuma itu yang dicek, penyerang tinggal bikin
+	OAuth client Google sendiri, mancing korban login sekali di situ, terus
+	muter ulang tokennya ke sini buat dapet JWT atas nama korban (termasuk
+	nembus akun yang aslinya pakai password, karena user dicari by email).
+	Makanya token WAJIB dicek dulu ke endpoint tokeninfo buat mastiin
+	audience-nya (aud/azp) memang GOOGLE_CLIENT_ID punya kita."""
+	if request.method != "POST":
+		return HttpResponseNotAllowed(["POST"])
+
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:google-login:ip:{ip}", limit=20, window_seconds=300):
+		return JsonResponse(
+			{"detail": "Terlalu banyak percobaan login dari perangkat ini. Coba lagi beberapa menit lagi."},
+			status=429,
+		)
+
+	request_data = get_request_data(request)
+	if request_data is None:
+		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+	access_token = request_data.get("access_token")
+	if not access_token:
+		return JsonResponse({"detail": "Token Google diperlukan."}, status=400)
+
+	client_id = getattr(settings, "GOOGLE_CLIENT_ID", None)
+	if not client_id:
+		return JsonResponse({"detail": "Login Google belum dikonfigurasi di server."}, status=503)
+
+	import requests as http_requests
+
+	# Langkah 1 -- pastikan token ini emang diterbitkan buat aplikasi KITA.
+	# Tanpa cek ini, token dari OAuth client orang lain juga bakal diterima
+	# (lihat penjelasan di docstring).
+	try:
+		tokeninfo_res = http_requests.get(
+			"https://oauth2.googleapis.com/tokeninfo",
+			params={"access_token": access_token},
+			timeout=5,
+		)
+	except http_requests.RequestException:
+		return JsonResponse({"detail": "Gagal menghubungi server Google. Coba lagi."}, status=502)
+
+	if tokeninfo_res.status_code != 200:
+		return JsonResponse({"detail": "Token Google tidak valid atau kedaluwarsa."}, status=401)
+
+	try:
+		tokeninfo = tokeninfo_res.json()
+	except ValueError:
+		return JsonResponse({"detail": "Token Google tidak valid atau kedaluwarsa."}, status=401)
+
+	# Google ngisi "aud" (dan biasanya "azp" juga) dengan client ID pemilik
+	# token. Dua-duanya diterima karena formatnya beda-beda tergantung tipe
+	# token, tapi salah satunya HARUS cocok sama punya kita.
+	token_audience = {tokeninfo.get("aud"), tokeninfo.get("azp")}
+	if client_id not in token_audience:
+		return JsonResponse(
+			{"detail": "Token Google ini bukan untuk aplikasi MarkUp."}, status=401
+		)
+
+	# Langkah 2 -- ambil profilnya (nama dsb). Tokennya udah kebukti punya
+	# kita di langkah 1, jadi hasil userinfo di sini aman dipercaya.
+	try:
+		userinfo_res = http_requests.get(
+			"https://www.googleapis.com/oauth2/v3/userinfo",
+			headers={"Authorization": f"Bearer {access_token}"},
+			timeout=5,
+		)
+	except http_requests.RequestException:
+		return JsonResponse({"detail": "Gagal menghubungi server Google. Coba lagi."}, status=502)
+
+	if userinfo_res.status_code != 200:
+		return JsonResponse({"detail": "Token Google tidak valid atau kedaluwarsa."}, status=401)
+
+	payload = userinfo_res.json()
+
+	if not payload.get("email_verified"):
+		return JsonResponse({"detail": "Email Google kamu belum terverifikasi."}, status=401)
+
+	# Kalau scope "email" nggak dikasih, userinfo balik tanpa field ini --
+	# jangan sampai KeyError-nya kelewat jadi 500.
+	email = (payload.get("email") or "").strip().lower()
+	if not email:
+		return JsonResponse({"detail": "Akun Google kamu tidak membagikan alamat email."}, status=401)
+
+	fullname = payload.get("name") or email.split("@")[0]
+
+	user, created = User.objects.get_or_create(
+		email=email,
+		defaults={
+			"fullname": fullname,
+			"role": UserRole.STUDENT,
+			"is_email_verified": True,
+		},
+	)
+	if created:
+		user.set_unusable_password()
+		user.save(update_fields=["password"])
+
+	if user.status == UserStatus.INACTIVE:
+		return JsonResponse(
+			{"detail": "Akun ini sudah dinonaktifkan. Hubungi tim kami jika ini keliru."},
+			status=403,
+		)
+
+	refresh = RefreshToken.for_user(user)
+
+	return JsonResponse(
+		{
+			"detail": "Login Google berhasil.",
+			"access": str(refresh.access_token),
+			"refresh": str(refresh),
+			"user": {
+				"id": str(user.id),
+				"email": user.email,
+				"fullname": user.fullname,
+				"role": user.role,
+			},
+		},
+		status=201 if created else 200,
+	)
+
+
 def _serialize_user_row(u, request):
-	return {
+	row = {
 		"id": str(u.id),
 		"fullname": u.fullname,
 		"email": u.email,
@@ -180,6 +396,23 @@ def _serialize_user_row(u, request):
 		"last_login": u.last_login.isoformat() if u.last_login else None,
 	}
 
+	if u.role == UserRole.MENTOR:
+		from mentors.models import MentorProfile
+
+		try:
+			mp = u.mentor_profile
+		except MentorProfile.DoesNotExist:
+			mp = None
+		row["mentoring_fee_percent_override"] = mp.mentoring_fee_percent_override if mp else None
+		# Status sebagai MENTOR, terpisah dari status akun di atas. Lihat
+		# MentorProfile.mentor_status: DISABLED (dimatikan admin), INCOMPLETE
+		# (data wajib bolong -- otomatis ACTIVE begitu lengkap), ACTIVE.
+		row["is_mentor_active"] = mp.is_mentor_active if mp else True
+		row["mentor_status"] = mp.mentor_status() if mp else "INCOMPLETE"
+		row["mentor_missing_fields"] = mp.missing_profile_fields() if mp else []
+
+	return row
+
 
 @jwt_required
 @role_required(UserRole.ADMIN)
@@ -187,7 +420,7 @@ def get_users(request):
 	if request.method != "GET":
 		return HttpResponseNotAllowed(["GET"])
 
-	users = User.objects.all().order_by("-created_at")
+	users = User.objects.select_related("mentor_profile").order_by("-created_at")
 
 	role = request.GET.get("role")
 	if role and role != "Semua Role":
@@ -246,6 +479,7 @@ def get_user_detail(request, user_id):
 				"bank_name": mentor_profile.bank_name,
 				"bank_account": mentor_profile.bank_account,
 				"bank_account_holder": mentor_profile.bank_account_holder,
+				"mentoring_fee_percent_override": mentor_profile.mentoring_fee_percent_override,
 			}
 
 	return JsonResponse({"user": data}, status=200)
@@ -269,11 +503,26 @@ def update_user(request, user_id):
 
 	old_data = {"role": user.role, "status": user.status}
 
+	# Divalidasi duluan, sebelum ada yang tersimpan (komisi khusus di bawah
+	# langsung di-save) -- nilai ngawur gak boleh ninggalin perubahan setengah.
+	mentor_active_baru = None
+	if "is_mentor_active" in request_data:
+		mentor_active_baru = request_data.get("is_mentor_active")
+		if isinstance(mentor_active_baru, str):
+			mentor_active_baru = {"true": True, "false": False}.get(mentor_active_baru.strip().lower(), mentor_active_baru)
+		if not isinstance(mentor_active_baru, bool):
+			return JsonResponse({"errors": {"is_mentor_active": ["Harus true atau false."]}}, status=400)
+
 	role = request_data.get("role")
 	if role:
-		role = role.upper()
+		# str() dulu -- nilai non-teks (mis. angka) dulu bikin .upper() crash 500.
+		role = str(role).upper()
 		if role not in UserRole.values:
 			return JsonResponse({"errors": {"role": ["Role tidak valid."]}}, status=400)
+		# Admin gak boleh mencopot peran adminnya sendiri -- bisa bikin gak
+		# ada lagi yang bisa masuk panel admin.
+		if user.pk == request.user.pk and role != UserRole.ADMIN:
+			return JsonResponse({"errors": {"role": ["Kamu tidak bisa mengubah peran akunmu sendiri."]}}, status=400)
 		user.role = role
 		if role == UserRole.MENTOR:
 			from mentors.models import MentorProfile
@@ -284,10 +533,56 @@ def update_user(request, user_id):
 
 	status_value = request_data.get("status")
 	if status_value:
-		status_value = status_value.upper()
+		status_value = str(status_value).upper()
 		if status_value not in UserStatus.values:
 			return JsonResponse({"errors": {"status": ["Status tidak valid."]}}, status=400)
+		if user.pk == request.user.pk and status_value != UserStatus.ACTIVE:
+			return JsonResponse({"errors": {"status": ["Kamu tidak bisa menonaktifkan akunmu sendiri."]}}, status=400)
 		user.status = status_value
+
+	if "mentoring_fee_percent_override" in request_data and user.role == UserRole.MENTOR:
+		from mentors.models import MentorProfile
+
+		override = request_data.get("mentoring_fee_percent_override")
+		if override is not None:
+			try:
+				override = int(override)
+			except (TypeError, ValueError):
+				return JsonResponse(
+					{"errors": {"mentoring_fee_percent_override": ["Harus berupa angka 0-100."]}},
+					status=400,
+				)
+			if not (0 <= override <= 100):
+				return JsonResponse(
+					{"errors": {"mentoring_fee_percent_override": ["Harus di antara 0-100."]}},
+					status=400,
+				)
+
+		try:
+			mentor_profile = user.mentor_profile
+		except MentorProfile.DoesNotExist:
+			mentor_profile = MentorProfile.objects.create(
+				user=user, bank_name="", bank_account="", linkedin_url=""
+			)
+		mentor_profile.mentoring_fee_percent_override = override
+		mentor_profile.save(update_fields=["mentoring_fee_percent_override"])
+
+	mentor_active_changed = None
+	if mentor_active_baru is not None and user.role == UserRole.MENTOR:
+		from mentors.models import MentorProfile
+
+		nilai = mentor_active_baru
+		mentor_profile, _ = MentorProfile.objects.get_or_create(
+			user=user, defaults={"bank_name": "", "bank_account": "", "linkedin_url": ""},
+		)
+		if mentor_profile.is_mentor_active != nilai:
+			old_data["is_mentor_active"] = mentor_profile.is_mentor_active
+			mentor_profile.is_mentor_active = nilai
+			mentor_profile.save(update_fields=["is_mentor_active"])
+			mentor_active_changed = mentor_profile
+
+	role_changed = old_data["role"] != user.role
+	status_changed = old_data["status"] != user.status
 
 	user.save()
 
@@ -297,8 +592,46 @@ def update_user(request, user_id):
 		"users",
 		object_id=user.id,
 		old_data=old_data,
-		new_data={"role": user.role, "status": user.status},
+		new_data={"role": user.role, "status": user.status, **(
+			{"is_mentor_active": mentor_active_changed.is_mentor_active} if mentor_active_changed else {}
+		)},
 	)
+
+	if role_changed:
+		role_label = {"ADMIN": "Admin", "MENTOR": "Mentor", "STUDENT": "Mentee"}.get(user.role, user.role)
+		role_dashboard = {"ADMIN": "/admin", "MENTOR": "/mentor/active-classes", "STUDENT": "/user/my-products"}
+		notify_user(
+			user,
+			"Role Akun Diubah",
+			f"Role akun kamu diubah jadi {role_label} oleh admin.",
+			url=role_dashboard.get(user.role, "/login"),
+		)
+	# Nonaktif sengaja TIDAK dinotif -- kalau status INACTIVE bikin user gak
+	# bisa login, notifikasi in-app-nya gak akan pernah kebaca. Aktif-lagi
+	# tetap layak dikabari, karena begitu login lagi dia bisa langsung lihat.
+	if status_changed and user.status == UserStatus.ACTIVE:
+		notify_user(
+			user,
+			"Akun Diaktifkan Kembali",
+			"Akun kamu sudah diaktifkan kembali oleh admin dan bisa dipakai normal.",
+			url="/login",
+		)
+	if mentor_active_changed is not None and user.role == UserRole.MENTOR:
+		if mentor_active_changed.is_mentor_active:
+			if mentor_active_changed.is_profile_complete():
+				pesan = "Admin mengaktifkan kamu kembali sebagai mentor. Profilmu sudah tampil lagi di halaman Mentor dan mentoringmu bisa dipesan."
+			else:
+				pesan = ("Admin mengaktifkan kamu kembali sebagai mentor. Lengkapi dulu data profilmu di Pengaturan "
+						 "supaya profilmu tampil di halaman Mentor dan bisa dipesan.")
+			notify_user(user, "Status Mentor Diaktifkan", pesan, url="/mentor/settings")
+		else:
+			notify_user(
+				user,
+				"Status Mentor Dinonaktifkan",
+				"Admin menonaktifkan sementara status mentormu: profilmu disembunyikan dari halaman Mentor dan "
+				"tidak bisa dipesan pembeli baru. Sesi yang sudah terjadwal tetap berjalan seperti biasa.",
+				url="/mentor/active-classes",
+			)
 
 	return JsonResponse({"detail": "User berhasil diperbarui.", "user": _serialize_user_row(user, request)}, status=200)
 
@@ -308,6 +641,10 @@ def update_user(request, user_id):
 def change_password(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
+
+	# Nebak password lama pakai sesi yang sudah dikuasai -- dibatasi per user.
+	if is_rate_limited(f"rl:change-password:user:{request.user.id}", limit=5, window_seconds=3600):
+		return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
 
 	request_data = get_request_data(request)
 	if request_data is None:
@@ -337,13 +674,86 @@ def change_password(request):
 	return JsonResponse({"detail": "Password berhasil diubah."}, status=200)
 
 
+_account_deletion_token = AccountDeletionTokenGenerator()
+
+
 @csrf_exempt
 @jwt_required
 def delete_account(request):
+	"""Langkah 1 hapus akun: BUKAN langsung hapus, tapi kirim link konfirmasi
+	ke email user. Akun baru dinonaktifkan setelah user klik link itu
+	(confirm_delete_account). Ini biar gak ada penghapusan gak sengaja /
+	tanpa akses ke email."""
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
 
 	user = request.user
+
+	if is_rate_limited(f"rl:delete-account:user:{user.id}", limit=5, window_seconds=3600):
+		return JsonResponse(
+			{"detail": "Terlalu banyak permintaan. Coba lagi nanti."}, status=429
+		)
+
+	uid = urlsafe_base64_encode(force_bytes(user.pk))
+	token = _account_deletion_token.make_token(user)
+	confirm_link = f"{settings.FRONTEND_BASE_URL}/delete-account?uid={uid}&token={token}"
+
+	send_mail_async(
+		subject="Konfirmasi Penghapusan Akun MARK-UP",
+		message=(
+			f"Halo {user.fullname},\n\n"
+			f"Kami menerima permintaan untuk menghapus akun MARK-UP kamu.\n\n"
+			f"Jika ini memang kamu, buka tautan berikut untuk mengonfirmasi "
+			f"(berlaku 30 menit):\n{confirm_link}\n\n"
+			"Setelah dikonfirmasi, akun kamu dinonaktifkan dan tidak dapat "
+			"digunakan untuk masuk lagi. Riwayat transaksi dan sertifikat tetap "
+			"tersimpan.\n\n"
+			"Jika kamu tidak meminta ini, abaikan saja email ini. Akun kamu tetap aman."
+		),
+		recipient_list=[user.email],
+	)
+
+	return JsonResponse(
+		{"detail": "Link konfirmasi penghapusan akun sudah dikirim ke email kamu."},
+		status=200,
+	)
+
+
+@csrf_exempt
+def confirm_delete_account(request):
+	"""Langkah 2: user klik link di email -> uid+token diverifikasi -> akun
+	beneran dinonaktifkan. Gak butuh login (uid+token yang jadi buktinya),
+	sama polanya kayak reset_password."""
+	if request.method != "POST":
+		return HttpResponseNotAllowed(["POST"])
+
+	ip = get_client_ip(request)
+	# Endpoint publik yang MENGHAPUS akun -- dulu gak dibatasi sama sekali.
+	if is_rate_limited(f"rl:confirm-delete:ip:{ip}", limit=5, window_seconds=3600):
+		return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
+
+	request_data = get_request_data(request)
+	if request_data is None:
+		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+	uid = request_data.get("uid")
+	token = request_data.get("token")
+	if not uid or not token:
+		return JsonResponse({"detail": "uid dan token diperlukan."}, status=400)
+
+	try:
+		user_id = urlsafe_base64_decode(uid).decode()
+		user = User.objects.get(pk=user_id)
+	except (User.DoesNotExist, ValueError, TypeError, OverflowError):
+		return JsonResponse({"detail": "Link konfirmasi tidak valid."}, status=400)
+
+	if not _account_deletion_token.check_token(user, token):
+		return JsonResponse(
+			{"detail": "Link konfirmasi tidak valid atau sudah kedaluwarsa."}, status=400
+		)
+
+	if user.status == UserStatus.INACTIVE:
+		return JsonResponse({"detail": "Akun ini sudah dinonaktifkan."}, status=200)
 
 	# Soft-delete (set nonaktif) -- BUKAN hard delete, biar histori transaksi/
 	# review/sertifikat yang udah ada nggak ikut hilang/rusak. Login_view udah
@@ -356,7 +766,7 @@ def delete_account(request):
 		old_data={"status": UserStatus.ACTIVE}, new_data={"status": UserStatus.INACTIVE},
 	)
 
-	return JsonResponse({"detail": "Akun berhasil dinonaktifkan."}, status=200)
+	return JsonResponse({"detail": "Akun berhasil dihapus. Sampai jumpa lagi!"}, status=200)
 
 
 _password_reset_token = PasswordResetTokenGenerator()
@@ -381,7 +791,7 @@ def forgot_password(request):
 
 	email = (request_data.get("email") or "").strip()
 	generic_response = JsonResponse(
-		{"detail": "Kalau email itu terdaftar, link reset password sudah dikirim."},
+		{"detail": "Jika email tersebut terdaftar, tautan untuk mengatur ulang kata sandi sudah dikirim."},
 		status=200,
 	)
 
@@ -405,16 +815,14 @@ def forgot_password(request):
 	token = _password_reset_token.make_token(user)
 	reset_link = f"{settings.FRONTEND_BASE_URL}/reset-password?uid={uid}&token={token}"
 
-	send_mail(
+	send_mail_async(
 		subject="Reset Password MARK-UP",
 		message=(
 			f"Halo {user.fullname},\n\n"
-			f"Klik link berikut buat bikin password baru (berlaku 30 menit):\n{reset_link}\n\n"
-			"Kalau kamu nggak minta reset password, abaikan email ini."
+			f"Buka tautan berikut untuk membuat kata sandi baru (berlaku 30 menit):\n{reset_link}\n\n"
+			"Jika kamu tidak meminta pengaturan ulang kata sandi, abaikan email ini."
 		),
-		from_email=settings.DEFAULT_FROM_EMAIL,
 		recipient_list=[user.email],
-		fail_silently=True,
 	)
 
 	return generic_response
@@ -424,6 +832,10 @@ def forgot_password(request):
 def reset_password(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
+
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:reset-password:ip:{ip}", limit=10, window_seconds=3600):
+		return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
 
 	request_data = get_request_data(request)
 	if request_data is None:
@@ -463,6 +875,10 @@ def reset_password(request):
 def verify_email(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
+
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:verify-email:ip:{ip}", limit=20, window_seconds=3600):
+		return JsonResponse({"detail": "Terlalu banyak percobaan. Coba lagi nanti."}, status=429)
 
 	request_data = get_request_data(request)
 	if request_data is None:
@@ -510,7 +926,7 @@ def resend_verification_email(request):
 
 	email = (request_data.get("email") or "").strip()
 	generic_response = JsonResponse(
-		{"detail": "Kalau email itu terdaftar dan belum diverifikasi, link verifikasi baru sudah dikirim."},
+		{"detail": "Jika email tersebut terdaftar dan belum diverifikasi, tautan verifikasi baru sudah dikirim."},
 		status=200,
 	)
 
@@ -532,16 +948,14 @@ def resend_verification_email(request):
 	token = _email_verification_token.make_token(user)
 	verify_link = f"{settings.FRONTEND_BASE_URL}/verify-email?uid={uid}&token={token}"
 
-	send_mail(
+	send_mail_async(
 		subject="Verifikasi Email MARK-UP",
 		message=(
 			f"Halo {user.fullname},\n\n"
-			f"Klik link berikut buat verifikasi email kamu:\n{verify_link}\n\n"
-			"Kalau kamu nggak merasa mendaftar, abaikan email ini."
+			f"Silakan klik tautan berikut untuk memverifikasi email kamu:\n{verify_link}\n\n"
+			"Apabila kamu tidak merasa melakukan pendaftaran, abaikan email ini."
 		),
-		from_email=settings.DEFAULT_FROM_EMAIL,
 		recipient_list=[user.email],
-		fail_silently=True,
 	)
 
 	return generic_response
@@ -551,6 +965,14 @@ def resend_verification_email(request):
 def submit_contact_message(request):
 	if request.method != "POST":
 		return HttpResponseNotAllowed(["POST"])
+
+	# Form publik tanpa login -- target spam paling gampang. Throttle per IP.
+	ip = get_client_ip(request)
+	if is_rate_limited(f"rl:contact:ip:{ip}", limit=5, window_seconds=3600):
+		return JsonResponse(
+			{"detail": "Terlalu banyak pesan dikirim dari perangkat ini. Coba lagi nanti."},
+			status=429,
+		)
 
 	request_data = get_request_data(request)
 	if request_data is None:
@@ -566,6 +988,21 @@ def submit_contact_message(request):
 
 	contact_message = ContactMessage.objects.create(
 		name=name, email=email, subject=subject, message=message,
+	)
+
+	notify_team(
+		f"Pesan masuk baru dari {name}",
+		f"Ada pesan masuk baru lewat form Kontak.\n\n"
+		f"Nama: {name}\n"
+		f"Email: {email}\n"
+		f"Subjek: {subject}\n\n"
+		f"Isi pesan:\n{message}\n\n"
+		f"Cek di dashboard admin -> Pesan Masuk.",
+	)
+	notify_admins(
+		f"Pesan Masuk Baru -- {subject}",
+		f"Dari {name} ({email}): {message}",
+		url="/admin/messages",
 	)
 
 	return JsonResponse(
@@ -653,10 +1090,11 @@ def get_current_user(request):
         or user.username
     )
 
-    avatar_src = (
-		_get_profile_image_url(user, request)
-		or f"https://api.dicebear.com/7.x/notionists/svg?seed={profile_name}"
-	)
+    # avatar_src dibiarkan None kalau user belum upload foto -- frontend yang
+    # nampilin fallback stickman lokal (/images/default-avatar.svg). Dulu di
+    # sini di-fallback ke URL dicebear eksternal, tapi kalau layanan itu gagal
+    # diakses (diblokir/offline) yang muncul malah ikon gambar rusak.
+    avatar_src = _get_profile_image_url(user, request)
 
     dashboard_href_by_role = {
         UserRole.ADMIN: "/admin",
@@ -673,12 +1111,26 @@ def get_current_user(request):
         "dashboard_href": dashboard_href_by_role.get(user.role, "/user/my-products"),
     }
 
+    if user.role == UserRole.MENTOR:
+        data["is_profile_complete"] = _is_mentor_profile_complete(user)
+    elif user.role == UserRole.STUDENT:
+        data["is_profile_complete"] = user.is_profile_complete()
+
     return JsonResponse(
         {
             "is_logged_in": True,
             "user": data,
         }
     )
+
+
+def _is_mentor_profile_complete(user):
+    from mentors.models import MentorProfile
+
+    try:
+        return user.mentor_profile.is_profile_complete()
+    except MentorProfile.DoesNotExist:
+        return False
 
 @csrf_exempt
 def logout_user(request):
@@ -716,6 +1168,10 @@ def profile_view(request):
 			"profile_image": _get_profile_image_url(user, request),
             "cv_url": _get_cv_url(user, request),
             "cv_filename": _get_cv_filename(user),
+            # Dipakai halaman Pengaturan Akun buat menyorot kolom mana yang
+            # bikin badge angka di sidebar menyala. Sengaja dari sumber yang
+            # sama dengan badge-nya supaya tidak pernah berbeda.
+            "missing_profile_fields": user.missing_profile_fields(),
         }
         return JsonResponse({"user": data}, status=200)
 
@@ -749,7 +1205,10 @@ def profile_view(request):
 
     return HttpResponseNotAllowed(["GET", "PATCH", "POST"])
 
-ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png"}
+# webp ikut diizinkan biar seragam sama register_view (dulu beda: register
+# nerima webp, endpoint ini nolak -- bikin user bingung kenapa file yang sama
+# bisa dipakai waktu daftar tapi ditolak waktu ganti foto).
+ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 MAX_PROFILE_IMAGE_SIZE = 2 * 1024 * 1024  # 2MB, sesuai teks di frontend
 
 
@@ -758,6 +1217,10 @@ MAX_PROFILE_IMAGE_SIZE = 2 * 1024 * 1024  # 2MB, sesuai teks di frontend
 def upload_profile_photo(request):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
+
+    # Batasi biar storage gak bisa dibanjiri upload berulang.
+    if is_rate_limited(f"rl:upload-photo:user:{request.user.id}", limit=20, window_seconds=3600):
+        return JsonResponse({"detail": "Terlalu banyak unggahan. Coba lagi nanti."}, status=429)
 
     photo = request.FILES.get("photo")
     if not photo:
@@ -769,6 +1232,13 @@ def upload_profile_photo(request):
 
     if photo.size > MAX_PROFILE_IMAGE_SIZE:
         return JsonResponse({"detail": "Ukuran file maksimal 2MB."}, status=400)
+
+    if not is_real_image(photo):
+        return JsonResponse({"detail": "File ini bukan gambar yang valid."}, status=400)
+
+    # Avatar cuma dipajang ~96px, jadi 512px sudah lebih dari cukup. Sekalian
+    # buang metadata EXIF (foto HP bisa nyimpen lokasi GPS di situ).
+    photo, _photo_name = compress_or_original(photo, max_dim=MAX_DIM_AVATAR)
 
     user = request.user
 
@@ -813,6 +1283,9 @@ MAX_CV_SIZE = 5 * 1024 * 1024  # 5MB, sesuai teks di frontend
 def upload_cv(request):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
+
+    if is_rate_limited(f"rl:upload-cv:user:{request.user.id}", limit=20, window_seconds=3600):
+        return JsonResponse({"detail": "Terlalu banyak unggahan. Coba lagi nanti."}, status=429)
 
     cv = request.FILES.get("cv")
     if not cv:
@@ -900,3 +1373,407 @@ def get_audit_logs(request):
     ]
 
     return JsonResponse({"logs": data}, status=200)
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_admin_sidebar_badges(request):
+	"""Angka notifikasi buat tiap menu sidebar admin -- masing-masing hitung
+	item yang beneran butuh tindakan admin (bukan sekadar total data), biar
+	konsisten sama badge/StatCard "butuh tindakan" yang udah ada di
+	halaman-halaman terkait."""
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	from django.db.models import Q
+	from products.models import MentoringSession, RefundRequest, Review, BootcampRegistration
+	from programs.models import BootcampSession as BootcampSessionTemplate
+	from transactions.models import Transaction, PaymentGateway, PaymentStatus, MentorPayout, PayoutStatus
+
+	bootcamp_pending = (
+		BootcampSessionTemplate.objects.filter(session_mentors__isnull=True).count()
+		+ BootcampSessionTemplate.objects.filter(Q(meeting_link__isnull=True) | Q(meeting_link="")).count()
+	)
+
+	# Sesi terjadwal (belum lewat, akses gak dicabut) yang belum punya link
+	# Zoom. "Menunggu pembeli pilih jadwal" gak dihitung lagi: admin gak bisa
+	# berbuat apa-apa, jadi badge-nya dulu nyangkut terus.
+	mentoring_pending = MentoringSession.objects.filter(
+		status="scheduled", zoom_link="", start_time__gte=timezone.now(), user_library__is_revoked=False,
+	).count()
+
+	data = {
+		"bootcamp": bootcamp_pending,
+		"bootcamp_registrations": BootcampRegistration.objects.filter(
+			status=BootcampRegistration.Status.REGISTERED
+		).count(),
+		"mentoring": mentoring_pending,
+		# Cuma transfer manual yang nunggu verifikasi admin. Pembayaran iPaymu
+		# yang masih PENDING itu nunggu PEMBELI bayar, bukan tugas admin.
+		"transactions": Transaction.objects.filter(
+			payment_status=PaymentStatus.PENDING, gateway=PaymentGateway.MANUAL,
+		).count(),
+		"refund_requests": RefundRequest.objects.filter(status=RefundRequest.RefundStatus.PENDING).count(),
+		"payouts": MentorPayout.objects.filter(status=PayoutStatus.PENDING).count(),
+		"messages": ContactMessage.objects.filter(status=ContactMessageStatus.NEW).count(),
+		"reviews": Review.objects.filter(is_seen_by_admin=False).count(),
+	}
+
+	return JsonResponse(data, status=200)
+
+
+@jwt_required
+@role_required(UserRole.STUDENT)
+def get_student_sidebar_badges(request):
+	"""Angka notifikasi buat sidebar dashboard student -- My Products (produk
+	yang udah selesai tapi belum dikasih rating), Transaksi (pembayaran yang
+	ditolak admin), dan Pengaturan Akun (profil belum lengkap)."""
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	from products.models import UserLibrary, Review, ProductType
+	from transactions.models import Transaction, PaymentStatus
+
+	user_libraries = list(
+		UserLibrary.objects.filter(user=request.user, is_revoked=False)
+		.exclude(product__type=ProductType.MODULE)
+		.select_related("product")
+		.prefetch_related("bootcamp_sessions", "mentoring_sessions")
+	)
+
+	reviewed_product_ids = set(
+		Review.objects.filter(
+			user=request.user, product_id__in=[lib.product_id for lib in user_libraries]
+		).values_list("product_id", flat=True)
+	)
+
+	needs_rating = 0
+	for library in user_libraries:
+		sessions = list(
+			library.bootcamp_sessions.all()
+			if library.product.type == ProductType.BOOTCAMP
+			else library.mentoring_sessions.all()
+		)
+		is_completed = len(sessions) > 0 and all(s.status == "completed" for s in sessions)
+		if is_completed and library.product_id not in reviewed_product_ids:
+			needs_rating += 1
+
+	# Pendaftaran bootcamp yang sudah DITERIMA tapi belum dibayar -- sebelum
+	# ini gak kehitung di badge mana pun, jadi pendaftar yang lolos seleksi
+	# gak punya petunjuk apa pun di dashboard bahwa dia masih punya tagihan
+	# (Produk Saya & Transaksi dua-duanya masih kosong sampai dia bayar).
+	# Anggota tim yang diundang sengaja TIDAK dihitung: yang bayar ketuanya.
+	from products.models import BootcampRegistration
+
+	perlu_bayar = 0
+	regs_accepted = BootcampRegistration.objects.filter(
+		user=request.user, status=BootcampRegistration.Status.ACCEPTED,
+	).select_related("package").prefetch_related("payment_transactions")
+	for reg in regs_accepted:
+		deadline = reg.package.payment_deadline_at
+		if deadline and timezone.now() > deadline:
+			continue
+		sudah_ada = any(
+			t.payment_status in (PaymentStatus.PENDING, PaymentStatus.PAID)
+			for t in reg.payment_transactions.all()
+		)
+		if not sudah_ada:
+			perlu_bayar += 1
+
+	data = {
+		# Dipisah supaya halaman Produk Saya bisa nampilin kartu "selesaikan
+		# pembayaran" khusus buat kasus ini, bukan cuma angka di sidebar.
+		"bootcamp_payment": perlu_bayar,
+		# Ikut dijumlahin ke badge Produk Saya supaya titik notifikasinya
+		# BENERAN kelihatan di sidebar -- percuma dihitung kalau gak nongol
+		# di mana pun (itu justru masalah yang mau dibenerin di sini).
+		"my_products": needs_rating + perlu_bayar,
+		# Penolakan admin yang BELUM dilihat pembeli (Transaction.buyer_seen).
+		# Dulu ngitung semua FAILED sepanjang masa -> badge gak pernah padam.
+		# Pembatalan oleh pembeli sendiri gak pernah menyalakan tanda ini.
+		"transactions": Transaction.objects.filter(
+			user=request.user, payment_status=PaymentStatus.FAILED, buyer_seen=False,
+		).count(),
+		"settings": 0 if request.user.is_profile_complete() else 1,
+	}
+
+	return JsonResponse(data, status=200)
+
+
+@jwt_required
+def get_notifications(request):
+	"""Daftar notifikasi IN-APP punya sendiri buat tombol lonceng dashboard
+	(student & mentor) -- 30 terbaru + jumlah yang belum dibaca. Bukan
+	admin-only kayak get_student_sidebar_badges di atas, karena mentor juga
+	pakai endpoint ini."""
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	from .models import Notification
+
+	# limit=30 buat dropdown lonceng (default). Halaman histori notifikasi
+	# kirim limit lebih besar (mis. 200) buat nampilin daftar lengkap --
+	# dibatasi 200 tetap, bukan literally unlimited, biar gak sekali fetch
+	# ratusan/ribuan baris kalau suatu akun numpuk banyak notifikasi.
+	try:
+		limit = min(int(request.GET.get("limit", 30)), 200)
+	except (TypeError, ValueError):
+		limit = 30
+
+	qs = Notification.objects.filter(user=request.user)
+	unread_count = qs.filter(is_read=False).count()
+	items = [
+		{
+			"id": str(n.id),
+			"title": n.title,
+			"message": n.message,
+			"url": n.url,
+			"is_read": n.is_read,
+			"created_at": n.created_at.isoformat(),
+		}
+		for n in qs[:limit]
+	]
+
+	return JsonResponse({"notifications": items, "unread_count": unread_count}, status=200)
+
+
+@csrf_exempt
+@jwt_required
+def mark_notifications_read(request):
+	"""Tandai notifikasi sudah dibaca -- kirim {"id": "..."} buat satu baris
+	spesifik (dipakai pas notifikasi diklik), atau {"all": true} buat semua
+	sekaligus (dipakai pas buka dropdown lonceng)."""
+	if request.method != "POST":
+		return HttpResponseNotAllowed(["POST"])
+
+	from .models import Notification
+
+	data = get_request_data(request) or {}
+	qs = Notification.objects.filter(user=request.user, is_read=False)
+
+	if data.get("all"):
+		jumlah = qs.update(is_read=True)
+	elif data.get("id"):
+		if not adalah_uuid(data["id"]):
+			return JsonResponse({"detail": "ID notifikasi tidak valid."}, status=400)
+		jumlah = qs.filter(id=data["id"]).update(is_read=True)
+	else:
+		return JsonResponse({"detail": "Sertakan 'id' atau 'all'."}, status=400)
+
+	return JsonResponse({"detail": "Ditandai sudah dibaca.", "jumlah": jumlah}, status=200)
+
+
+def _resolve_broadcast_recipients(filter_type, params):
+	"""Balikin QuerySet User sesuai filter -- dipakai BARENG oleh endpoint
+	preview (cuma hitung/contoh) dan endpoint kirim beneran, supaya dua-duanya
+	GAK PERNAH ketuker hasilnya (preview bilang 50 orang, pas kirim ternyata
+	80 -- itu yang mau dihindari)."""
+	if filter_type == BroadcastFilterType.ALL:
+		return User.objects.all()
+
+	if filter_type == BroadcastFilterType.ROLE:
+		role = (params.get("role") or "").upper()
+		if role not in UserRole.values:
+			return User.objects.none()
+		return User.objects.filter(role=role)
+
+	if filter_type == BroadcastFilterType.BOUGHT_PRODUCT:
+		product_id = params.get("product_id")
+		if not product_id or not adalah_uuid(product_id):
+			return User.objects.none()
+		return User.objects.filter(product_libraries__product_id=product_id).distinct()
+
+	if filter_type == BroadcastFilterType.BOOTCAMP_REGISTERED:
+		bootcamp_id = params.get("bootcamp_id")
+		if not bootcamp_id or not adalah_uuid(bootcamp_id):
+			return User.objects.none()
+		from products.models import BootcampRegistration
+		from transactions.models import PaymentStatus
+
+		regs = BootcampRegistration.objects.filter(package__bootcamp_id=bootcamp_id)
+		status = params.get("status")
+		if status:
+			regs = regs.filter(status=status)
+
+		# Sub-filter status pembayaran -- independen dari status pendaftaran
+		# di atas, jadi admin bisa gabungin keduanya (mis. "Diterima" +
+		# "Belum Bayar" buat nyari yang perlu diingetin bayar). "Sudah
+		# Bayar" = ADA transaksi beneran PAID. "Belum Bayar" = TIDAK punya
+		# transaksi PENDING/PAID sama sekali (logikanya sama persis kayak
+		# pending_bootcamp_payments di get_my_products, products/views.py --
+		# sengaja gak ikut cek payment_deadline_at, admin justru mau bisa
+		# jangkau yang lewat batas juga buat follow-up).
+		payment_status = params.get("payment_status")
+		if payment_status == "PAID":
+			regs = regs.filter(payment_transactions__payment_status=PaymentStatus.PAID).distinct()
+		elif payment_status == "UNPAID":
+			regs = regs.exclude(
+				payment_transactions__payment_status__in=[PaymentStatus.PENDING, PaymentStatus.PAID]
+			)
+
+		return User.objects.filter(id__in=regs.values("user_id")).distinct()
+
+	if filter_type == BroadcastFilterType.MANUAL:
+		raw = params.get("emails") or []
+		emails = [e.strip().lower() for e in raw if isinstance(e, str) and e.strip()]
+		if not emails:
+			return User.objects.none()
+		return User.objects.filter(email__in=emails)
+
+	return User.objects.none()
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def preview_broadcast_recipients(request):
+	"""Hitung berapa orang bakal kena kirim SEBELUM beneran dikirim --
+	admin bisa mastiin filternya bener dulu, gak langsung nembak ke semua
+	orang begitu klik kirim."""
+	if request.method != "POST":
+		return HttpResponseNotAllowed(["POST"])
+
+	data = get_request_data(request)
+	if data is None:
+		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+	filter_type = (data.get("filter_type") or "").upper()
+	if filter_type not in BroadcastFilterType.values:
+		return JsonResponse({"detail": "filter_type tidak dikenali."}, status=400)
+
+	users = _resolve_broadcast_recipients(filter_type, data.get("filter_params") or {})
+	count = users.count()
+	sample = list(users.order_by("email").values_list("email", flat=True)[:10])
+
+	return JsonResponse({"count": count, "sample_emails": sample}, status=200)
+
+
+# Batas jumlah penerima per pengiriman -- pagar pengaman biar admin gak
+# nembak email ke ribuan orang sekaligus cuma gara-gara salah pilih
+# filter (mis. lupa isi product_id, keliru pilih "Semua User"). Kalau
+# beneran butuh lebih banyak, bisa dikirim bertahap.
+BROADCAST_MAX_RECIPIENTS = 300
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.ADMIN)
+def send_broadcast_email(request):
+	"""Kirim email ke banyak (atau satu) penerima sekaligus, sesuai filter.
+	Dikirim SINKRON (bukan send_mail_async/thread) -- pelajaran dari kejadian
+	nyata: skrip sekali-jalan yang mancarin thread lalu langsung exit bikin
+	thread pengirimnya ikut mati sebelum sempat connect ke Brevo, emailnya
+	gak ada yang beneran nyampe walau kelihatan 'berhasil' dipanggil. Di sini
+	aman dikirim sinkron karena prosesnya (gunicorn worker) hidup terus,
+	bukan proses sekali-jalan -- tinggal jaga jumlah penerima gak kebesaran
+	(lihat BROADCAST_MAX_RECIPIENTS) biar gak kelamaan nyampe timeout worker."""
+	if request.method != "POST":
+		return HttpResponseNotAllowed(["POST"])
+
+	if is_rate_limited(f"rl:broadcast-email:admin:{request.user.id}", limit=10, window_seconds=3600):
+		return JsonResponse(
+			{"detail": "Terlalu banyak pengiriman broadcast dalam 1 jam terakhir. Coba lagi nanti."},
+			status=429,
+		)
+
+	data = get_request_data(request)
+	if data is None:
+		return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+	filter_type = (data.get("filter_type") or "").upper()
+	if filter_type not in BroadcastFilterType.values:
+		return JsonResponse({"detail": "filter_type tidak dikenali."}, status=400)
+
+	subject = (data.get("subject") or "").strip()
+	message = (data.get("message") or "").strip()
+	if not subject or not message:
+		return JsonResponse({"detail": "Subjek dan isi pesan wajib diisi."}, status=400)
+
+	filter_params = data.get("filter_params") or {}
+	filter_summary = (data.get("filter_summary") or "").strip()
+
+	users = list(
+		_resolve_broadcast_recipients(filter_type, filter_params)
+		.exclude(email="")
+		.values_list("email", flat=True)
+		.distinct()
+	)
+	if not users:
+		return JsonResponse({"detail": "Gak ada penerima yang cocok dengan filter ini."}, status=400)
+	if len(users) > BROADCAST_MAX_RECIPIENTS:
+		return JsonResponse(
+			{"detail": (
+				f"Penerima ({len(users)} orang) melebihi batas {BROADCAST_MAX_RECIPIENTS} sekali kirim. "
+				"Persempit filternya, atau kirim bertahap."
+			)},
+			status=400,
+		)
+
+	from django.conf import settings as dj_settings
+	from django.core.mail import send_mail as dj_send_mail
+
+	terkirim, gagal = 0, 0
+	for email in users:
+		try:
+			n = dj_send_mail(
+				subject=subject, message=message,
+				from_email=dj_settings.DEFAULT_FROM_EMAIL,
+				recipient_list=[email], fail_silently=True,
+			)
+			if n >= 1:
+				terkirim += 1
+			else:
+				gagal += 1
+		except Exception:
+			logger.exception("Broadcast email gagal ke %s", email)
+			gagal += 1
+
+	BroadcastEmail.objects.create(
+		admin=request.user, subject=subject, message=message,
+		filter_type=filter_type, filter_summary=filter_summary,
+		recipient_count=terkirim,
+	)
+	log_audit(
+		request, AuditAction.CREATE, "broadcast_emails",
+		new_data={"subject": subject, "filter_type": filter_type, "recipient_count": terkirim},
+	)
+
+	return JsonResponse(
+		{
+			"detail": f"Email terkirim ke {terkirim} penerima." + (f" ({gagal} gagal)" if gagal else ""),
+			"sent_count": terkirim,
+			"failed_count": gagal,
+		},
+		status=200,
+	)
+
+
+@jwt_required
+@role_required(UserRole.ADMIN)
+def get_broadcast_history(request):
+	if request.method != "GET":
+		return HttpResponseNotAllowed(["GET"])
+
+	logs = BroadcastEmail.objects.select_related("admin").order_by("-created_at")[:100]
+	return JsonResponse(
+		{
+			"broadcasts": [
+				{
+					"id": str(b.id),
+					"admin_name": b.admin.fullname if b.admin else "(dihapus)",
+					"subject": b.subject,
+					# Isi lengkap ikut dikirim di sini (bukan endpoint detail
+					# terpisah) -- daftarnya dibatasi 100 baris & admin-only,
+					# jadi ukuran payload-nya gak jadi masalah, dan ini lebih
+					# simpel daripada bikin round-trip tambahan pas admin
+					# klik satu baris buat lihat isinya.
+					"message": b.message,
+					"filter_type": b.filter_type,
+					"filter_summary": b.filter_summary,
+					"recipient_count": b.recipient_count,
+					"created_at": b.created_at.isoformat(),
+				}
+				for b in logs
+			]
+		},
+		status=200,
+	)

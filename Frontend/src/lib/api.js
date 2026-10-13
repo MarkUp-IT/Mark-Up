@@ -3,26 +3,77 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhos
 const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
 
-export function getAccessToken() {
+/**
+ * Akses localStorage SELALU lewat pembungkus ini.
+ *
+ * Menyentuh localStorage bisa MELEMPAR, bukan sekadar mengembalikan null:
+ * browser yang memblokir penyimpanan situs (Chrome "Block all cookies", mode
+ * privat tertentu, Brave/Safari dengan proteksi ketat, sebagian webview)
+ * melempar SecurityError begitu propertinya dibaca.
+ *
+ * Dulu dipanggil langsung, jadi error itu naik ke React dan seluruh halaman
+ * diganti layar "Halaman ini gagal ditampilkan" -- termasuk halaman publik
+ * yang sebenarnya tidak butuh login sama sekali.
+ *
+ * Gagal-aman: kalau storage tidak bisa diakses, pengguna dianggap belum login.
+ * Situs tetap bisa dijelajahi; hanya sesi login yang tidak bisa disimpan.
+ */
+function bacaStorage(key) {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(ACCESS_TOKEN_KEY);
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function tulisStorage(key, value) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* penyimpanan diblokir atau penuh -- diabaikan, jangan merusak halaman */
+  }
+}
+
+function hapusStorage(key) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    /* sama seperti di atas */
+  }
+}
+
+/** true kalau sesi login tidak akan bertahan (penyimpanan diblokir browser). */
+export function isStorageBlocked() {
+  if (typeof window === "undefined") return false;
+  try {
+    const uji = "__markup_uji_storage__";
+    window.localStorage.setItem(uji, "1");
+    window.localStorage.removeItem(uji);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+export function getAccessToken() {
+  return bacaStorage(ACCESS_TOKEN_KEY);
 }
 
 export function getRefreshToken() {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
+  return bacaStorage(REFRESH_TOKEN_KEY);
 }
 
 export function setTokens({ access, refresh }) {
-  if (typeof window === "undefined") return;
-  if (access) localStorage.setItem(ACCESS_TOKEN_KEY, access);
-  if (refresh) localStorage.setItem(REFRESH_TOKEN_KEY, refresh);
+  if (access) tulisStorage(ACCESS_TOKEN_KEY, access);
+  if (refresh) tulisStorage(REFRESH_TOKEN_KEY, refresh);
 }
 
 export function clearTokens() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  hapusStorage(ACCESS_TOKEN_KEY);
+  hapusStorage(REFRESH_TOKEN_KEY);
 }
 
 export class ApiError extends Error {
@@ -98,8 +149,16 @@ export async function apiRequest(
 ) {
   const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
 
+  // Upload file harus dikirim sebagai FormData mentah -- kalau di-JSON.stringify
+  // filenya hilang, dan Content-Type-nya wajib dibiarin browser yang isi
+  // (butuh boundary multipart). Sebelum ini apiRequest maksa JSON, jadi semua
+  // upload terpaksa pakai fetch mentah -- akibatnya mereka gak kebagian
+  // auto-refresh token, dan pendaftaran gagal 401 kalau token keburu expired
+  // pas user lagi lama ngisi form.
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+
   const buildHeaders = () => {
-    const h = { "Content-Type": "application/json", ...headers };
+    const h = isFormData ? { ...headers } : { "Content-Type": "application/json", ...headers };
     if (auth) {
       const token = getAccessToken();
       if (token) h["Authorization"] = `Bearer ${token}`;
@@ -111,7 +170,7 @@ export async function apiRequest(
     const options = {
       method,
       headers: buildHeaders(),
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
       ...rest,
     };
 
@@ -148,8 +207,17 @@ export async function apiRequest(
     const hasRefreshToken = Boolean(getRefreshToken());
 
     if (!hasRefreshToken) {
+      // Dulu di sini `return null` diam-diam. Bagi pemanggil itu nggak bisa
+      // dibedain dari "sukses tapi datanya kosong" -- yang langsung baca
+      // res.field jadi crash dengan TypeError yang nggak nyambung, dan yang
+      // punya try/catch pun nggak kena catch-nya sama sekali. Sesi habis itu
+      // kegagalan, jadi diperlakukan sama kayak cabang refresh yang gagal di
+      // bawah: dilempar sebagai ApiError 401.
       clearTokens();
-      return null;
+      throw new ApiError("Sesi berakhir, silakan login kembali.", {
+        status: 401,
+        url,
+      });
     } else if (isRefreshing) {
       const newToken = await new Promise((resolve) => subscribeToRefresh(resolve));
       if (newToken) {
@@ -178,13 +246,43 @@ export async function apiRequest(
   }
 
   if (!res.ok) {
-    const message =
-      (data && (data.detail || data.message || data.error)) ||
-      `Request gagal dengan status ${res.status}`;
+    // Backend balikin error validasi field dalam bentuk
+    // {"errors": {"field": ["pesan", ...]}} -- kalau nggak ada detail/message
+    // yang kebaca, rangkai pesan dari errors itu biar user tau field mana yang
+    // salah, bukan cuma "Request gagal dengan status 400" yang nggak informatif.
+    let message = data && (data.detail || data.message || data.error);
+    if (!message && data?.errors && typeof data.errors === "object") {
+      const parts = Object.values(data.errors)
+        .flat()
+        .filter(Boolean);
+      if (parts.length) message = parts.join(" ");
+    }
+    if (!message) message = `Request gagal dengan status ${res.status}`;
     throw new ApiError(message, { status: res.status, data, url });
   }
 
   return data;
+}
+
+/**
+ * Upload file (FormData) yang balikin {ok, status, data} alih-alih nge-throw.
+ *
+ * Dipakai halaman-halaman upload yang butuh baca status mentah (mis. bedain
+ * 413 "file kegedean" dari error validasi biasa). Bedanya sama fetch mentah:
+ * ini tetap lewat apiRequest, jadi kalau access token keburu kedaluwarsa pas
+ * user lama ngisi form, tokennya di-refresh otomatis dan request diulang --
+ * ini yang dulu bikin pendaftaran gagal 401 tanpa penjelasan.
+ */
+export async function apiRequestRaw(path, formData, { method = "POST" } = {}) {
+  try {
+    const data = await apiRequest(path, { method, body: formData });
+    return { ok: true, status: 200, data };
+  } catch (err) {
+    if (err instanceof ApiError) {
+      return { ok: false, status: err.status, data: err.data ?? null, message: err.message };
+    }
+    throw err;
+  }
 }
 
 export const api = {

@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.decorators import jwt_required, role_required
-from accounts.models import UserRole
+from accounts.models import UserRole, UserStatus
 
 from .models import (
     MentorProfile,
@@ -16,6 +16,7 @@ from .models import (
 )
 from .forms import MentorAvailabilityForm, MentorProfileForm, MentorExperienceForm
 from .utils import get_request_data
+from accounts.utils import tanggal_indo
 
 
 def _serialize_mentor_slot(availability):
@@ -70,6 +71,25 @@ def get_mentors(request):
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])
 
+    # Endpoint ini dipakai buat DUA konteks beda: direktori mentor publik
+    # (harus nyaring profil belum lengkap) DAN dropdown assign-mentor-ke-sesi
+    # admin (kelola pesanan bootcamp) -- admin harus tetap bisa nugasin
+    # mentor yang profil publiknya belum lengkap, karena itu urusan internal
+    # penjadwalan/payout, bukan tampilan publik. Deteksi admin dari JWT kalau
+    # ada, tapi endpoint tetap boleh diakses tanpa token (buat direktori publik).
+    requester_is_admin = False
+    auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+    if auth_header.startswith("Bearer "):
+        from rest_framework_simplejwt.authentication import JWTAuthentication
+        from rest_framework_simplejwt.exceptions import InvalidToken, AuthenticationFailed
+
+        try:
+            jwt_auth = JWTAuthentication()
+            validated_token = jwt_auth.get_validated_token(auth_header.split(" ", 1)[1].strip())
+            requester_is_admin = jwt_auth.get_user(validated_token).role == UserRole.ADMIN
+        except (InvalidToken, AuthenticationFailed):
+            requester_is_admin = False
+
     mentors = (
         MentorProfile.objects.select_related("user")
         .prefetch_related(
@@ -77,11 +97,68 @@ def get_mentors(request):
             "mentor_experiences",
             "mentor_availabilities",
         )
+        # Mentor yang akunnya dinonaktifkan admin (User.status=INACTIVE) gak
+        # boleh nongol di direktori publik -- sebelumnya query ini cuma
+        # nyaring profil belum lengkap, gak pernah ngecek status akun sama
+        # sekali.
+        #
+        # Peran juga WAJIB dicek, bukan cuma keberadaan MentorProfile-nya.
+        # MentorProfile dibuat saat admin mengubah peran seseorang jadi MENTOR,
+        # tapi menurunkan perannya lagi TIDAK menghapus baris itu (sengaja --
+        # riwayat sesi & payout-nya masih menggantung ke sana). Tanpa cek ini,
+        # akun yang perannya sudah dikembalikan ke STUDENT tetap tampil di
+        # direktori mentor publik. Sudah pernah kejadian di produksi.
+        #
+        # Berlaku juga buat admin (dropdown assign-mentor): orang yang bukan
+        # mentor lagi memang tidak boleh ditugaskan ke sesi baru. Penugasan
+        # lama tidak terpengaruh karena tersimpan di sesinya sendiri.
+        .filter(user__role=UserRole.MENTOR, user__status=UserStatus.ACTIVE)
         .order_by("-rating")
     )
 
-    data = [_serialize_mentor(mentor, request) for mentor in mentors]
+    # ?product_id= dipakai widget pilih-mentor di checkout -- cuma tampilin
+    # mentor yang keahliannya overlap sama kategori produk mentoring itu.
+    # Kalau produknya belum ditandain kategori sama sekali (belum di-setting
+    # admin), jangan dibatasi dulu -- daripada checkout-nya malah kosong.
+    product_id = request.GET.get("product_id")
+    if product_id:
+        from products.models import MentoringProduct
+
+        try:
+            product = MentoringProduct.objects.prefetch_related("expertise").get(
+                product_id=product_id
+            )
+        except MentoringProduct.DoesNotExist:
+            product = None
+
+        if product is not None:
+            expertise_ids = list(product.expertise.values_list("id", flat=True))
+            if expertise_ids:
+                mentors = mentors.filter(
+                    mentor_expertises__expertise_id__in=expertise_ids
+                ).distinct()
+
+    # Mentor yang profilnya belum lengkap ATAU dinonaktifkan admin sebagai
+    # mentor (lihat MentorProfile.mentor_status) nggak ditampilin publik.
+    # Admin (lihat requester_is_admin di atas) tetap lihat semua mentor.
+    data = [
+        _serialize_mentor(mentor, request)
+        for mentor in mentors
+        if requester_is_admin or mentor.bisa_dipesan()
+    ]
     return JsonResponse({"mentors": data}, status=200)
+
+
+def _slot_bentrok(mentor_profile, mulai, selesai, abaikan_id=None):
+    """Slot milik mentor ini yang waktunya beririsan dengan [mulai, selesai),
+    atau None. Bersentuhan pas di batas (11:00 selesai, 11:00 mulai) bukan
+    bentrok."""
+    qs = MentorAvailability.objects.filter(
+        mentor_profile=mentor_profile, start_time__lt=selesai, end_time__gt=mulai,
+    )
+    if abaikan_id is not None:
+        qs = qs.exclude(id=abaikan_id)
+    return qs.first()
 
 
 @csrf_exempt
@@ -110,7 +187,30 @@ def add_availability(request):
 
     availability = form.save(commit=False)
     availability.mentor_profile = mentor_profile
-    availability.save()
+
+    # Idempoten: kalau mentor udah punya slot di jam mulai yang sama persis,
+    # jangan bikin baris baru -- balikin yang udah ada. Ini yang bikin slot
+    # kedouble/ketriple kemarin (de-dup di FE gak reliable karena beda zona
+    # waktu browser), sekarang dijamin unik di sisi server.
+    existing = MentorAvailability.objects.filter(
+        mentor_profile=mentor_profile,
+        start_time=availability.start_time,
+    ).first()
+    if existing:
+        availability = existing
+    else:
+        # Tolak slot yang BERTABRAKAN dengan slot lain (bukan cuma yang jam
+        # mulainya persis sama) -- dulu 10:00-11:00 & 10:30-11:30 dua-duanya
+        # bisa dibuat, jadi mentor bisa dibooking dua orang di jam yang sama.
+        bentrok = _slot_bentrok(mentor_profile, availability.start_time, availability.end_time)
+        if bentrok is not None:
+            mulai = tanggal_indo(bentrok.start_time)
+            selesai = timezone.localtime(bentrok.end_time).strftime("%H:%M")
+            return JsonResponse(
+                {"errors": {"non_field_errors": [f"Bertabrakan dengan jadwal kamu yang lain ({mulai}-{selesai} WIB)."]}},
+                status=400,
+            )
+        availability.save()
 
     return JsonResponse(
         {
@@ -211,9 +311,15 @@ def get_mentor_availability(request, mentor_id):
     except MentorProfile.DoesNotExist:
         return JsonResponse({"detail": "Mentor profile tidak ditemukan."}, status=404)
 
+    # start_time__gt=now WAJIB -- tanpa ini, slot yang sudah lewat waktu
+    # tapi gak pernah kebooking (mis. mentor buka jadwal terus gak ada yang
+    # ambil) tetap muncul sebagai "bisa dipilih", dan karena diurutkan
+    # ascending malah nongol PALING ATAS duluan sebelum jadwal yang beneran
+    # valid -- user bisa nge-klik jadwal yang udah lewat.
     slots = MentorAvailability.objects.filter(
         mentor_profile=mentor,
         is_booked=False,
+        start_time__gt=timezone.now(),
     ).order_by("start_time")
 
     day_names = {
@@ -240,6 +346,8 @@ def get_mentor_availability(request, mentor_id):
             "id": str(slot.id),
             "date": date_label,
             "time": time_label,
+            # ISO mentah buat frontend banding urutan waktu antar-sesi.
+            "start_time": slot.start_time.isoformat(),
         })
 
     return JsonResponse({"availability": data}, status=200)
@@ -284,6 +392,9 @@ def my_profile_view(request):
                     _serialize_experience(exp)
                     for exp in mentor_profile.mentor_experiences.all()
                 ],
+                # Dipakai halaman Settings buat menyorot syarat mana yang bikin
+                # badge angka di sidebar menyala. Sumbernya sama dengan badge.
+                "missing_profile_fields": mentor_profile.missing_profile_fields(),
             },
             status=200,
         )
@@ -461,7 +572,7 @@ def get_my_sessions(request):
         .order_by("user_library_id", "order")
     )
     bootcamp_sessions = (
-        BootcampSession.objects.filter(mentor=mentor_profile, user_library__is_revoked=False)
+        BootcampSession.objects.filter(mentors=mentor_profile, user_library__is_revoked=False)
         .select_related("bootcamp", "bootcamp__product", "user_library__user")
         .order_by("user_library_id", "order")
     )
@@ -513,21 +624,29 @@ def get_my_reviews(request):
     if error:
         return error
 
-    product_ids = set(
+    # Filter per pasangan (produk, mentee) yang BENERAN diajar mentor ini --
+    # bukan cuma per produk. Satu MentoringProduct bisa diajar mentor
+    # berbeda-beda per mentee (mentee milih mentornya sendiri pas checkout,
+    # lihat MentoringProduct.expertise), jadi kalau cuma difilter per produk,
+    # mentor A bisa ikut lihat ulasan dari mentee yang sebenernya diajar
+    # mentor B di produk yang sama.
+    taught_pairs = set(
         MentoringSession.objects.filter(mentor=mentor_profile).values_list(
-            "mentoring__product_id", flat=True
+            "mentoring__product_id", "user_library__user_id"
         )
     ) | set(
-        BootcampSession.objects.filter(mentor=mentor_profile).values_list(
-            "bootcamp__product_id", flat=True
+        BootcampSession.objects.filter(mentors=mentor_profile).values_list(
+            "bootcamp__product_id", "user_library__user_id"
         )
     )
+    product_ids = {pid for pid, _ in taught_pairs}
 
     reviews = (
         Review.objects.filter(product_id__in=product_ids, is_hidden=False)
         .select_related("user", "product")
         .order_by("-created_at")
     )
+    reviews = [r for r in reviews if (r.product_id, r.user_id) in taught_pairs]
 
     data = []
     for review in reviews:
@@ -546,3 +665,141 @@ def get_my_reviews(request):
         )
 
     return JsonResponse({"reviews": data}, status=200)
+
+@jwt_required
+@role_required(UserRole.MENTOR)
+def get_mentor_sidebar_badges(request):
+    """Angka notifikasi buat sidebar dashboard mentor -- Active Classes
+    (sesi terjadwal yang link meeting-nya belum ada) & Settings
+    (profil belum lengkap, lihat MentorProfile.is_profile_complete)."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    from products.models import MentoringSession, BootcampSession
+
+    mentor_profile, error = _get_mentor_profile_or_404(request)
+    if error:
+        return error
+
+    # Cuma yang BISA dikerjakan mentor: sesi terjadwal (belum lewat) yang
+    # belum punya link meeting. Sesi "menunggu pembeli pilih jadwal" dulu
+    # ikut dihitung -- padahal mentor gak bisa berbuat apa-apa, jadi
+    # badge-nya nyangkut terus walau halamannya sudah dibuka.
+    sekarang = timezone.now()
+    active_classes_pending = (
+        MentoringSession.objects.filter(
+            mentor=mentor_profile, user_library__is_revoked=False,
+            status="scheduled", zoom_link="", start_time__gte=sekarang,
+        ).count()
+        + BootcampSession.objects.filter(
+            mentors=mentor_profile, user_library__is_revoked=False,
+            status="scheduled", meeting_link="", start_time__gte=sekarang,
+        ).count()
+    )
+
+    data = {
+        "active_classes": active_classes_pending,
+        "settings": 0 if mentor_profile.is_profile_complete() else 1,
+    }
+    return JsonResponse(data, status=200)
+
+
+MAX_BULK_AVAILABILITY_SLOTS = 800
+
+
+@csrf_exempt
+@jwt_required
+@role_required(UserRole.MENTOR)
+def add_availability_bulk(request):
+    """Bikin banyak slot availability sekaligus (rentang tanggal x list jam)
+    dalam SATU request. Sebelumnya FE nembak 1 POST per (tanggal x jam) --
+    kalau mentor ngebatch setahun penuh (mis. 2026->2027), itu ratusan/ribuan
+    request paralel yang bikin sebagian kena rate-limit & gagal, jadi kalender
+    keliatan bolong. Di sini semuanya dibuat server-side, idempoten (skip yang
+    udah ada), dan dibatasi biar gak kebablasan."""
+    from datetime import datetime, timedelta
+
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        mentor_profile = request.user.mentor_profile
+    except MentorProfile.DoesNotExist:
+        return JsonResponse({"detail": "Mentor profile tidak ditemukan."}, status=404)
+
+    data = get_request_data(request)
+    if data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+
+    start_date_str = data.get("start_date")
+    end_date_str = data.get("end_date")
+    times = data.get("times") or []
+
+    if not start_date_str or not end_date_str or not isinstance(times, list) or not times:
+        return JsonResponse(
+            {"detail": "start_date, end_date, dan times (list jam) diperlukan."},
+            status=400,
+        )
+
+    try:
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return JsonResponse({"detail": "Format tanggal harus YYYY-MM-DD."}, status=400)
+
+    if end_date < start_date:
+        return JsonResponse({"detail": "end_date tidak boleh sebelum start_date."}, status=400)
+
+    num_days = (end_date - start_date).days + 1
+    if num_days * len(times) > MAX_BULK_AVAILABILITY_SLOTS:
+        return JsonResponse(
+            {"detail": f"Terlalu banyak slot sekaligus (maks {MAX_BULK_AVAILABILITY_SLOTS}). Persempit rentang tanggal atau jamnya."},
+            status=400,
+        )
+
+    # Ambil dulu slot yang udah ada di rentang ini biar gak query berkali-kali.
+    range_start_dt = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+    range_end_dt = timezone.make_aware(datetime.combine(end_date + timedelta(days=1), datetime.min.time()))
+    # Rentang waktu slot yang SUDAH ada (diperlebar sejam di kedua sisi biar
+    # slot yang beririsan di tepi rentang ikut kebaca) -- dipakai buat nolak
+    # slot baru yang bertabrakan, bukan cuma yang jam mulainya persis sama.
+    terpakai = list(
+        MentorAvailability.objects.filter(
+            mentor_profile=mentor_profile,
+            start_time__lt=range_end_dt + timedelta(hours=1),
+            end_time__gt=range_start_dt - timedelta(hours=1),
+        ).values_list("start_time", "end_time")
+    )
+    sekarang = timezone.now()
+
+    to_create = []
+    day = start_date
+    while day <= end_date:
+        for t in times:
+            try:
+                hh, mm = str(t).split(":")
+                slot_time = datetime.min.time().replace(hour=int(hh), minute=int(mm))
+            except (ValueError, TypeError):
+                continue
+            start_dt = timezone.make_aware(datetime.combine(day, slot_time))
+            end_dt = start_dt + timedelta(hours=1)
+            # Lewati jam yang sudah lewat & yang bertabrakan dengan slot lain
+            # (termasuk slot lain di permintaan yang sama, mis. 10:00 & 10:30).
+            if start_dt <= sekarang:
+                continue
+            if any(s < end_dt and e > start_dt for s, e in terpakai):
+                continue
+            to_create.append(
+                MentorAvailability(
+                    mentor_profile=mentor_profile,
+                    start_time=start_dt,
+                    end_time=end_dt,
+                )
+            )
+            terpakai.append((start_dt, end_dt))
+        day += timedelta(days=1)
+
+    if to_create:
+        MentorAvailability.objects.bulk_create(to_create, ignore_conflicts=True)
+
+    return JsonResponse({"detail": "Slot berhasil ditambahkan.", "created": len(to_create)}, status=201)

@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     login_view,
+    google_login_view,
     register_view,
     get_user_summary,
     get_current_user,
@@ -16,6 +17,8 @@ from .views import (
     update_user,
     change_password,
     delete_account,
+    confirm_delete_account,
+    report_client_error,
     forgot_password,
     reset_password,
     verify_email,
@@ -24,12 +27,20 @@ from .views import (
     get_contact_messages,
     get_contact_message_detail,
     get_audit_logs,
+    get_admin_sidebar_badges,
+    get_student_sidebar_badges,
+    get_notifications,
+    mark_notifications_read,
+    preview_broadcast_recipients,
+    send_broadcast_email,
+    get_broadcast_history,
 )
 
 urlpatterns = [
     path("register/", register_view, name="api_register"),
     path("me/", get_current_user, name="api_auth_me"),
     path("login/", login_view, name="api_login"),
+    path("google-login/", google_login_view, name="api_google_login"),
     path("logout/", logout_user, name="api_logout"),
     path("summary/", get_user_summary, name="api_users_summary"),
     path("me/profile/", profile_view, name="api_profile"),
@@ -39,6 +50,7 @@ urlpatterns = [
     path("me/cv/delete/", delete_cv, name="delete_cv"),
     path("me/change-password/", change_password, name="api_change_password"),
     path("me/delete/", delete_account, name="api_delete_account"),
+    path("delete-account/confirm/", confirm_delete_account, name="api_confirm_delete_account"),
     path("forgot-password/", forgot_password, name="api_forgot_password"),
     path("reset-password/", reset_password, name="api_reset_password"),
     path("verify-email/", verify_email, name="api_verify_email"),
@@ -50,4 +62,14 @@ urlpatterns = [
     path("contact-messages/<uuid:message_id>/", get_contact_message_detail, name="api_contact_message_detail"),
     path("contact/", submit_contact_message, name="api_contact_submit"),
     path("audit-logs/", get_audit_logs, name="api_audit_logs_list"),
+    path("admin/sidebar-badges/", get_admin_sidebar_badges, name="api_admin_sidebar_badges"),
+    path("me/sidebar-badges/", get_student_sidebar_badges, name="api_student_sidebar_badges"),
+    path("me/notifications/", get_notifications, name="api_notifications_list"),
+    path("me/notifications/mark-read/", mark_notifications_read, name="api_notifications_mark_read"),
+    path("broadcast-email/preview/", preview_broadcast_recipients, name="api_broadcast_email_preview"),
+    path("broadcast-email/send/", send_broadcast_email, name="api_broadcast_email_send"),
+    path("broadcast-email/history/", get_broadcast_history, name="api_broadcast_email_history"),
+    # Laporan error yang terjadi di browser pengguna -- tanpa login, lihat
+    # report_client_error di views.py untuk alasan & pembatasnya.
+    path("client-error/", report_client_error, name="api_report_client_error"),
 ]

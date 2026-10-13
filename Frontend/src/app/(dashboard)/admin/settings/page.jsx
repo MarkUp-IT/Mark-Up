@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { Camera, Lock } from "lucide-react";
 import Link from "next/link";
-import DashboardLayout from "@/component/admin/DashboardLayout";
-import { apiRequest, getAccessToken, API_BASE } from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/lib/formErrors";
 
@@ -55,19 +54,12 @@ export default function AdminSettings() {
     try {
       const formData = new FormData();
       formData.append("photo", file);
-      const token = getAccessToken();
-      const res = await fetch(`${API_BASE}/api/accounts/me/profile/photo/`, {
+      const data = await apiRequest("/api/accounts/me/profile/photo/", {
         method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
-      const data = await res.json().catch(() => null);
-      if (res.ok) {
-        setProfileImage(data.profile_image);
-        toast.success("Foto Profil Diperbarui");
-      } else {
-        toast.error("Gagal Mengunggah Foto", { description: data?.detail || "Terjadi kesalahan." });
-      }
+      setProfileImage(data.profile_image);
+      toast.success("Foto Profil Diperbarui");
     } catch (err) {
       toast.error("Gagal Mengunggah Foto", { description: err?.message || "Terjadi kesalahan." });
     } finally {
@@ -76,7 +68,7 @@ export default function AdminSettings() {
   };
 
   return (
-    <DashboardLayout title="Pengaturan">
+    <>
       <div>
         <h1 className="font-bold text-[22px] text-[#0F172A]">Pengaturan Akun</h1>
         <p className="text-[#64748B] text-[14px] mt-1">
@@ -94,13 +86,11 @@ export default function AdminSettings() {
             style={{ width: "72px", height: "72px" }}
             className="rounded-full overflow-hidden border border-[#E2E8F0] relative shrink-0 bg-[#F1F5F9]"
           >
-            {profileImage && (
-              <img
-                src={profileImage}
-                alt="Foto profil"
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            )}
+            <img
+              src={profileImage || "/images/default-avatar.svg"}
+              alt="Foto profil"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <p className="text-[#1E293B] font-semibold text-[14px]">Foto Profil</p>
@@ -151,7 +141,7 @@ export default function AdminSettings() {
               Admin
             </div>
             <p className="text-[#94A3B8] text-[11px]">
-              Role admin diatur lewat Manajemen User oleh Super Admin, nggak bisa diubah sendiri di sini.
+              Peran admin diatur melalui Manajemen User oleh Super Admin dan tidak dapat diubah sendiri di sini.
             </p>
           </div>
 
@@ -177,7 +167,7 @@ export default function AdminSettings() {
             </div>
             <div>
               <p className="text-[#1E293B] font-semibold text-[14px]">Password</p>
-              <p className="text-[#64748B] text-[12.5px]">Ganti password akun secara berkala buat keamanan.</p>
+              <p className="text-[#64748B] text-[12.5px]">Ganti kata sandi akun secara berkala demi keamanan.</p>
             </div>
           </div>
           <Link
@@ -188,6 +178,6 @@ export default function AdminSettings() {
           </Link>
         </div>
       </form>
-    </DashboardLayout>
+    </>
   );
 }

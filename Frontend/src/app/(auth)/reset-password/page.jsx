@@ -56,7 +56,7 @@ function ResetPasswordForm() {
       return;
     }
     if (newPassword !== confirmPassword) {
-      setFormError("Konfirmasi password baru nggak sama.");
+      setFormError("Konfirmasi kata sandi baru tidak sama.");
       return;
     }
 
@@ -118,8 +118,8 @@ function ResetPasswordForm() {
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
                 <img src="/images/logo-markup.svg" alt="Mark-Up" className="w-[150px]" />
-                <p className="font-bold text-[#B19EEF] text-[28px] font-poppins mt-2">Buat Password Baru</p>
-                <p className="text-[13px] text-[#9CA3AF]">Masukkan password baru buat akunmu.</p>
+                <p className="font-bold text-[#B19EEF] text-[28px] font-poppins mt-2">Buat Kata Sandi Baru</p>
+                <p className="text-[13px] text-[#9CA3AF]">Masukkan kata sandi baru untuk akunmu.</p>
               </div>
 
               {formError && <p className="text-red-400 text-[13px]">{formError}</p>}

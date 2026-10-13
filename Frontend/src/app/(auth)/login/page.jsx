@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
-import { api, ApiError, setTokens } from "@/lib/api";
+import { api, ApiError, setTokens, isStorageBlocked } from "@/lib/api";
+import GoogleSignInButton from "@/component/GoogleSignInButton";
 
 // Paksa background input autofill browser tetap gelap -- browser (Chrome dkk)
 // otomatis kasih background terang ke field yang di-autofill/diinget, dan itu
@@ -45,8 +46,13 @@ function Field({ label, type = "text", value, onChange, rightIcon }) {
   );
 }
 
-export default function Login() {
+function LoginInner() {
   const router = useRouter();
+  // ?next= diisi halaman yang butuh login (mis. checkout). Cuma path internal
+  // yang diterima -- kalau nerima URL absolut, orang bisa bikin link login
+  // yang habis sukses malah nendang korban ke situs lain (open redirect).
+  const rawNext = useSearchParams().get("next");
+  const nextPath = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -86,6 +92,19 @@ export default function Login() {
         refresh: data.refresh,
       });
 
+      // Kalau browser memblokir penyimpanan situs, token barusan tidak
+      // tersimpan -- user akan langsung terlempar keluar begitu pindah halaman.
+      // Lebih baik dikatakan terus terang daripada dia bingung sendiri.
+      if (isStorageBlocked()) {
+        showToast(
+          "error",
+          "Browser memblokir penyimpanan situs",
+          "Login tidak bisa disimpan. Izinkan cookie & data situs untuk mark-up.id, atau keluar dari mode penyamaran, lalu coba lagi.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
       showToast(
         "success",
         "Login berhasil",
@@ -95,6 +114,13 @@ export default function Login() {
       const role = data.user?.role;
 
       window.setTimeout(() => {
+        // Kalau user tadi diarahkan ke sini dari halaman yang butuh login
+        // (mis. checkout), balikin ke situ -- bukan dilempar ke dashboard,
+        // yang bikin dia harus nyari ulang produk yang mau dibeli.
+        if (nextPath) {
+          router.push(nextPath);
+          return;
+        }
         switch (role) {
           case "ADMIN":
             router.push("/admin");
@@ -246,6 +272,8 @@ export default function Login() {
             {isSubmitting ? "Memproses..." : "Masuk"}
           </button>
 
+          <GoogleSignInButton />
+
           <p className="text-[13px] text-center text-[#9CA3AF]">
             Belum memiliki akun?{" "}
             <Link href="/register" className="text-[#08C7E1] hover:underline">
@@ -270,3 +298,12 @@ export default function Login() {
   );
   }
 
+// useSearchParams wajib dibungkus Suspense, kalau nggak build produksi bisa
+// gagal waktu Next.js nyoba prerender halaman ini.
+export default function Login() {
+  return (
+    <Suspense fallback={<div className="w-full min-h-screen bg-[#060010]" />}>
+      <LoginInner />
+    </Suspense>
+  );
+}
