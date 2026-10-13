@@ -47,8 +47,21 @@ pm2 restart markup-frontend
 #   # setelah meeting bubar.
 #   17 * * * * cd /var/www/markup/Backend && ./.venv/bin/python manage.py fetch_zoom_recordings --execute >> /var/log/markup_zoom.log 2>&1
 #
-# Keduanya WAJIB pakai --execute. Tanpa itu perintahnya cuma dry-run: melapor
-# tanpa mengubah apa pun, dan link tidak akan pernah terisi.
+#   # Lepas reservasi pembayaran yang kedaluwarsa (15 menit) & pulihkan pembayaran
+#   # iPaymu yang telat. Tanpa --execute pun jalan (bukan dry-run).
+#   */2 * * * * cd /var/www/markup/Backend && ./.venv/bin/python manage.py expire_stale_transactions >> /var/log/markup_reservations.log 2>&1
+#
+#   # Pengingat mentoring (H-24 & H-3 jam), pengingat pilih jadwal, sesi selesai
+#   # otomatis, dan cek paket akun Zoom harian. Aman diulang: tiap kabar
+#   # tercatat (accounts.PesanTerkirim) jadi hanya terkirim sekali.
+#   */10 * * * * cd /var/www/markup/Backend && ./.venv/bin/python manage.py send_mentoring_reminders --execute >> /var/log/markup_reminders.log 2>&1
+#
+# Perintah yang berlabel --execute WAJIB pakai --execute. Tanpa itu perintahnya
+# cuma dry-run: melapor tanpa mengubah apa pun, dan link/email tidak akan
+# pernah terkirim.
+#
+# Frontend: pakai Frontend/deploy-frontend.sh (zero-downtime) alih-alih
+# `npm run build` langsung -- build di tempat membuat situs 502 selama proses.
 #
 # Butuh ZOOM_CRED_KEY di Backend/.env. Bikin sekali:
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
