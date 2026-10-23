@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
@@ -18,6 +18,7 @@ import {
   AlertCircle,
   MoreVertical,
   MessageCircle,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import Linkify from "@/component/Linkify";
@@ -83,7 +84,19 @@ function mapSession(raw) {
     meetingLink: raw.meeting_link,
     zoomLink: raw.zoom_link,
     recordingUrl: raw.recording_url,
+    // Feedback mentee untuk sesi ini ({rating, comment}) atau null.
+    feedback: raw.feedback || null,
   };
+}
+
+function Bintang({ nilai, ukuran = 14 }) {
+  return (
+    <span className="flex items-center gap-0.5" aria-label={`${nilai} dari 5 bintang`}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Star key={i} size={ukuran} className={i <= nilai ? "fill-[#F59E0B] text-[#F59E0B]" : "text-[#4B4560]"} />
+      ))}
+    </span>
+  );
 }
 
 function mapProductDetail(raw) {
@@ -126,7 +139,9 @@ export default function ProductDetail() {
             `/api/products/my-products/${params.id}/`
         );
 
-        setProduct(mapProductDetail(res));
+        const data = mapProductDetail(res);
+        setProduct(data);
+        bukaFeedbackDariLink(data);
     } finally {
         if (showLoading) setLoading(false);
     }
@@ -137,6 +152,12 @@ export default function ProductDetail() {
   // --- Refund (satu-satunya, level produk, bukan per-sesi) ---
   const [refundMenuOpen, setRefundMenuOpen] = useState(false);
   const [refundModalOpen, setRefundModalOpen] = useState(false);
+  // --- Feedback per sesi mentoring (diminta lewat lonceng + email setelah sesi selesai) ---
+  const [feedbackSesi, setFeedbackSesi] = useState(null);
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackKomentar, setFeedbackKomentar] = useState("");
+  const [feedbackKirim, setFeedbackKirim] = useState(false);
+  const feedbackDariLinkDicek = useRef(false);
   const [refundReason, setRefundReason] = useState("");
   const [refundRekening, setRefundRekening] = useState({
     bank_name: "",
@@ -192,6 +213,52 @@ export default function ProductDetail() {
       };
 
   
+
+  // Fungsi feedback SENGAJA didefinisikan sebelum `if (loading) return` di
+  // bawah: fetchDetail (dari render pertama, saat masih loading) memanggil
+  // bukaFeedbackDariLink -> bukaFeedback. Kalau didefinisikan setelah return
+  // lebih awal, const-nya belum pernah terinisialisasi di render itu dan
+  // modal dari link email diam-diam gagal terbuka.
+  const bukaFeedback = (session) => {
+    setFeedbackSesi(session);
+    setFeedbackRating(0);
+    setFeedbackKomentar("");
+  };
+
+  const kirimFeedback = async () => {
+    if (!feedbackSesi || feedbackRating < 1 || feedbackKirim) return;
+    setFeedbackKirim(true);
+    try {
+      await apiRequest(`/api/products/my-products/sessions/${feedbackSesi.id}/feedback/`, {
+        method: "POST",
+        body: { rating: feedbackRating, comment: feedbackKomentar },
+      });
+      toast.success("Terima Kasih atas Feedback-mu!");
+      setFeedbackSesi(null);
+      fetchDetail(false);
+    } catch (err) {
+      toast.error("Feedback Gagal Dikirim", { description: extractErrorMessage(err, "Coba lagi.") });
+    } finally {
+      setFeedbackKirim(false);
+    }
+  };
+
+  // Link "Beri Feedback" di email membuka halaman ini dengan ?feedback=<id sesi>.
+  // Dibaca dari window.location (bukan useSearchParams) supaya halaman tidak
+  // perlu dibungkus Suspense; dipanggil sekali begitu data produk termuat.
+  function bukaFeedbackDariLink(dataProduk) {
+    if (feedbackDariLinkDicek.current || typeof window === "undefined") return;
+    feedbackDariLinkDicek.current = true;
+    const id = new URLSearchParams(window.location.search).get("feedback");
+    if (!id) return;
+    const sesi = (dataProduk.sessions || []).find((x) => x.id === id);
+    if (!sesi) return;
+    if (sesi.feedback) {
+      toast.info("Kamu sudah memberi feedback untuk sesi ini. Terima kasih!");
+    } else if (sesi.status === "completed") {
+      bukaFeedback(sesi);
+    }
+  }
 
   if (loading) {
     return (
@@ -421,7 +488,7 @@ export default function ProductDetail() {
     }
 
     if (session.status === "completed") {
-      return session.recordingUrl ? (
+      const rekaman = session.recordingUrl ? (
         <a
           href={session.recordingUrl}
           target="_blank"
@@ -432,6 +499,25 @@ export default function ProductDetail() {
           Rekaman
         </a>
       ) : null;
+      if (productType !== "mentoring") return rekaman;
+      return (
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {rekaman}
+          {session.feedback ? (
+            <span className="flex items-center gap-1.5 text-[#9CA3AF] text-[11px]" title="Feedback-mu untuk sesi ini">
+              <Bintang nilai={session.feedback.rating} ukuran={12} />
+            </span>
+          ) : (
+            <button
+              onClick={() => bukaFeedback(session)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-[8px] bg-[#F59E0B]/10 border border-[#F59E0B]/40 text-[#FCD34D] text-[12px] font-semibold hover:bg-[#F59E0B]/20 transition-colors whitespace-nowrap"
+            >
+              <Star size={13} />
+              Beri Feedback
+            </button>
+          )}
+        </div>
+      );
     }
 
     // status === "scheduled"
@@ -1054,6 +1140,65 @@ export default function ProductDetail() {
             )}
           </motion.div>
         </motion.div>
+      )}
+
+      {/* --- MODAL: Feedback satu sesi mentoring --- */}
+      {feedbackSesi && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setFeedbackSesi(null)} />
+          <div className="relative w-full max-w-[420px] bg-[#170F26] border border-[#2D2342] rounded-[16px] shadow-2xl overflow-hidden">
+            <div className="flex items-start justify-between gap-3 p-6 border-b border-[#2D2342]">
+              <div>
+                <h3 className="text-white font-bold text-[16px]">Bagaimana Sesi {feedbackSesi.order}?</h3>
+                <p className="text-[#9CA3AF] text-[12px] mt-1">
+                  {feedbackSesi.mentor ? `Bersama ${feedbackSesi.mentor}` : ""}
+                  {feedbackSesi.startTime ? ` · ${formatDateTime(feedbackSesi.startTime)}` : ""}
+                </p>
+              </div>
+              <button onClick={() => setFeedbackSesi(null)} className="text-[#9CA3AF] hover:text-white" aria-label="Tutup">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-6 flex flex-col gap-4">
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setFeedbackRating(i)}
+                      aria-label={`${i} bintang`}
+                      className="p-1 rounded-md hover:scale-110 transition-transform"
+                    >
+                      <Star
+                        size={30}
+                        className={i <= feedbackRating ? "fill-[#F59E0B] text-[#F59E0B]" : "text-[#4B4560]"}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[#9CA3AF] text-[12px] h-4">
+                  {["", "Kurang", "Cukup", "Baik", "Sangat baik", "Luar biasa"][feedbackRating]}
+                </span>
+              </div>
+              <textarea
+                value={feedbackKomentar}
+                onChange={(e) => setFeedbackKomentar(e.target.value)}
+                rows={4}
+                maxLength={2000}
+                placeholder="Ceritakan pengalamanmu di sesi ini (opsional)..."
+                className="w-full bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-4 py-3 text-[13px] text-white placeholder:text-[#6B7280] outline-none focus:border-[#148F89]/60 transition-colors resize-none"
+              />
+              <button
+                onClick={kirimFeedback}
+                disabled={feedbackRating < 1 || feedbackKirim}
+                className="w-full py-3 rounded-[8px] bg-[#148F89] text-white font-semibold text-[13px] hover:bg-[#117A75] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {feedbackKirim ? "Mengirim..." : feedbackRating < 1 ? "Pilih jumlah bintang dulu" : "Kirim Feedback"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* --- MODAL: Ajukan Refund (level produk, cuma 1) --- */}

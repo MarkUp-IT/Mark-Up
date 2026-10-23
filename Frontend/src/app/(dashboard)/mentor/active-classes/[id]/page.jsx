@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, PlayCircle, Users, Clock } from "lucide-react";
+import { ArrowLeft, PlayCircle, Users, Clock, Star } from "lucide-react";
 import EmptyState from "@/component/mentor/EmptyState";
 import { apiRequest } from "@/lib/api";
 import { useTimpaJudulDashboard } from "@/lib/dashboardChrome";
@@ -268,6 +268,23 @@ export default function ClassDetail() {
                         <Clock size={12} />
                         {formatDateTime(session.start_time)}
                       </p>
+                    )}
+                    {session.feedback && (
+                      <div className="mt-1 flex flex-col gap-1 bg-[#0F081C] border border-[#2D2342] rounded-[8px] px-3 py-2">
+                        <span className="flex items-center gap-1.5 text-[#9CA3AF] text-[11px]">
+                          Feedback mentee:
+                          <span className="flex items-center gap-0.5">
+                            {[1, 2, 3, 4, 5].map((i) => (
+                              <Star key={i} size={11} className={i <= session.feedback.rating ? "fill-[#F59E0B] text-[#F59E0B]" : "text-[#4B4560]"} />
+                            ))}
+                          </span>
+                        </span>
+                        {session.feedback.comment && (
+                          <p className="text-[#E2E8F0] text-[12px] leading-relaxed whitespace-pre-line">
+                            &ldquo;{session.feedback.comment}&rdquo;
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

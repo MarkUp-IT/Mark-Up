@@ -16,6 +16,7 @@ DNS smtp-relay yang dibajak, dan port 443 praktis gak pernah diblokir di mana
 pun kalau nanti pindah hosting.
 """
 
+import base64
 import json
 from email.utils import parseaddr
 
@@ -85,6 +86,17 @@ class BrevoAPIEmailBackend(BaseEmailBackend):
             payload["bcc"] = [{"email": e} for e in msg.bcc]
         if getattr(msg, "reply_to", None):
             payload["replyTo"] = {"email": msg.reply_to[0]}
+        # Lampiran (mis. PDF invoice). Dulu diabaikan diam-diam -- email
+        # tetap terkirim tapi tanpa file yang dijanjikan isinya.
+        lampiran = []
+        for att in getattr(msg, "attachments", []) or []:
+            if isinstance(att, tuple) and len(att) >= 2:
+                nama, isi = att[0], att[1]
+                if isinstance(isi, str):
+                    isi = isi.encode("utf-8")
+                lampiran.append({"name": nama, "content": base64.b64encode(isi).decode()})
+        if lampiran:
+            payload["attachment"] = lampiran
 
         # Kalau view ngirim versi HTML (EmailMultiAlternatives), ikutkan.
         for isi, tipe in getattr(msg, "alternatives", []) or []:

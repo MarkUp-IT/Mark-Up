@@ -552,6 +552,16 @@ def my_experience_detail_view(request, experience_id):
     return HttpResponseNotAllowed(["PATCH", "PUT", "DELETE"])
 
 
+def _feedback_sesi(session):
+    """Feedback mentee untuk sesi ini (rating + komentar), atau None."""
+    from products.models import SessionFeedback
+
+    try:
+        fb = session.feedback
+    except SessionFeedback.DoesNotExist:
+        return None
+    return {"rating": fb.rating, "comment": fb.comment}
+
 @jwt_required
 @role_required(UserRole.MENTOR)
 def get_my_sessions(request):
@@ -588,6 +598,7 @@ def get_my_sessions(request):
             "status": s.status,
             "zoom_link": s.zoom_link,
             "recording_url": s.recording_url,
+            "feedback": _feedback_sesi(s),
         }
         for s in mentoring_sessions
     ]

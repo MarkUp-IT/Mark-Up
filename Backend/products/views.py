@@ -382,7 +382,25 @@ def _serialize_mentoring_session(session):
         "status": session.status,
         "zoom_link": session.zoom_link,
         "recording_url": session.recording_url,
+        "feedback": _ambil_feedback(session),
     }
+
+
+def _serialize_feedback(session):
+    """Feedback mentee untuk satu sesi, atau None kalau belum ada."""
+    fb = getattr(session, "feedback", None)
+    if fb is None:
+        return None
+    return {"rating": fb.rating, "comment": fb.comment, "created_at": fb.created_at.isoformat()}
+
+
+def _ambil_feedback(session):
+    from products.models import SessionFeedback
+
+    try:
+        return _serialize_feedback(session)
+    except SessionFeedback.DoesNotExist:
+        return None
 
 
 def _get_user_library(request, product_id):
@@ -534,6 +552,47 @@ def _info_refund(user_library):
         "refund_amount": float(terakhir.refund_amount) if terakhir.refund_amount is not None else None,
     } if terakhir else None
     return info
+
+
+
+@csrf_exempt
+@jwt_required
+def submit_session_feedback(request, session_id):
+    """Mentee menilai SATU sesi mentoring miliknya yang sudah selesai
+    (bintang 1-5 + komentar opsional). Sekali per sesi."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    from products.models import SessionFeedback
+
+    try:
+        session = MentoringSession.objects.select_related("user_library").get(
+            id=session_id, user_library__user=request.user,
+        )
+    except MentoringSession.DoesNotExist:
+        return JsonResponse({"detail": "Sesi tidak ditemukan."}, status=404)
+    if session.user_library.is_revoked:
+        return JsonResponse({"detail": "Akses program ini sudah tidak aktif."}, status=400)
+    if session.status != MentoringSession.SessionStatus.COMPLETED:
+        return JsonResponse({"detail": "Feedback baru bisa diberikan setelah sesi selesai."}, status=400)
+    if SessionFeedback.objects.filter(session=session).exists():
+        return JsonResponse({"detail": "Kamu sudah memberi feedback untuk sesi ini."}, status=400)
+
+    data = get_request_data(request)
+    if data is None:
+        return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
+    try:
+        rating = int(data.get("rating"))
+    except (TypeError, ValueError):
+        rating = 0
+    if not 1 <= rating <= 5:
+        return JsonResponse({"errors": {"rating": ["Pilih nilai 1 sampai 5 bintang."]}}, status=400)
+    komentar = str(data.get("comment") or "").strip()
+    if len(komentar) > 2000:
+        return JsonResponse({"errors": {"comment": ["Komentar maksimal 2000 karakter."]}}, status=400)
+
+    fb = SessionFeedback.objects.create(session=session, rating=rating, comment=komentar)
+    return JsonResponse({"rating": fb.rating, "comment": fb.comment, "created_at": fb.created_at.isoformat()},
+                        status=201)
 
 
 @jwt_required
@@ -799,7 +858,7 @@ def schedule_my_product_session(request, session_id):
     # beda dari notifikasi "Booking Baru" yang sudah ada (itu dipicu pas
     # checkout produk, bukan pas slot spesifik ini dipilih/diubah).
     from . import kabar_mentoring
-    kabar_mentoring.jadwal_ditetapkan(session, jadwal_lama=jadwal_lama)
+    kabar_mentoring.jadwal_ditetapkan(session, jadwal_lama=jadwal_lama, mentor_baru=pilih_mentor_baru)
 
     return JsonResponse(_serialize_mentoring_session(session), status=200)
 
@@ -1807,7 +1866,7 @@ def get_mentoring_order_detail(request, user_library_id):
             "user_phone": library.user.phone or "",
             "messages": [
                 {
-                    "label": LABEL_PESAN.get(m.jenis, m.jenis),
+                    "label": LABEL_PESAN.get(m.jenis.split("@")[0], m.jenis.split("@")[0]),
                     "session_order": urutan_sesi.get(m.objek_id),
                     "recipient": m.penerima,
                     "sent_at": m.dikirim_pada.isoformat(),
@@ -1825,6 +1884,7 @@ def get_mentoring_order_detail(request, user_library_id):
                     "zoom_link": s.zoom_link,
                     "zoom_error": s.zoom_error,
                     "recording_url": s.recording_url,
+                    "feedback": _ambil_feedback(s),
                 }
                 for s in sessions
             ],
@@ -1845,6 +1905,10 @@ LABEL_PESAN = {
     "belum_jadwal_admin_h3": "Kabar ke admin: pembeli belum pilih jadwal (hari ke-3)",
     "belum_jadwal_admin_h7": "Kabar ke admin: pembeli belum pilih jadwal (hari ke-7)",
     "sesi_selesai_otomatis": "Sesi ditandai selesai otomatis",
+    "zoom_gagal": "Kabar ke admin: link Zoom gagal dibuat",
+    "konfirmasi_sesi": "Kabar ke admin: sesi lewat tanpa meeting, perlu konfirmasi",
+    "minta_feedback": "Permintaan feedback ke mentee",
+    "pengingat_feedback": "Pengingat feedback ke mentee",
 }
 
 
@@ -1900,7 +1964,7 @@ def update_mentoring_order_session(request, session_id):
 
     try:
         session = MentoringSession.objects.select_related(
-            "mentor", "mentoring", "user_library"
+            "mentor__user", "mentoring", "user_library__user", "zoom_account"
         ).get(id=session_id)
     except MentoringSession.DoesNotExist:
         return JsonResponse({"detail": "Sesi tidak ditemukan."}, status=404)
@@ -1909,6 +1973,7 @@ def update_mentoring_order_session(request, session_id):
     if request_data is None:
         return JsonResponse({"detail": "Invalid JSON payload."}, status=400)
 
+    link_baru = False
     if "zoom_link" in request_data:
         from accounts.utils import normalize_and_validate_url
 
@@ -1918,7 +1983,14 @@ def update_mentoring_order_session(request, session_id):
                 {"errors": {"zoom_link": ["Link Zoom harus berupa link yang valid (contoh: https://...)."]}},
                 status=400,
             )
-        session.zoom_link = link
+        if link != session.zoom_link:
+            # Link diganti manual: meeting otomatis yang lama (kalau ada)
+            # dilepas supaya tidak terus "memakai" jam itu di akun Zoom-nya.
+            if session.zoom_meeting_id:
+                _lepas_meeting_zoom(session)
+            session.zoom_link = link
+            session.zoom_error = ""
+            link_baru = bool(link)
 
     status_baru = request_data.get("status")
     if status_baru == "completed" and session.status != "completed":
@@ -1944,7 +2016,20 @@ def update_mentoring_order_session(request, session_id):
     session.save()
 
     log_audit(request, AuditAction.UPDATE, "mentoring_sessions", object_id=session.id,
-              new_data={"status": session.status})
+              new_data={"status": session.status, **({"zoom_link": session.zoom_link} if link_baru else {})})
+
+    from mark_up.emails import sekali
+    from . import kabar_mentoring
+    # Link ditempel manual untuk sesi yang belum lewat -> mentee & mentor
+    # langsung dikabari (dulu tidak ada kabar sama sekali).
+    if (link_baru and session.status == MentoringSession.SessionStatus.SCHEDULED and session.start_time
+            and session.start_time > timezone.now() and session.mentor_id):
+        kabar_mentoring.link_zoom_siap(session, manual=True)
+    # Admin menandai selesai -> minta feedback mentee (sekali per sesi, walau
+    # status selesainya sempat dibatalkan lalu ditandai lagi).
+    if status_baru == "completed" and session.status == MentoringSession.SessionStatus.COMPLETED:
+        if sekali("minta_feedback", session.id, session.user_library.user.email):
+            kabar_mentoring.minta_feedback(session)
 
     return JsonResponse({"detail": "Sesi berhasil diperbarui."}, status=200)
 

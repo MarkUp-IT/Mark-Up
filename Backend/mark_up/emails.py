@@ -97,12 +97,14 @@ def _teks(judul, paragraf, tombol, rincian, tautan_tambahan):
     return "\n".join(bagian)
 
 
-def kirim_email(penerima, subjek, judul, paragraf, tombol=None, rincian=None, tautan_tambahan=None):
+def kirim_email(penerima, subjek, judul, paragraf, tombol=None, rincian=None, tautan_tambahan=None,
+                lampiran=None):
     """Kirim satu email berdesain (HTML + teks) tanpa menahan request.
 
     penerima: alamat email atau list alamat. paragraf: str atau list str.
     tombol: (label, path_frontend_atau_url). rincian: list (label, nilai).
     tautan_tambahan: list (label, url) -- mis. link Google Calendar.
+    lampiran: list (nama_file, bytes, mime) -- mis. PDF invoice.
     """
     if isinstance(penerima, str):
         penerima = [penerima]
@@ -122,6 +124,8 @@ def kirim_email(penerima, subjek, judul, paragraf, tombol=None, rincian=None, ta
         reply_to=[settings.TEAM_NOTIFICATION_EMAIL] if getattr(settings, "TEAM_NOTIFICATION_EMAIL", "") else None,
     )
     pesan.attach_alternative(_html(judul, paragraf, tombol, rincian, tautan_tambahan), "text/html")
+    for nama_file, isi, mime in (lampiran or []):
+        pesan.attach(nama_file, isi, mime)
 
     def _kirim():
         try:
@@ -137,7 +141,7 @@ def kirim_email(penerima, subjek, judul, paragraf, tombol=None, rincian=None, ta
 
 
 def kabari(user, judul, pesan, url="", *, paragraf=None, tombol=None, rincian=None, tautan_tambahan=None,
-           email=True):
+           email=True, lampiran=None):
     """SATU pintu kabar ke pengguna: notifikasi lonceng + email berpasangan.
 
     `pesan` = teks ringkas buat lonceng (dan isi email kalau `paragraf` kosong).
@@ -153,16 +157,19 @@ def kabari(user, judul, pesan, url="", *, paragraf=None, tombol=None, rincian=No
         isi = list(paragraf) if paragraf else [pesan]
         kirim_email(user.email, f"[MARK-UP] {judul}", judul,
                     ([f"Halo {nama},"] if nama else []) + isi,
-                    tombol=tombol, rincian=rincian, tautan_tambahan=tautan_tambahan)
+                    tombol=tombol, rincian=rincian, tautan_tambahan=tautan_tambahan, lampiran=lampiran)
 
 
-def kabari_tim(judul, pesan, url="", rincian=None):
-    """Kabar ke tim MarkUp: lonceng semua admin + email ke inbox tim."""
+def kabari_tim(judul, pesan, url="", rincian=None, lampiran=None, lonceng=True):
+    """Kabar ke tim MarkUp: lonceng semua admin + email ke inbox tim.
+    lonceng=False -> cukup email (mis. invoice, yang lonceng admin-nya sudah
+    diisi alur pembayaran sendiri)."""
     from accounts.utils import notify_admins
 
-    notify_admins(judul, pesan, url=url)
+    if lonceng:
+        notify_admins(judul, pesan, url=url)
     kirim_email(getattr(settings, "TEAM_NOTIFICATION_EMAIL", ""), f"[MARK-UP] {judul}", judul, [pesan],
-                tombol=("Buka Dashboard Admin", url) if url else None, rincian=rincian)
+                tombol=("Buka Dashboard Admin", url) if url else None, rincian=rincian, lampiran=lampiran)
 
 
 def sekali(jenis, objek_id, penerima="") -> bool:

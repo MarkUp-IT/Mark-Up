@@ -6,7 +6,7 @@
 
 [![Website](https://img.shields.io/badge/website-mark--up.id-148F89?style=for-the-badge&logo=googlechrome&logoColor=white)](https://mark-up.id)
 [![Status](https://img.shields.io/badge/status-production-2EA043?style=for-the-badge)](https://mark-up.id)
-[![Tes](https://img.shields.io/badge/tes_otomatis-192_lulus-2EA043?style=for-the-badge&logo=checkmarx&logoColor=white)](#-pengujian)
+[![Tes](https://img.shields.io/badge/tes_otomatis-221_lulus-2EA043?style=for-the-badge&logo=checkmarx&logoColor=white)](#-pengujian)
 
 ![Next.js](https://img.shields.io/badge/Next.js_16-000000?style=flat-square&logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React_19-20232A?style=flat-square&logo=react&logoColor=61DAFB)
@@ -210,7 +210,7 @@ Kredensial **iPaymu** dan **Zoom** disimpan terenkripsi di database dan diatur l
 
 ## 🧪 Pengujian
 
-Backend punya **192 tes otomatis** yang mencakup alur pembayaran, refund, iPaymu, jadwal mentoring,
+Backend punya **221 tes otomatis** yang mencakup alur pembayaran, refund, iPaymu, jadwal mentoring,
 bootcamp, matriks izin akses seluruh endpoint, pengecekan IDOR, dan *smoke test* input sampah.
 
 ```bash
