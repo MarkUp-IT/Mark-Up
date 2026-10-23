@@ -9,15 +9,32 @@ import {
   Lock,
   Check,
 } from "lucide-react";
+import { toast } from "sonner";
 import { apiRequest } from "@/lib/api";
+import { extractErrorMessage } from "@/lib/formErrors";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#148F89] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0F081C]";
 
-const allTimeSlots = [
-  "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00",
-  "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00",
-];
+// Pilihan jam mulai tiap 30 menit (07:00, 07:30, ... 21:00). Panjang tiap
+// slot tetap 1 jam, jadi dua jam mulai yang selisihnya < 60 menit saling
+// bertabrakan -- lihat menitDari & bentrokDengan di bawah.
+const SLOT_MENIT = 60;
+const allTimeSlots = Array.from({ length: (21 - 7) * 2 + 1 }, (_, i) => {
+  const menit = 7 * 60 + i * 30;
+  return `${String(Math.floor(menit / 60)).padStart(2, "0")}:${String(menit % 60).padStart(2, "0")}`;
+});
+
+function menitDari(time) {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/** Jam mulai lain (dari `daftar`) yang slot 1 jam-nya beririsan dengan `time`. */
+function bentrokDengan(time, daftar) {
+  const t = menitDari(time);
+  return daftar.find((lain) => lain !== time && Math.abs(menitDari(lain) - t) < SLOT_MENIT);
+}
 
 const daysOfWeek = ["MIN", "SEN", "SEL", "RAB", "KAM", "JUM", "SAB"];
 const monthLabels = [
@@ -53,9 +70,11 @@ function toJakartaParts(isoString) {
   };
 }
 
-function nextHour(time) {
-  const [h] = time.split(":").map(Number);
-  return `${pad2((h + 1) % 24)}:00`;
+// Jam selesai slot = jam mulai + 1 jam. Dulu dihitung "jam berikutnya :00",
+// jadi slot 06:30 akan tersimpan 06:30-07:00 (cuma 30 menit).
+function jamSelesai(time) {
+  const menit = (menitDari(time) + SLOT_MENIT) % (24 * 60);
+  return `${pad2(Math.floor(menit / 60))}:${pad2(menit % 60)}`;
 }
 
 function buildMonthGrid(year, month) {
@@ -222,9 +241,13 @@ export default function MentoringSchedule() {
 
   const toggleTimeSlot = (time) => {
     if (modalMode === "single" && bookedTimes.includes(time)) return;
-    setSelectedTimeSlots((prev) =>
-      prev.includes(time) ? prev.filter((t) => t !== time) : [...prev, time],
-    );
+    setSelectedTimeSlots((prev) => {
+      if (prev.includes(time)) return prev.filter((t) => t !== time);
+      // Slot 1 jam: jam yang bertabrakan dengan pilihan lain / slot yang sudah
+      // dipesan tidak bisa ikut dipilih (tombolnya juga dinonaktifkan).
+      if (bentrokDengan(time, [...prev, ...(modalMode === "single" ? bookedTimes : [])])) return prev;
+      return [...prev, time];
+    });
   };
 
   async function addSlot(dateStr, time) {
@@ -234,7 +257,7 @@ export default function MentoringSchedule() {
         start_date: dateStr,
         end_date: dateStr,
         start_time: time,
-        end_time: nextHour(time),
+        end_time: jamSelesai(time),
       },
     });
   }
@@ -253,15 +276,20 @@ export default function MentoringSchedule() {
       const toAdd = selectedTimeSlots.filter((t) => !existingTimes.includes(t));
       const toRemove = existingAvailable.filter((s) => !selectedTimeSlots.includes(s.time));
 
-      await Promise.all([
-        ...toAdd.map((time) => addSlot(activeDateStr, time)),
-        ...toRemove.map((s) => removeSlot(s.id)),
-      ]);
+      // Hapus DULU baru tambah: memindah 07:00 -> 07:30 akan ditolak server
+      // (dianggap bentrok) kalau slot 07:00 belum terhapus saat 07:30 dibuat.
+      await Promise.all(toRemove.map((s) => removeSlot(s.id)));
+      await Promise.all(toAdd.map((time) => addSlot(activeDateStr, time)));
 
       await fetchAvailability();
       closeModal();
+      toast.success("Jadwal Tersimpan");
     } catch (err) {
-      console.error(err);
+      // Dulu cuma dicetak ke console -- mentor tidak tahu jadwalnya gagal tersimpan.
+      toast.error("Sebagian Jadwal Gagal Disimpan", {
+        description: extractErrorMessage(err, "Coba lagi, atau periksa jam yang bertabrakan."),
+      });
+      await fetchAvailability();
     } finally {
       setSaving(false);
     }
@@ -275,7 +303,7 @@ export default function MentoringSchedule() {
       // bikin & skip yang udah ada. Sebelumnya nembak 1 request per slot;
       // pas ngebatch rentang panjang (mis. setahun) itu ratusan request
       // paralel yang sebagian kena rate-limit & gagal -> kalender bolong.
-      await apiRequest("/api/mentors/availability/add-bulk/", {
+      const hasil = await apiRequest("/api/mentors/availability/add-bulk/", {
         method: "POST",
         body: {
           start_date: rangeStart,
@@ -285,8 +313,16 @@ export default function MentoringSchedule() {
       });
       await fetchAvailability();
       closeModal();
+      toast.success("Jadwal Tersimpan", {
+        description:
+          hasil?.created != null
+            ? `${hasil.created} slot baru dibuat. Jam yang sudah lewat atau bertabrakan dengan slot lain dilewati.`
+            : undefined,
+      });
     } catch (err) {
-      console.error(err);
+      toast.error("Jadwal Gagal Disimpan", {
+        description: extractErrorMessage(err, "Terjadi kesalahan, coba lagi."),
+      });
     } finally {
       setSaving(false);
     }
@@ -523,6 +559,10 @@ export default function MentoringSchedule() {
                 <h3 className="text-white font-bold text-[16px]">
                   Pilih Jam Ketersediaan
                 </h3>
+                <p className="text-[#9CA3AF] text-[12px] leading-relaxed -mt-1">
+                  Tiap slot berdurasi 1 jam dan bisa dimulai di jam bulat maupun setengah (mis. 06:30).
+                  Jam yang bertabrakan dengan pilihanmu otomatis dicoret.
+                </p>
                 <div
                   style={{ padding: "16px" }}
                   className="ms-inset border border-[#2D2342] rounded-[12px] grid grid-cols-3 sm:grid-cols-5 gap-3"
@@ -531,16 +571,23 @@ export default function MentoringSchedule() {
                     const isSelected = selectedTimeSlots.includes(slot);
                     const isLocked =
                       modalMode === "single" && bookedTimes.includes(slot);
+                    const tabrakan =
+                      !isSelected && !isLocked
+                        ? bentrokDengan(slot, [...selectedTimeSlots, ...(modalMode === "single" ? bookedTimes : [])])
+                        : null;
                     return (
                       <button
                         key={index}
                         type="button"
-                        disabled={isLocked}
+                        disabled={isLocked || !!tabrakan}
+                        title={tabrakan ? `Bertabrakan dengan slot ${tabrakan} (tiap slot 1 jam)` : undefined}
                         onClick={() => toggleTimeSlot(slot)}
                         className={`py-2 rounded-[8px] text-[11px] font-bold border transition-colors flex items-center justify-center gap-1 ${focusRing} ${
                           isLocked
                             ? "bg-[#D1D83E]/5 border-[#D1D83E]/30 text-[#D1D83E] cursor-not-allowed"
-                            : isSelected
+                            : tabrakan
+                              ? "bg-transparent border-[#2D2342]/60 text-[#4B4560] line-through cursor-not-allowed"
+                              : isSelected
                               ? "bg-[#148F89]/10 border-[#148F89] text-[#148F89]"
                               : "bg-transparent border-[#2D2342] text-[#9CA3AF] hover:border-[#9CA3AF] hover:text-white"
                         }`}

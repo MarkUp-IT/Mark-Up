@@ -651,13 +651,6 @@ def get_my_transactions(request):
 
     return JsonResponse({"transactions": data}, status=200)
 
-def nomor_invoice(txn):
-    """INV/2026/10/88DE62 -- diturunkan dari tanggal & ID transaksi, jadi
-    selalu sama untuk transaksi yang sama tanpa perlu kolom/penomoran baru."""
-    waktu = timezone.localtime(txn.paid_at or txn.created_at)
-    return f"INV/{waktu:%Y}/{waktu:%m}/{txn.id.rsplit('-', 1)[-1]}"
-
-
 @jwt_required
 def get_invoice(request, transaction_id):
     """Data invoice satu transaksi -- buat pemiliknya atau admin. Hanya
@@ -675,37 +668,8 @@ def get_invoice(request, transaction_id):
     if txn.payment_status not in (PaymentStatus.PAID, PaymentStatus.REFUNDED):
         return JsonResponse({"detail": "Invoice baru tersedia setelah pembayaran lunas."}, status=400)
 
-    items = []
-    for item in txn.items.select_related(
-        "product__mentoring_detail", "product__module_detail", "product__bootcamp_detail",
-    ):
-        detail = _serialize_product_detail(item.product)
-        items.append({
-            "title": detail.get("title") if detail else item.product.type,
-            "type": item.product.type,
-            "quantity": item.quantity,
-            "price": str(item.price_at_checkout),
-            "subtotal": str(item.price_at_checkout * item.quantity),
-        })
-
-    return JsonResponse({
-        "invoice_number": nomor_invoice(txn),
-        "transaction_id": txn.id,
-        "status": txn.payment_status,
-        "created_at": txn.created_at.isoformat(),
-        "paid_at": txn.paid_at.isoformat() if txn.paid_at else None,
-        "method": txn.payment_method,
-        "gateway": txn.gateway,
-        "buyer": {"name": txn.user.fullname, "email": txn.user.email, "phone": txn.buyer_phone or txn.user.phone or ""},
-        "items": items,
-        "sub_total": str(txn.sub_total),
-        "promo_code": txn.promo_code or "",
-        "discount_amount": str(txn.discount_amount),
-        "team_discount_amount": str(txn.team_discount_amount),
-        "commitment_fee_amount": str(txn.commitment_fee_amount),
-        "tax": str(txn.tax),
-        "grand_total": str(txn.grand_total),
-    }, status=200)
+    from .invoice import data_invoice
+    return JsonResponse(data_invoice(txn), status=200)
 
 
 @jwt_required

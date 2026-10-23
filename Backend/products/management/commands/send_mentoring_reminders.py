@@ -11,8 +11,18 @@ Yang dikerjakan:
   2. Pengingat "belum pilih jadwal": pembeli yang sudah bayar tapi masih
      punya sesi tanpa jadwal -- hari ke-1, 3, 7 sejak pembelian. Admin ikut
      dikabari di hari ke-3 dan ke-7 untuk follow up manual.
-  3. Sesi yang jadwalnya sudah lewat ditandai selesai (honor mentor terbit),
-     lalu pembeli diajak memberi rating / menjadwalkan sesi berikutnya.
+  3. Sesi yang jadwalnya sudah lewat ditandai selesai (honor mentor terbit)
+     -- HANYA kalau meeting-nya terbukti berlangsung (tercatat di Zoom, atau
+     link ditempel manual admin). Sesi tanpa link / meeting yang tidak pernah
+     dimulai TIDAK diselesaikan; admin diminta konfirmasi. Lalu mentee diminta
+     feedback untuk sesi itu.
+  4. Pengingat feedback: sekali, 24 jam setelah diminta, kalau belum diisi.
+  5. Cek paket akun Zoom (Pro/gratis) sekali sehari.
+
+Kunci pengingat sesi memuat jam mulai sesi (mis. "pengingat_h3@1729425600"),
+jadi sesi yang dijadwal ulang diingatkan lagi untuk jadwal barunya -- dulu
+kuncinya cuma ID sesi, sehingga sesi yang dipindah jadwal tidak pernah
+diingatkan lagi.
 """
 from datetime import timedelta
 
@@ -44,12 +54,16 @@ class Command(BaseCommand):
         self.execute = opts["execute"]
         self.sekarang = timezone.now()
         n = (self._pengingat_sesi() + self._belum_pilih_jadwal() + self._selesaikan_otomatis()
-             + self._cek_akun_zoom())
+             + self._pengingat_feedback() + self._cek_akun_zoom())
         self.stdout.write(f"Selesai. {n} tindakan" + ("" if self.execute else " (dry-run, tidak ada yang dikirim)") + ".")
 
     def _lakukan(self, jenis, objek_id, penerima, label, aksi):
         """Jalankan `aksi` sekali saja untuk (jenis, objek, penerima)."""
         if not self.execute:
+            # Yang sudah pernah terkirim tidak ikut didaftar -- dulu dry-run
+            # menampilkannya lagi sehingga terlihat seolah akan dikirim ulang.
+            if self._sudah_pernah_ke(jenis, objek_id, penerima):
+                return 0
             self.stdout.write(f"  [DRY-RUN] {label}")
             return 1
         if not sekali(jenis, objek_id, penerima):
@@ -78,14 +92,15 @@ class Command(BaseCommand):
             sisa = s.start_time - self.sekarang
             pembeli = s.user_library.user
             label = f"{pembeli.fullname} x {s.mentor.user.fullname} ({tanggal_indo(s.start_time)})"
+            stempel = int(s.start_time.timestamp())
             if sisa <= timedelta(hours=3):
-                n += self._lakukan("pengingat_h3", s.id, pembeli.email, f"H-3 pembeli: {label}",
+                n += self._lakukan(f"pengingat_h3@{stempel}", s.id, pembeli.email, f"H-3 pembeli: {label}",
                                    lambda s=s: kabar_mentoring.pengingat_sesi(s, 3, ke_mentor=False))
-                n += self._lakukan("pengingat_h3", s.id, s.mentor.user.email, f"H-3 mentor: {label}",
+                n += self._lakukan(f"pengingat_h3@{stempel}", s.id, s.mentor.user.email, f"H-3 mentor: {label}",
                                    lambda s=s: kabar_mentoring.pengingat_sesi(s, 3, ke_mentor=True))
                 if not s.zoom_link:
                     n += self._lakukan(
-                        "zoom_belum_ada", s.id, "tim", f"Zoom belum ada: {label}",
+                        f"zoom_belum_ada@{stempel}", s.id, "tim", f"Zoom belum ada: {label}",
                         lambda s=s, label=label: kabari_tim(
                             "Sesi Mentoring Belum Punya Link Zoom",
                             f"Sesi {label} dimulai kurang dari 3 jam lagi tapi belum punya link Zoom"
@@ -96,7 +111,7 @@ class Command(BaseCommand):
             # H-24 cuma kalau sesinya memang masih jauh (dijadwalkan mepet
             # -> langsung dapat H-3 saja, tidak dua email beruntun).
             elif sisa > timedelta(hours=20):
-                n += self._lakukan("pengingat_h24", s.id, pembeli.email, f"H-24 pembeli: {label}",
+                n += self._lakukan(f"pengingat_h24@{stempel}", s.id, pembeli.email, f"H-24 pembeli: {label}",
                                    lambda s=s: kabar_mentoring.pengingat_sesi(s, 24, ke_mentor=False))
         return n
 
@@ -189,6 +204,27 @@ class Command(BaseCommand):
 
     # ------------------------------------------------------------ 3
 
+    def _boleh_diselesaikan(self, s):
+        """(boleh, alasan_kalau_tidak, perlu_coba_lagi).
+
+        Dulu sesi apa pun yang jadwalnya lewat langsung ditandai selesai --
+        termasuk sesi yang tidak pernah punya link Zoom, sehingga honor mentor
+        terbit untuk meeting yang tidak pernah ada (kejadian 20 Okt 2026)."""
+        from mark_up.zoom import meeting_pernah_berlangsung
+
+        if not s.zoom_link:
+            return False, "sesi ini tidak pernah punya link Zoom.", False
+        if not (s.zoom_meeting_id and s.zoom_account_id):
+            # Link ditempel manual admin (bukan dari akun Zoom kita) -- tidak bisa
+            # dicek ke Zoom, dan admin sendiri yang menyiapkannya.
+            return True, "", False
+        hasil = meeting_pernah_berlangsung(s.zoom_account, s.zoom_meeting_id)
+        if hasil is True:
+            return True, "", False
+        if hasil is False:
+            return False, "Zoom mencatat meeting-nya tidak pernah dimulai (tidak ada yang masuk).", False
+        return False, "", True  # Zoom tidak bisa dihubungi -- coba lagi di putaran berikutnya
+
     def _selesaikan_otomatis(self):
         from products.views import selesaikan_sesi_mentoring
 
@@ -200,24 +236,68 @@ class Command(BaseCommand):
             start_time__lte=self.sekarang,
             mentor__isnull=False,
             user_library__is_revoked=False,
-        ).select_related("mentoring", "mentor__user", "user_library__user", "user_library__product")
+        ).select_related("mentoring", "mentor__user", "user_library__user", "user_library__product",
+                         "zoom_account")
 
         for s in lewat:
             durasi = (s.mentoring.duration_minutes if s.mentoring_id else None) or 60
             if s.start_time + timedelta(minutes=durasi) + jeda > self.sekarang:
                 continue
             label = f"{s.user_library.user.fullname} x {s.mentor.user.fullname} ({tanggal_indo(s.start_time)})"
+            # Koreksi admin ("Batalkan Selesai") tidak boleh ditimpa cron.
+            stempel = int(s.start_time.timestamp())
+            if (self._sudah_pernah("sesi_selesai_otomatis", s.id)
+                    or self._sudah_pernah(f"konfirmasi_sesi@{stempel}", s.id)):
+                continue  # sudah diputuskan / sudah diserahkan ke admin
+
+            boleh, alasan, coba_lagi = self._boleh_diselesaikan(s) if self.execute else (True, "", False)
+            if coba_lagi:
+                self.stdout.write(f"  [TUNDA] {label} -- Zoom belum bisa dihubungi, dicoba lagi nanti")
+                continue
+            if not boleh:
+                n += self._lakukan(f"konfirmasi_sesi@{stempel}", s.id, "tim", f"Minta konfirmasi admin: {label}",
+                                   lambda s=s, alasan=alasan: kabar_mentoring.konfirmasi_sesi_ke_admin(s, alasan))
+                continue
 
             def aksi(s=s):
                 with transaction.atomic():
                     selesaikan_sesi_mentoring(s)
-                lain = list(s.user_library.mentoring_sessions.exclude(id=s.id))
-                kabar_mentoring.sesi_selesai(
-                    s,
-                    semua_selesai=all(x.status == MentoringSession.SessionStatus.COMPLETED for x in lain),
-                    ada_yang_belum_dijadwalkan=any(
-                        x.status == MentoringSession.SessionStatus.WAITING_SCHEDULE for x in lain),
-                )
+                if sekali("minta_feedback", s.id, s.user_library.user.email):
+                    kabar_mentoring.minta_feedback(s)
 
             n += self._lakukan("sesi_selesai_otomatis", s.id, "", f"Selesai otomatis: {label}", aksi)
+        return n
+
+    def _sudah_pernah(self, jenis, objek_id):
+        from accounts.models import PesanTerkirim
+
+        return PesanTerkirim.objects.filter(jenis=jenis, objek_id=str(objek_id)).exists()
+
+    def _sudah_pernah_ke(self, jenis, objek_id, penerima):
+        from accounts.models import PesanTerkirim
+
+        return PesanTerkirim.objects.filter(jenis=jenis, objek_id=str(objek_id),
+                                            penerima=str(penerima)[:254]).exists()
+
+    # ------------------------------------------------------------ 4
+
+    def _pengingat_feedback(self):
+        """Sekali, 24 jam setelah feedback diminta, kalau belum diisi."""
+        from accounts.models import PesanTerkirim
+
+        n = 0
+        diminta = PesanTerkirim.objects.filter(
+            jenis="minta_feedback", dikirim_pada__lte=self.sekarang - timedelta(hours=24),
+            dikirim_pada__gte=self.sekarang - timedelta(days=14),
+        )
+        for catatan in diminta:
+            s = MentoringSession.objects.filter(
+                id=catatan.objek_id, status=MentoringSession.SessionStatus.COMPLETED,
+                user_library__is_revoked=False, feedback__isnull=True,
+            ).select_related("mentoring", "mentor__user", "user_library__user").first()
+            if s is None:
+                continue
+            label = f"{s.user_library.user.fullname} - Sesi {s.order} {s.mentoring.title if s.mentoring_id else ''}"
+            n += self._lakukan("pengingat_feedback", s.id, s.user_library.user.email, f"Ingatkan feedback: {label}",
+                               lambda s=s: kabar_mentoring.pengingat_feedback(s))
         return n

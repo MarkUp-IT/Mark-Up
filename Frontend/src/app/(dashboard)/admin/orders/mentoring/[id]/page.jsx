@@ -242,6 +242,21 @@ export default function MentoringOrderDetail() {
                     Link Zoom otomatis gagal dibuat: {session.zoom_error}
                   </span>
                 )}
+                {session.feedback && (
+                  <div className="basis-full bg-[#FFFBEB] border border-[#FDE68A] rounded-[8px] px-3 py-2 text-[12px]">
+                    <span className="font-semibold text-[#92400E]">
+                      Feedback mentee: {"★".repeat(session.feedback.rating)}
+                      <span className="text-[#E5D3A6]">{"★".repeat(5 - session.feedback.rating)}</span>{" "}
+                      ({session.feedback.rating}/5)
+                    </span>
+                    {session.feedback.comment && (
+                      <p className="text-[#78350F] mt-0.5 whitespace-pre-line">&ldquo;{session.feedback.comment}&rdquo;</p>
+                    )}
+                  </div>
+                )}
+                {session.status === "completed" && !session.feedback && (
+                  <span className="basis-full text-[#94A3B8] text-[11.5px] italic">Mentee belum memberi feedback.</span>
+                )}
               </div>
             </div>
           ))}

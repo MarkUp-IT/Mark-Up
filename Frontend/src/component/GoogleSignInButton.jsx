@@ -54,17 +54,21 @@ export default function GoogleSignInButton() {
   // Polling ringan ini mastiin tombolnya tetap kebuka begitu API-nya beneran
   // siap, tanpa user perlu refresh manual.
   useEffect(() => {
-    if (window.google?.accounts?.oauth2) {
+    // Cek pertama juga lewat timer (bukan setState langsung di badan effect)
+    // supaya tidak memicu render berantai -- aturan react-hooks/set-state-in-effect.
+    const cek = () => {
+      if (!window.google?.accounts?.oauth2) return false;
       setScriptReady(true);
-      return;
-    }
+      return true;
+    };
+    const awal = setTimeout(cek, 0);
     const interval = setInterval(() => {
-      if (window.google?.accounts?.oauth2) {
-        setScriptReady(true);
-        clearInterval(interval);
-      }
+      if (cek()) clearInterval(interval);
     }, 200);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(awal);
+      clearInterval(interval);
+    };
   }, []);
 
   function handleTokenResponse(tokenResponse) {

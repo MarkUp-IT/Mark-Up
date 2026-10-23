@@ -58,7 +58,7 @@ class OrderLunasTests(Dasar):
         self.assertIn("Booking Baru", untuk_mentor[0].subject)
         self.assertIn(self.pembeli.fullname, untuk_mentor[0].body)
 
-        self.assertTrue(any("Order mentoring lunas" in m.subject for m in mail.outbox), "tim MarkUp ikut dikabari")
+        self.assertTrue(any("Pembayaran Lunas:" in m.subject for m in mail.outbox), "tim MarkUp ikut dikabari")
         # Setiap email punya notifikasi web padanannya.
         self.assertTrue(Notification.objects.filter(user=self.pembeli, title="Pembayaran Lunas").exists())
         self.assertTrue(Notification.objects.filter(user=self.mentor.user, title="Booking Baru").exists())
@@ -66,7 +66,8 @@ class OrderLunasTests(Dasar):
     def test_modul_cukup_konfirmasi_ke_pembeli(self):
         beli_lunas(self, self.pembeli, buat_modul())
         self.assertEqual(len(surat_untuk(self.pembeli.email)), 1)
-        self.assertFalse(any("Order mentoring" in m.subject for m in mail.outbox))
+        # Tim tetap menerima invoice-nya, tapi tidak ada email ke mentor mana pun.
+        self.assertEqual(len([m for m in mail.outbox if "Booking Baru" in m.subject]), 0)
 
 
 class JadwalDanRefundTests(Dasar):
@@ -157,7 +158,9 @@ class PengingatTests(Dasar):
 
 class SelesaiOtomatisTests(Dasar):
     def lewatkan(self, jam):
-        MentoringSession.objects.filter(id=self.sesi[0].id).update(start_time=timezone.now() - timedelta(hours=jam))
+        # Link manual (tanpa meeting_id) -> dianggap disiapkan admin, boleh selesai otomatis.
+        MentoringSession.objects.filter(id=self.sesi[0].id).update(
+            start_time=timezone.now() - timedelta(hours=jam), zoom_link="https://zoom.us/j/manual")
 
     def test_selesai_otomatis_menerbitkan_honor_sekali(self):
         self.beli()
@@ -171,8 +174,11 @@ class SelesaiOtomatisTests(Dasar):
         self.assertEqual(MentoringSession.objects.get(id=self.sesi[0].id).status, "completed")
         self.assertEqual(MentorPayout.objects.filter(mentoring_session=self.sesi[0]).count(), 1)
         self.assertEqual(MentorPayout.objects.get(mentoring_session=self.sesi[0]).gross_amount, Decimal("100000"))
-        self.assertEqual(len(surat_untuk(self.pembeli.email)), 1, "diajak menjadwalkan sesi berikutnya")
-        self.assertIn("Jadwalkan Sesi Berikutnya", surat_untuk(self.pembeli.email)[0].subject)
+        self.assertEqual(len(surat_untuk(self.pembeli.email)), 1, "diminta feedback + diajak jadwalkan berikutnya")
+        surat = surat_untuk(self.pembeli.email)[0]
+        self.assertIn("Bagaimana Sesi Mentoringmu", surat.subject)
+        self.assertIn(f"?feedback={self.sesi[0].id}", surat.body)
+        self.assertIn("pilih jadwal sesi berikutnya", surat.body)
 
     def test_admin_bisa_membatalkan_selesai_dan_tidak_diselesaikan_ulang(self):
         self.beli()
@@ -242,7 +248,7 @@ class CatatanPesanTests(Dasar):
         self.beli(jam_lagi=2)
         cron()
         jenis = set(PesanTerkirim.objects.filter(objek_id=str(self.sesi[0].id)).values_list("jenis", flat=True))
-        self.assertIn("pengingat_h3", jenis)
+        self.assertTrue(any(j.startswith("pengingat_h3@") for j in jenis), jenis)
 
 
 class PaketAkunZoomTests(ApiTestCase):

@@ -325,6 +325,27 @@ def buka_izin_akun(account):
     return False, _pesan_error(resp, "Izin peserta belum bisa dibuka otomatis")
 
 
+def meeting_pernah_berlangsung(account, meeting_id):
+    """Apakah meeting ini benar-benar pernah dimulai (ada yang masuk)?
+
+    True  -- Zoom mencatatnya sebagai past meeting.
+    False -- Zoom bilang meeting itu tidak pernah berlangsung.
+    None  -- tidak bisa dipastikan (Zoom tidak bisa dihubungi / error lain);
+             pemanggil sebaiknya mencoba lagi nanti, bukan menganggap gagal.
+
+    Dipakai sebelum menandai sesi mentoring selesai otomatis: sesi yang
+    meeting-nya tidak pernah ada tidak boleh menerbitkan honor mentor.
+    """
+    resp, err = _request(account, "GET", f"/past_meetings/{meeting_id}")
+    if err:
+        return None
+    if resp.status_code == 200:
+        return bool((resp.json() or {}).get("start_time"))
+    if resp.status_code in (400, 404):
+        return False
+    return None
+
+
 def delete_meeting(account, meeting_id):
     """Hapus meeting. 404 dianggap sukses -- targetnya memang sudah tidak ada."""
     resp, err = _request(account, "DELETE", f"/meetings/{meeting_id}")

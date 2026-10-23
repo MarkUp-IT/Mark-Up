@@ -1305,6 +1305,26 @@ class MentoringSession(models.Model):
         return f"{self.mentoring} - session {self.order}"
 
 
+class SessionFeedback(models.Model):
+    """Penilaian mentee untuk SATU sesi mentoring (bukan ulasan program --
+    itu products.Review, yang baru bisa diisi setelah semua sesi paket
+    selesai). Diminta otomatis lewat lonceng + email begitu sesi selesai, dan
+    diingatkan sekali kalau belum diisi dalam 24 jam."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.OneToOneField(
+        MentoringSession, on_delete=models.CASCADE, related_name="feedback",
+    )
+    rating = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    comment = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Feedback {self.rating}/5 sesi {self.session_id}"
+
+
 class ZoomAccount(models.Model):
     """Satu akun Zoom (Server-to-Server OAuth app) di kolam akun.
 
